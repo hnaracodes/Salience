@@ -1,0 +1,11 @@
+schema_version: 1
+insights:
+  attention_reorienting_candidate:
+    text: >-
+      Model-assisted hypothesis: ventral/salience-attention systems show elevated
+      response vs normative clips — possible stimulus-driven reorienting or surprise.
+      Not a clinical or diagnostic emotion label.
+  default_network_elevation_candidate:
+    text: >-
+      Model-assisted hypothesis: default-mode aggregate exceeds calibrated threshold
+      vs norms — possible internally directed processing relative to baseline clips.

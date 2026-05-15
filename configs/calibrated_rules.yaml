@@ -1,0 +1,24 @@
+schema_version: 1
+norm_ref: default_naturalistic_v1
+signals:
+  primary: network_z
+  secondary: network_quantile_excess
+windows:
+  spike_min_seconds: 0.5
+  sustained_min_seconds: 1.5
+rules:
+  - id: sal_vent_attn_spike
+    when:
+      network: SalVentAttn
+      z_above: 1.5
+      min_duration_s: 0.5
+    insight_key: attention_reorienting_candidate
+    confidence: effect_size_x_duration
+
+  - id: default_mode_suppression
+    when:
+      network: Default
+      z_above: 2.0
+      min_duration_s: 1.0
+    insight_key: default_network_elevation_candidate
+    confidence: effect_size_x_duration

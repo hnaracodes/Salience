@@ -1,0 +1,14 @@
+# Versioned parcellation metadata. Gifti SHA placeholders until atlas files are attached.
+mesh: fsaverage5
+tribe_vertex_order: facebook/tribev2
+atlas_id: placeholder_demo_until_real_atlas
+yeo7_map_version: synthetic_demo_v1
+n_vertices_expected: null  # set by build_vertex_regions_csv or validated at analyze time
+
+artifact_sha256:
+  labels_gii_lh: ""
+  labels_gii_rh: ""
+
+inputs:
+  labels_gii_lh: ""
+  labels_gii_rh: ""

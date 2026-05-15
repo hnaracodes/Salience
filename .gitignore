@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local runtime / DB (regenerate from Modal + analyze_session)
+*.sqlite
+scout_data/sessions/
+
+# Optional reproducible outputs
+brain_results.mp4
+
+# Editor / OS
+.DS_Store
+Thumbs.db
