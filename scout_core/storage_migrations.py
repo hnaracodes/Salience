@@ -106,6 +106,7 @@ def insert_roi_timeseries_batch(
     z_parcel: np.ndarray,
     parcel_ids: np.ndarray,
 ) -> None:
+    T, P = parcel_ts.shape
     rows = []
     for t in range(T):
         for j in range(P):
@@ -138,6 +139,7 @@ def insert_network_timeseries_batch(
     z_net: np.ndarray,
     network_ids: list[int],
 ) -> None:
+    T, N = net_ts.shape
     rows = []
     for t in range(T):
         for j in range(N):

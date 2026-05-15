@@ -1,0 +1,19 @@
+{
+  "norm_id": "synthetic_bootstrap_v1",
+  "source": "synthetic_bootstrap",
+  "n_clips": 10,
+  "t_steps_per_clip": 30,
+  "reducer": "mean",
+  "seed": 42,
+  "network_names": [
+    "Vis",
+    "SomMot",
+    "DorsAttn",
+    "SalVentAttn",
+    "Limbic",
+    "Cont",
+    "Default"
+  ],
+  "parcellation_csv": "/Users/shivanksingh/Documents/TribeV2/configs/vertex_regions.csv",
+  "leakage_note": "SYNTHETIC BOOTSTRAP \u2014 replace with empirical norms from held-out naturalistic clips before production use."
+}

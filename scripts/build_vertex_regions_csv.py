@@ -107,6 +107,7 @@ def build_demo(n_vertices: int, n_parcels: int, output_csv: Path) -> None:
     vidx = 0
     for p in range(n_parcels):
         count = verts_per + (1 if p < remainder else 0)
+        parcel_id = p + 1
         yn_id = (p % 7) + 1
         yn_name = YEO7_NAMES[yn_id - 1]
         for _ in range(count):
