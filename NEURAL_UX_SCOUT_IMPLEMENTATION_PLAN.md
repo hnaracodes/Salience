@@ -12,7 +12,7 @@ This doc aligns with the existing Modal scaffold in [`tribe.py`](tribe.py) (`Tri
 
 - [ ] Vendor/pin tribev2; locate Stage-5 subject injection; spike single-GPU K-way multiplex forward + peak VRAM curve
 - [ ] Define `session_manifest.json` + `analysis_bundle.json` schemas; Playwright recorder writes manifests
-- [ ] Implement vertex→Yeo7 parcellation + YAML emotion/barrier rules over network timeseries
+- [ ] Implement vertex→Yeo7 surface masks + MVPA probability traces over network-specific vertex patterns
 - [ ] Modal `inference_mux`: micro-batch clusters, return chunked `vertex_ts`; add streaming encoder module
 - [ ] `viz_web`: three.js/vtk.js viewer + WS timeline sync with walkthrough video
 - [ ] Barrier detector: pairwise cluster divergence + DOM timeline intersection + ranked UX issues
@@ -27,7 +27,7 @@ This doc aligns with the existing Modal scaffold in [`tribe.py`](tribe.py) (`Tri
 |------|-----------|
 | Multiplex many demographics | **Cluster embeddings** (prototypes): train/report ~10–50 clusters; optionally maintain **many fine-grained tags** offline while inference uses batched prototypes |
 | Real-time brain viz | **Browser**: stream **compressed per-frame vertex colors + mesh topology once**, or **tile-encoded MP4/WebRTC** of server-rendered views |
-| Emotion / cognition layer | Rule + calibration layer over **Yeo-7 network aggregates** (not raw vertices), with optional LLM narrative |
+| Emotion / cognition layer | MVPA classifier over **Yeo-7 surface vertex patterns** using nilearn masks + scikit-learn, with optional LLM narrative |
 | Agent understands failing UI | Ground divergence events to **DOM selectors / bounding boxes** from Playwright + screenshot timestamps |
 
 **Non-goals for MVP:** Training full LLaMA/V-JEPA from scratch; claiming clinical diagnostic validity; true simultaneous “700 voxel grid” without defining the volumetric forward model.
@@ -44,8 +44,8 @@ flowchart LR
   end
   subgraph modal [Modal_GPU]
     INF[Tribe_inference_mux]
-    PAR[Parcellate_Yeo7]
-    MAP[Emotion_barrier_mapper]
+    MASK[Surface_mask_Yeo7]
+    MVPA[MVPA_probability_mapper]
     STR[Stream_encoder]
   end
   subgraph web [Browser_viewer]
@@ -55,12 +55,12 @@ flowchart LR
   end
   PW --> REC
   REC --> INF
-  INF --> PAR
-  PAR --> MAP
+  INF --> MASK
+  MASK --> MVPA
   INF --> STR
   STR --> BR
   REC --> VID
-  MAP --> DEMO
+  MVPA --> DEMO
 ```
 
 ---
@@ -121,7 +121,7 @@ Given your choice (**web stream**), recommended MVP is **B for interaction**, wi
 ### Front-end stack
 
 - **`three.js`** or **`vtk.js`** loading **fsaverage5** inflated mesh (precomputed `.glb` / `.vtk`).
-- **Demographic panel**: small multiples or stacked heatmaps over **Yeo-7 traces** per cluster; highlight divergence gaps.
+- **Demographic panel**: small multiples or stacked heatmaps over **MVPA probability traces** per cluster; highlight divergence gaps.
 
 ### Sync UX
 
@@ -130,42 +130,20 @@ Given your choice (**web stream**), recommended MVP is **B for interaction**, wi
 
 ---
 
-## 3. Neural-to-emotion mapping (Yeo-7 logic layer)
+## 3. Neural-to-emotion mapping (MVPA logic layer)
 
 ### Pipeline
 
-1. **Vertex → network**: Map each vertex to **Yeo-7** labels using a **fsaverage5-compatible surface atlas** (Schaefer→Yeo or nearest-neighbor from centroid coordinates — validate against your exact mesh labeling convention).
-2. **Aggregate per timestep**: For cluster `k`, compute `network_activation[k, t, n_networks] = weighted_mean(|zscore(vertex_activity))`.
-3. **Event detection**: Sliding-window z-score or robust MAD thresholds on derivatives `d/dt` to flag **spikes / suppression**.
-4. **Interpretation rules (example skeleton — tunable via YAML)**
-
-```yaml
-rules:
-  - name: confusion_candidate
-    when:
-      all_of:
-        - network: VentralAttention
-          spike_above: 2.0
-      optional:
-        - network: Frontoparietal
-          spike_above: 1.5
-    insight: "Attention capture / re-orienting — often confusion or novelty."
-
-  - name: overload_candidate
-    when:
-      all_of:
-        - network: Frontoparietal
-          sustained_above: 1.5  # seconds
-        - network: Salience
-          spike_above: 2.0
-    insight: "Executive + salience load — possible information overload."
-```
-
-5. **Optional narrative**: Feed structured JSON (network deltas + DOM context + screenshot crops) to a **small LLM** for UX copy — keep **rules as source of truth** for product analytics.
+1. **Vertex → network mask**: Map each fsaverage5 vertex to **Yeo-7** labels using [`configs/vertex_regions.csv`](configs/vertex_regions.csv). Use `nilearn.maskers.SurfaceMasker` to isolate a target network, such as Frontoparietal, while preserving the full vertex pattern inside that mask.
+2. **No vertex averaging**: Do not collapse vertices into network means. Averaging destroys the spatial “barcode” that MVPA needs to distinguish cognitive states.
+3. **Spatiotemporal feature extraction**: For each cluster `k` and timestep `t`, take masked rows `[t-2, t-1, t]` from `vertex_ts[k, T, V]` and flatten the resulting `3 × P_network` matrix into one feature vector.
+4. **Scikit-learn inference**: Load a pre-trained `sklearn` `.pkl` pipeline, for example `StandardScaler + LinearSVC` wrapped with calibration, and run `predict_proba` or `decision_function` converted to probabilities.
+5. **Probability trace output**: Emit `probability_trace[k, t, class]` aligned to the walkthrough timeline. Downstream analytics consume continuous probabilities rather than YAML rule hits.
+6. **Optional narrative**: Feed structured JSON (probability peaks/slopes + DOM context + screenshot crops) to a **small LLM** for UX copy — keep the trained MVPA model as the source of truth for product analytics.
 
 ### Guardrails
 
-- Emit **`confidence`** from effect size + temporal persistence.
+- Emit **`confidence`** from classifier probability, calibration quality, and temporal persistence.
 - Never claim emotion **measurement**; phrase as **model-assisted hypotheses** tied to UX stimuli.
 
 ---
@@ -176,19 +154,19 @@ rules:
 sequenceDiagram
   participant Agent as Playwright_agent
   participant MUX as Modal_mux_infer
-  participant EVT as Barrier_detector
+  participant MVPA as MVPA_engine
   participant DOM as DOM_snapshot_store
 
   Agent->>DOM: Record_selector_bbox_timeline
   Agent->>MUX: Upload_video_and_cluster_ids
   MUX-->>Agent: vertex_ts_by_cluster
-  Agent->>EVT: Yeo7_aggregate_and_compare
-  EVT-->>Agent: Divergence_windows_and_rules_hits
+  Agent->>MVPA: Mask_vertices_and_score_windows
+  MVPA-->>Agent: Probability_traces_and_divergence_windows
   Agent->>DOM: Resolve_active_elements_for_windows
   Agent-->>Agent: Ranked_issues_per_demographic
 ```
 
-**Barrier definition:** For time window `W`, cluster pair `(A,B)` exhibits **large divergence** in ≥2 networks (e.g. Cohen’s d > threshold on window mean Δ) **and** rule engine fires for one side only.
+**Barrier definition:** For time window `W`, cluster pair `(A,B)` exhibits **large divergence** in MVPA probability traces (e.g. probability delta, slope, or area-under-curve gap crosses the model’s chosen operating point) for a target state/network. The agent does not wait for a `rule engine fires` event; it watches the continuous probability array for peaks, sustained elevation, or cluster-specific divergence.
 
 **Grounding:** For each `W`, intersect DOM timeline → candidate nodes → screenshot snippets → optional CV segmentation later.
 
@@ -209,7 +187,7 @@ neural_ux_scout/
     stream_protocol.py       # WS framing, quantization helpers
   scout_core/
     parcellation.py          # vertex → Yeo7
-    emotion_mapper.py        # YAML rules + scoring
+    mvpa_engine.py           # SurfaceMasker + sliding windows + sklearn probability traces
     barriers.py              # divergence + ranking
     schemas.py               # pydantic models for manifests
   viz_web/
@@ -220,7 +198,7 @@ neural_ux_scout/
       ClusterLegend.tsx
   configs/
     clusters.yaml            # cluster IDs ↔ demographics metadata
-    emotion_rules.yaml
+    mvpa_models.yaml         # model IDs, mask definitions, probability labels
   scripts/
     slice_dataset.py         # offline demographic slicing utilities
   tests/
@@ -263,8 +241,8 @@ Existing repo root can keep [`tribe.py`](tribe.py) as **legacy demo** or migrate
 
 ## 8. Inference & analysis — nilearn + Yeo-7 + barriers
 
-- Use **nilearn** for **NiftiMasker / surface plotting helpers** where volumetric glue is needed; surface MVP can rely on **numpy + precomputed parcellation CSV**.
-- Publish **`analysis_bundle.json`** per session: `{barriers, emotion_events, network_timeseries}` consumable by agent and dashboard.
+- Use **nilearn** for **SurfaceMasker** and surface plotting helpers; surface MVP relies on native fsaverage5 vertices plus [`configs/vertex_regions.csv`](configs/vertex_regions.csv).
+- Publish **`analysis_bundle.json`** per session: `{barriers, probability_traces, mvpa_model_meta}` consumable by agent and dashboard.
 
 ---
 

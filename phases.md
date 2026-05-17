@@ -15,7 +15,7 @@ This document breaks [`NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md`](NEURAL_UX_SCOUT_
 1. **One runnable spine first:** video in → Tribe predict → artifact out → viewer consumes something (even if ugly).
 2. **Contracts before scale:** freeze `session_manifest` / `analysis_bundle` shapes early; version them (`schema_version`).
 3. **Multiplex second:** prove single-subject path on Modal with stable memory, then add `K` clusters with micro-batching.
-4. **Interpretation last-mile:** Yeo-7 aggregates + rule YAML before LLM prose; never invert that order for analytics truthfulness.
+4. **Interpretation last-mile:** MVPA probability traces from trained models before LLM prose; never invert that order for analytics truthfulness.
 5. **Ethics & reporting floors:** define minimum cluster size and suppressed outputs before shipping comparative demographics UI.
 
 ---
@@ -27,7 +27,8 @@ This document breaks [`NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md`](NEURAL_UX_SCOUT_
 | **R0** | TRIBE research spike | Know where Stage 5 subject conditioning lives; VRAM curve for one forward |
 | **P0** | Baseline capture + inference | Manifest + Modal job reproduces current `tribe.py` parity |
 | **P1** | Multiplex inference | `vertex_ts[K,T,V]` (or chunked) + `analysis_bundle` v0 |
-| **P2** | Parcellation & semantics | Vertex → Yeo-7 → rule-based insights + confidence |
+| **P2A** | MVPA training data | Behavioral proxy labels + frozen TRIBE features produce validated `.pkl` classifiers |
+| **P2** | Parcellation & MVPA inference | Vertex → Yeo-7 surface masking → MVPA probability classifications |
 | **P3** | Streaming viewer | Browser: video + brain mesh + timeline sync (degraded mode OK) |
 | **P4** | Neural barriers & grounding | Divergence windows ↔ DOM selectors / evidence bundle |
 | **P5** | Data & cluster training | Demographic clustering artifacts + Modal train job v1 |
@@ -100,30 +101,53 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 ---
 
-## P2 — Parcellation + neural semantics (Yeo-7, rules, guardrails)
+## P2A — MVPA training data (behavioral proxy labels)
 
-**Goal:** Turn vertex traces into **network-level time series** and **human-readable hypotheses** with explicit confidence — **no LLM required** for core scoring.
+**Goal:** Build the production `.pkl` models before runtime inference depends on them: collect UX recordings, create behavioral proxy labels from Playwright traces, generate frozen TRIBE features, and validate with video-held-out CV.
+
+**Deliverables**
+
+- Dataset manifest for **N=50 UX screen recordings** with video path, URL/session metadata, and Playwright DOM trace pointer.
+- Behavioral proxy label builder for `$y`, starting with **Rage Clicks** and related DOM proxy events (`rapid repeated clicks`, `failed submit loops`, `backtrack after interaction`) mapped to Frustration/Cognitive Load labels.
+- Frozen TRIBE feature builder for `$X`: `preds[T,V]` → Yeo-7 surface mask → 3-second sliding-window flattened vectors.
+- `train_mvpa_model.py` outputs calibrated `scikit-learn` `.pkl` pipelines (e.g. `LinearSVC` + calibration), `label_map.json`, and LOVO metrics.
+
+**Checkpoints**
+
+- [ ] **P2A-C1:** Collected **N=50** UX screen recordings with matching Playwright DOM traces and usable TRIBE predictions.
+- [ ] **P2A-C2:** `$y` labels generated via DOM proxy rules, including Rage Clicks, with a spot-check audit log for label quality.
+- [ ] **P2A-C3:** `$X` features generated via frozen TRIBE and 3-second masked sliding windows; feature shapes documented per target mask.
+- [ ] **P2A-C4:** Leave-One-Video-Out CV achieves **macro F1 > 0.75** for the target Frustration/Cognitive Load classifier, or the phase records why the model is not production-ready.
+
+**Exit gate:** `model.pkl` is registered with metadata, LOVO macro F1 > 0.75, and runtime code can load it without retraining.
+
+---
+
+## P2 — Parcellation + MVPA inference (Yeo-7 surface masks, guardrails)
+
+**Goal:** Turn vertex traces into **Yeo-7 surface-masked MVPA features** and continuous cognitive-state probability traces — **no LLM required** for core scoring.
 
 **Deliverables**
 
 - Vertex → **Yeo-7** mapping artifact (`csv`/`npz`) tied to **fsaverage5** vertex indexing used by Tribe.
-- **`emotion_rules.yaml` v1** loaded by code; unit tests on synthetic spikes.
-- **`analysis_bundle.json` v2** adds `network_timeseries`, `emotion_events` with confidence.
+- **`scout_core/mvpa_engine.py`**: applies Yeo-7 `SurfaceMasker`, builds 3-second flattened windows, and loads the pre-trained `.pkl` classifier.
+- Removal/deprecation of **`emotion_rules.yaml`** from the production inference path.
+- **`analysis_bundle.json` v2** adds `probability_traces`, `mvpa_probability_classifications`, model metadata, and confidence/calibration fields.
 
 **Checkpoints**
 
 - [ ] **P2-C1:** Mapping covers **100%** of mesh vertices or documents masked vertices explicitly.
-- [ ] **P2-C2:** Aggregation reproducible: given fixed inputs, network traces bitwise/stable across runs.
-- [ ] **P2-C3:** Every emitted insight includes **`confidence`** + **`evidence`** (which networks, time range).
+- [ ] **P2-C2:** Surface masking reproducible: given fixed inputs, masked vertex order and sliding-window feature vectors are stable across runs.
+- [ ] **P2-C3:** Every emitted MVPA probability classification includes **`confidence`** + **`evidence`** (model id, mask, time range, probability/slope).
 - [ ] **P2-C4:** Copy review: language is **non-diagnostic** (hypothesis framing only).
 
-**Exit gate:** UX-ready JSON drives charts without opening raw `.npz`.
+**Exit gate:** System outputs a continuous probability trace for Frustration/Cognitive Load based on SVM weights, not averages.
 
 ---
 
 ## P3 — Streaming visualization (browser-first)
 
-**Goal:** Side-by-side **walkthrough video** + **3D cortical activity** + **cluster/network panels**, time-aligned; accepts degraded mode (lower FPS mesh updates).
+**Goal:** Side-by-side **walkthrough video** + **3D cortical activity** + **cluster/MVPA probability panels**, time-aligned; accepts degraded mode (lower FPS mesh updates).
 
 **Deliverables**
 
@@ -135,7 +159,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 - [ ] **P3-C1:** Sync accuracy: scrubbing lands within **≤1 frame** of intended index after buffering rules applied.
 - [ ] **P3-C2:** Payload budget: median/max bandwidth documented for one session at target FPS.
-- [ ] **P3-C3:** Degraded mode: if WS stalls, UI shows **network traces** without crashing.
+- [ ] **P3-C3:** Degraded mode: if WS stalls, UI shows **MVPA probability traces** without crashing.
 - [ ] **P3-C4:** Accessibility pass on viewer chrome (keyboard scrubbing, contrast on legend).
 
 **Exit gate:** Stakeholder demo without pointing them at Jupyter or Modal logs.
@@ -148,7 +172,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 **Deliverables**
 
-- `barriers.py` logic: pairwise cluster divergence + persistence thresholds + linkage to P2 events.
+- `barriers.py` logic: pairwise cluster divergence + persistence criteria + linkage to P2 MVPA probability classifications.
 - DOM timeline store (selector, bbox, visibility) correlated to timestamps.
 - Ranked **issue list** export suitable for design/engineering tickets.
 
@@ -159,7 +183,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 - [ ] **P4-C3:** False-positive review checklist completed on **N≥5** diverse sites (manual QA rubric).
 - [ ] **P4-C4:** Privacy review for DOM captures (PII redaction policy documented).
 
-**Exit gate:** “Why Senior spiked PFC but Gen‑Z didn’t” has a **UI artifact pointer**, not only a chart.
+**Exit gate:** “Why Senior probability trace rose but Gen‑Z didn’t” has a **UI artifact pointer**, not only a chart.
 
 ---
 
@@ -180,7 +204,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 - [ ] **P5-C3:** Training loss curve + simple downstream metric (e.g. prediction error vs cluster held-out) tracked per run.
 - [ ] **P5-C4:** Cost estimate documented ($/hr × step time) for one full experiment.
 
-**Exit gate:** New clusters materially change **`analysis_bundle`** outputs vs naive averaging — or consciously ship “v1 equals centroid-of-subjects” with documented limitation.
+**Exit gate:** New clusters materially change **`analysis_bundle`** probability traces vs baseline cluster prototypes — or consciously ship “v1 equals centroid-of-subjects” with documented limitation.
 
 ---
 
@@ -204,7 +228,7 @@ Apply incrementally; don’t punt all to the end.
 
 - **Security:** secrets only via Modal Secret / env; no tokens in manifests or browser bundles.
 - **Reproducibility:** pinned Tribev2 commit, Docker/Modal image digest, seed strategy for training.
-- **Observability:** structured logs per session id; timing breakdown (encode / predict / parcel / stream).
+- **Observability:** structured logs per session id; timing breakdown (encode / predict / mask / MVPA / stream).
 - **Documentation:** each phase updates a single “current demo script” section in README when P0+.
 
 ---
@@ -212,11 +236,12 @@ Apply incrementally; don’t punt all to the end.
 ## Suggested sequencing when overwhelmed
 
 1. **R0** (short spike, hard stop if multiplex looks infeasible without fork).
-2. **P0** → **P2** on offline fixtures **before** perfect Playwright autonomy (use manual captures).
-3. **P1** once R0+P0 stable.
-4. **P3** in parallel with **P2** using mocked `analysis_bundle` JSON.
-5. **P4** once P2+P3 share a timeline contract.
-6. **P5** when you have dataset access rights and ethics sign-off — often last among core phases.
+2. **P0** → **P2A** on offline fixtures **before** perfect Playwright autonomy (use manual captures plus DOM proxy labels).
+3. **P2** once P2A has a registered `.pkl` model.
+4. **P1** once R0+P0 stable.
+5. **P3** in parallel with **P2** using mocked `analysis_bundle` JSON.
+6. **P4** once P2+P3 share a timeline contract.
+7. **P5** when you have dataset access rights and ethics sign-off — often last among core phases.
 
 ---
 
@@ -228,7 +253,7 @@ The checklist at the top of [`NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md`](NEURAL_UX
 |---------------------|-------|
 | Vendor/pin tribev2; Stage 5 spike; VRAM | **R0**, **P0** |
 | Manifest + `analysis_bundle` schemas | **P0** |
-| Vertex→Yeo7 + YAML rules | **P2** |
+| Vertex→Yeo7 + MVPA probability classifications | **P2A**, **P2** |
 | Modal `inference_mux` + streaming encoder | **P1**, **P3** |
 | `viz_web` viewer | **P3** |
 | Barrier detector + DOM intersection | **P4** |
