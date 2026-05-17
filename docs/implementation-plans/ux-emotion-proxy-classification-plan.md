@@ -2,7 +2,7 @@
 
 ## Why not use CorrMVPA directly
 
-[CorrMVPA](https://github.com/shobrook/mvpa) requires volumetric NIfTI input (Haxby 2001 searchlight on voxel grids). Tribe outputs **fsaverage5 cortical surface predictions** `preds[T, V]` where V=20484. Projecting surface→volume introduces interpolation artifacts and throws away the parcellation structure already built in [`scout_core/`](scout_core/). The better approach is a **surface-parcel MVPA**: same correlation-based discriminability logic, but searchlight neighborhoods are defined by Yeo-network membership over the 400 parcels already in [`configs/vertex_regions.csv`](configs/vertex_regions.csv).
+[CorrMVPA](https://github.com/shobrook/mvpa) requires volumetric NIfTI input (Haxby 2001 searchlight on voxel grids). Tribe outputs **fsaverage5 cortical surface predictions** `preds[T, V]` where V=20484. Projecting surface→volume introduces interpolation artifacts and throws away the parcellation structure already built in [`scout_core/`](../../scout_core/). The better approach is a **surface-parcel MVPA**: same correlation-based discriminability logic, but searchlight neighborhoods are defined by Yeo-network membership over the 400 parcels already in [`configs/vertex_regions.csv`](../../configs/vertex_regions.csv).
 
 ## Dataset strategy options
 
@@ -76,17 +76,17 @@ flowchart TD
 
 ## New files
 
-- [`scripts/build_emotion_dataset.py`](scripts/build_emotion_dataset.py) — batch-run Tribe inference on labeled clips, collect sliding-window features + labels into `scout_data/emotion_dataset.npz`
-- [`scripts/record_ux_session.py`](scripts/record_ux_session.py) — Playwright wrapper for browser telemetry capture during user walkthroughs
-- [`scripts/sync_ux_capture.py`](scripts/sync_ux_capture.py) — align screen-recording time to Playwright event time using the text-selection visual anchor
-- [`scripts/label_ux_events.py`](scripts/label_ux_events.py) — convert telemetry windows into baseline/frustration/overload labels
-- [`scripts/build_ux_mvpa_dataset.py`](scripts/build_ux_mvpa_dataset.py) — join TRIBE predictions, synced telemetry labels, and sliding-window features
-- [`scout_core/mvpa.py`](scout_core/mvpa.py) — `parcel_searchlight()`, `sliding_window_features()`, `fit_classifier()`, `discriminability_map()`
-- [`scripts/train_emotion_classifier.py`](scripts/train_emotion_classifier.py) — CLI: load dataset, run LOVO CV, save classifier + discriminability parquet
-- [`configs/emotion_classification.yaml`](configs/emotion_classification.yaml) — window length, classifier hyperparams, CV scheme
-- [`configs/ux_label_rules.yaml`](configs/ux_label_rules.yaml) — thresholds for rage clicks, scroll thrashing, dwell, and baseline reading labels
-- [`tests/test_mvpa.py`](tests/test_mvpa.py) — unit tests for sliding-window features, searchlight, classifier shapes
-- [`tests/test_ux_label_rules.py`](tests/test_ux_label_rules.py) — unit tests for telemetry-derived labels and synchronization offsets
+- [`scripts/build_emotion_dataset.py`](../../scripts/build_emotion_dataset.py) — batch-run Tribe inference on labeled clips, collect sliding-window features + labels into `scout_data/emotion_dataset.npz`
+- [`scripts/record_ux_session.py`](../../scripts/record_ux_session.py) — Playwright wrapper for browser telemetry capture during user walkthroughs
+- [`scripts/sync_ux_capture.py`](../../scripts/sync_ux_capture.py) — align screen-recording time to Playwright event time using the text-selection visual anchor
+- [`scripts/label_ux_events.py`](../../scripts/label_ux_events.py) — convert telemetry windows into baseline/frustration/overload labels
+- [`scripts/build_ux_mvpa_dataset.py`](../../scripts/build_ux_mvpa_dataset.py) — join TRIBE predictions, synced telemetry labels, and sliding-window features
+- [`scout_core/mvpa.py`](../../scout_core/mvpa.py) — `parcel_searchlight()`, `sliding_window_features()`, `fit_classifier()`, `discriminability_map()`
+- [`scripts/train_emotion_classifier.py`](../../scripts/train_emotion_classifier.py) — CLI: load dataset, run LOVO CV, save classifier + discriminability parquet
+- [`configs/emotion_classification.yaml`](../../configs/emotion_classification.yaml) — window length, classifier hyperparams, CV scheme
+- [`configs/ux_label_rules.yaml`](../../configs/ux_label_rules.yaml) — thresholds for rage clicks, scroll thrashing, dwell, and baseline reading labels
+- [`tests/test_mvpa.py`](../../tests/test_mvpa.py) — unit tests for sliding-window features, searchlight, classifier shapes
+- [`tests/test_ux_label_rules.py`](../../tests/test_ux_label_rules.py) — unit tests for telemetry-derived labels and synchronization offsets
 
 ## Proprietary UI/UX capture protocol
 
@@ -264,7 +264,7 @@ click_count_per_10s <= 1
 
 From `preds[T, V]`:
 
-1. Apply `parcel_timeseries(preds, vp)` → `parcel_ts[T, P]` (P=400) — already in [`scout_core/aggregate.py`](scout_core/aggregate.py)
+1. Apply `parcel_timeseries(preds, vp)` → `parcel_ts[T, P]` (P=400) — already in [`scout_core/aggregate.py`](../../scout_core/aggregate.py)
 2. Apply `network_timeseries(parcel_ts, ...)` → `net_ts[T, 7]`
 3. Build **spatiotemporal sliding windows** over `parcel_ts`:
    - To predict timestep `t`, extract rows `[t-2, t-1, t]` from the masked matrix.
@@ -327,7 +327,7 @@ For the proprietary UI/UX path, labels are behavioral proxy classes rather than 
 
 Mirrors Haxby 2001 / CorrMVPA logic, adapted to parcels:
 
-- For each parcel p, define a **neighborhood** = {p} + parcels sharing its Yeo network (from `parcel_to_network_map` in [`scout_core/parcellation.py`](scout_core/parcellation.py))
+- For each parcel p, define a **neighborhood** = {p} + parcels sharing its Yeo network (from `parcel_to_network_map` in [`scout_core/parcellation.py`](../../scout_core/parcellation.py))
 - Split clips into even/odd halves → compute within- vs between-condition correlations across the neighborhood feature vectors
 - Produces `discriminability[P]` — one score per parcel, writeable to `scout_norms/<norm_id>/discriminability.parquet` for visualization
 

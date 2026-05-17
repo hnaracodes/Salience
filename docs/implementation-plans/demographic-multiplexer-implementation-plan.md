@@ -25,7 +25,7 @@ The current repo has root-level `tribe.py`, `scout_core/`, `scripts/`, `configs/
 
 ```text
 TribeV2Application/
-  demographic_implementation.md
+  docs/implementation-plans/demographic-multiplexer-implementation-plan.md
   tribe.py
   activation_store.py
   configs/

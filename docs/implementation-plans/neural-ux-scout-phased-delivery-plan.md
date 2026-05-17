@@ -1,6 +1,6 @@
 # Neural-UX Scout — Phased delivery & checkpoints
 
-This document breaks [`NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md`](NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md) into **concrete phases** with **exit criteria** you can verify independently. The overall vision is large (research-grade neuro-modeling + realtime 3D + agentic UX); these phases are deliberately **narrow** so each gate delivers a demo-able artifact before scope expands.
+This document breaks [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-architecture-plan.md) into **concrete phases** with **exit criteria** you can verify independently. The overall vision is large (research-grade neuro-modeling + realtime 3D + agentic UX); these phases are deliberately **narrow** so each gate delivers a demo-able artifact before scope expands.
 
 **How to use this file**
 
@@ -61,7 +61,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 ## P0 — Baseline pipeline: session artifacts + Modal parity
 
-**Goal:** End-to-end **single demographic / single subject configuration** matching today’s [`tribe.py`](tribe.py): upload clip → `predict` → persisted outputs suitable for downstream tooling.
+**Goal:** End-to-end **single demographic / single subject configuration** matching today’s [`tribe.py`](../../tribe.py): upload clip → `predict` → persisted outputs suitable for downstream tooling.
 
 **Deliverables**
 
@@ -247,7 +247,7 @@ Apply incrementally; don’t punt all to the end.
 
 ## Relationship to the implementation checklist
 
-The checklist at the top of [`NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md`](NEURAL_UX_SCOUT_IMPLEMENTATION_PLAN.md) maps roughly as:
+The checklist at the top of [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-architecture-plan.md) maps roughly as:
 
 | Plan checklist item | Phase |
 |---------------------|-------|

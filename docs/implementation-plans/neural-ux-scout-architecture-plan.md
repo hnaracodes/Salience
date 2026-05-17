@@ -2,7 +2,7 @@
 
 **Architecture choices captured:** cluster-centroid sub-agents, browser streaming visualization.
 
-This doc aligns with the existing Modal scaffold in [`tribe.py`](tribe.py) (`TribeInference`, `TribeModel.from_pretrained`, `predict` → `(n_timesteps, n_vertices)`).
+This doc aligns with the existing Modal scaffold in [`tribe.py`](../../tribe.py) (`TribeInference`, `TribeModel.from_pretrained`, `predict` → `(n_timesteps, n_vertices)`).
 
 **Important reality check (terminology):** Tribe’s public demo path predicts **cortical surface time series** on **fsaverage5** (`PlotBrain(mesh="fsaverage5")`), typically **~20k vertices total**, not **70k volumetric voxels**. The architecture treats “70k voxels” as an optional **Phase B** (volume reconstruction / subcortex), while MVP ships **surface vertex activation** as the primary signal—still mappable to Yeo-7 via surface parcellations and consistent with nilearn workflows.
 
@@ -73,7 +73,7 @@ With **cluster-centroid/prototype embeddings**, the inference batch dimension is
 
 ### Recommended pattern
 
-1. **Freeze** multimodal encoders (~32GB combined — load once per container lifecycle via `@modal.enter()`, identical to current [`tribe.py`](tribe.py)).
+1. **Freeze** multimodal encoders (~32GB combined — load once per container lifecycle via `@modal.enter()`, identical to current [`tribe.py`](../../tribe.py)).
 2. **Replace / extend** the Stage-5 subject pathway with:
    - `subject_embedding_matrix`: shape `[K, D]` on GPU (learnable or fixed after training).
    - Forward pass: **either**
@@ -97,7 +97,7 @@ infer_mux(video_bytes | stimulus_uri, cluster_ids: list[int]) -> {
 
 ### Integration touchpoint
 
-Fork or vendor **`facebookresearch/tribev2`** as a pinned submodule/image layer (you already `pip install -e` from GitHub in [`tribe.py`](tribe.py)). The multiplex work lands as a **small patch module** (e.g. `tribev2_mux.py`) that wraps `TribeModel.predict` after locating where subject IDs feed Stage 5.
+Fork or vendor **`facebookresearch/tribev2`** as a pinned submodule/image layer (you already `pip install -e` from GitHub in [`tribe.py`](../../tribe.py)). The multiplex work lands as a **small patch module** (e.g. `tribev2_mux.py`) that wraps `TribeModel.predict` after locating where subject IDs feed Stage 5.
 
 ---
 
@@ -134,7 +134,7 @@ Given your choice (**web stream**), recommended MVP is **B for interaction**, wi
 
 ### Pipeline
 
-1. **Vertex → network mask**: Map each fsaverage5 vertex to **Yeo-7** labels using [`configs/vertex_regions.csv`](configs/vertex_regions.csv). Use `nilearn.maskers.SurfaceMasker` to isolate a target network, such as Frontoparietal, while preserving the full vertex pattern inside that mask.
+1. **Vertex → network mask**: Map each fsaverage5 vertex to **Yeo-7** labels using [`configs/vertex_regions.csv`](../../configs/vertex_regions.csv). Use `nilearn.maskers.SurfaceMasker` to isolate a target network, such as Frontoparietal, while preserving the full vertex pattern inside that mask.
 2. **No vertex averaging**: Do not collapse vertices into network means. Averaging destroys the spatial “barcode” that MVPA needs to distinguish cognitive states.
 3. **Spatiotemporal feature extraction**: For each cluster `k` and timestep `t`, take masked rows `[t-2, t-1, t]` from `vertex_ts[k, T, V]` and flatten the resulting `3 × P_network` matrix into one feature vector.
 4. **Scikit-learn inference**: Load a pre-trained `sklearn` `.pkl` pipeline, for example `StandardScaler + LinearSVC` wrapped with calibration, and run `predict_proba` or `decision_function` converted to probabilities.
@@ -205,7 +205,7 @@ neural_ux_scout/
     ...
 ```
 
-Existing repo root can keep [`tribe.py`](tribe.py) as **legacy demo** or migrate into `modal_app/inference_mux.py`.
+Existing repo root can keep [`tribe.py`](../../tribe.py) as **legacy demo** or migrate into `modal_app/inference_mux.py`.
 
 ---
 
@@ -241,7 +241,7 @@ Existing repo root can keep [`tribe.py`](tribe.py) as **legacy demo** or migrate
 
 ## 8. Inference & analysis — nilearn + Yeo-7 + barriers
 
-- Use **nilearn** for **SurfaceMasker** and surface plotting helpers; surface MVP relies on native fsaverage5 vertices plus [`configs/vertex_regions.csv`](configs/vertex_regions.csv).
+- Use **nilearn** for **SurfaceMasker** and surface plotting helpers; surface MVP relies on native fsaverage5 vertices plus [`configs/vertex_regions.csv`](../../configs/vertex_regions.csv).
 - Publish **`analysis_bundle.json`** per session: `{barriers, probability_traces, mvpa_model_meta}` consumable by agent and dashboard.
 
 ---
@@ -250,7 +250,7 @@ Existing repo root can keep [`tribe.py`](tribe.py) as **legacy demo** or migrate
 
 | Phase | Deliverable |
 |-------|-------------|
-| **P0** | Manifest + single-cluster inference parity with current [`tribe.py`](tribe.py) |
+| **P0** | Manifest + single-cluster inference parity with current [`tribe.py`](../../tribe.py) |
 | **P1** | Multiplex `K` clusters + micro-batch + `analysis_bundle` |
 | **P2** | Browser viewer + WS stream + synced video |
 | **P3** | Barrier detector + Playwright grounding |
