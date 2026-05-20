@@ -1,0 +1,32 @@
+engagement:
+  # Z-score thresholds for engagement labels
+  threshold_high: 1.5
+  threshold_low: -1.5
+  # Agentic grounding fires when engagement_score exceeds this
+  grounding_trigger: 2.0
+  # Minimum baseline TRs required; fewer → "insufficient_baseline" flag, Track 1 labels suppressed
+  min_baseline_trs: 30
+  # Yeo network names as they appear in configs/vertex_regions.csv
+  van_network_name: "VentralAttention"
+  dmn_network_name: "DefaultMode"
+
+emotion:
+  # Directory containing downloaded + resampled .npy templates (relative to project root)
+  template_dir: "configs/emotion_templates"
+  # Ordered list — index position matches column in cosine_scores output
+  template_names:
+    - anger
+    - disgust
+    - fear
+    - happy
+    - neutral
+    - sad
+    - negative_affect
+  # Agentic grounding fires when any cosine score exceeds this
+  grounding_trigger: 0.85
+
+output:
+  # Written to scout_data/sessions/<id>/analysis_bundle.json
+  analysis_bundle_filename: "analysis_bundle.json"
+  # If true, existing analysis_bundle.json is merged rather than replaced
+  merge_existing: true
