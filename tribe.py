@@ -48,6 +48,43 @@ class TribeInference:
         )
 
     @modal.method()
+    def predict_and_visualize(self, video_bytes: bytes):
+        """Single GPU pass: predict cortical time series and render side-view MP4."""
+        import io
+        import os
+        import subprocess
+        import tempfile
+        import time
+
+        import numpy as np
+
+        if not os.environ.get("DISPLAY"):
+            subprocess.Popen(
+                ["Xvfb", ":99", "-screen", "0", "1280x1024x24", "+extension", "GLX"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.environ["DISPLAY"] = ":99"
+            time.sleep(1.0)
+
+        from tribev2.plotting import PlotBrain
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            video_path = temp_video.name
+
+        df = self.model.get_events_dataframe(video_path=video_path)
+        preds, _ = self.model.predict(events=df)
+
+        plotter = PlotBrain(mesh="fsaverage5")
+        output_path = "/tmp/brain_sim.mp4"
+        plotter.plot_timesteps_mp4(preds, output_path, views="left")
+
+        buf = io.BytesIO()
+        np.savez_compressed(buf, preds=np.asarray(preds, dtype=np.float32))
+        return buf.getvalue(), Path(output_path).read_bytes()
+
+    @modal.method()
     def predict_brain(self, video_bytes: bytes):
         import tempfile
 
@@ -100,19 +137,67 @@ class TribeInference:
 
         return Path(output_path).read_bytes()
 
-# Updated Local Entrypoint
+def _default_video_path() -> Path:
+    return Path(__file__).resolve().parent / "videoplayback.mp4"
+
+
+def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: bytes):
+    """Save preds.npz, SQLite summaries, side-view MP4, and interactive viewer bundle."""
+    import io
+    import sys
+
+    import numpy as np
+
+    from activation_store import DB_PATH, DATA_DIR, resolve_vertex_regions, save_cortical_timeseries
+
+    preds = np.load(io.BytesIO(preds_npz_bytes))["preds"]
+    vertex_map = resolve_vertex_regions()
+    session_id = save_cortical_timeseries(
+        preds,
+        source_video=video_path.name,
+        mesh_name="fsaverage5",
+        vertex_to_region=vertex_map,
+        top_k_peaks=64,
+        notes="TRIBE v2 prediction via modal run tribe.py",
+    )
+
+    session_dir = DATA_DIR / "sessions" / session_id
+    (session_dir / "brain_results.mp4").write_bytes(video_mp4_bytes)
+    Path("brain_results.mp4").write_bytes(video_mp4_bytes)
+
+    scripts_dir = Path(__file__).resolve().parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from export_brain_viewer import export_session_viewer  # noqa: WPS433
+
+    viewer_dir = export_session_viewer(session_id)
+    return session_id, preds.shape, session_dir, viewer_dir, DB_PATH
+
+
 @app.local_entrypoint()
 def main():
-    video_path = Path(__file__).resolve().parent / "videoplayback.mp4"
+    """Predict, save preds.npz + SQLite, render MP4, and export rotatable 3D viewer data.
+
+    Usage: ``modal run tribe.py``  (same as before, but now persists all artifacts)
+    """
+    video_path = _default_video_path()
     video_data = video_path.read_bytes()
     predictor = TribeInference()
 
-    print(f"🧠 Loading {video_path} — predicting and rendering...")
-    video_out = predictor.visualize_brain.remote(video_data)
+    print(f"Loading {video_path} — predicting, rendering, and saving locally...")
+    preds_npz_bytes, video_mp4_bytes = predictor.predict_and_visualize.remote(video_data)
 
-    output_filename = "brain_results.mp4"
-    Path(output_filename).write_bytes(video_out)
-    print(f"✅ Success! Visualization saved to {output_filename}")
+    session_id, shape, session_dir, viewer_dir, db_path = _persist_session(
+        video_path, preds_npz_bytes, video_mp4_bytes
+    )
+
+    print(f"Session id: {session_id}")
+    print(f"preds shape (T×V): {shape[0]} × {shape[1]}")
+    print(f"Dense matrix: {session_dir / 'preds.npz'}")
+    print(f"SQLite (summaries + top-64 peaks/timestep): {db_path}")
+    print(f"Side-view video: brain_results.mp4 and {session_dir / 'brain_results.mp4'}")
+    print(f"3D viewer: open {viewer_dir / 'index.html'} in a browser")
+    print("Inspect numbers: python scripts/inspect_session.py --session-id", session_id)
 
 
 @app.local_entrypoint()
@@ -128,13 +213,16 @@ def record():
     - stimulation_band: timestep/session percentiles → qualitative stimulation labels.
     - location_coarse_bands.csv optional → remap vertex_fraction [0,1] bins (default seeds are mesh-index proxies only).
 
-    Usage (same venv as main): ``modal run tribe.py::record``
-    """
-    import numpy as np
+    Prefer ``modal run tribe.py`` — same persistence plus MP4 and 3D viewer export.
 
+    Usage: ``modal run tribe.py::record`` (predict only, no MP4 / viewer)
+    """
     from activation_store import DB_PATH, DATA_DIR, resolve_vertex_regions, save_cortical_timeseries
 
-    video_path = Path(__file__).resolve().parent / "videoplayback.mp4"
+    import io
+    import numpy as np
+
+    video_path = _default_video_path()
     video_data = video_path.read_bytes()
     predictor = TribeInference()
 
@@ -155,6 +243,7 @@ def record():
     print(f"Session id: {session_id}")
     print(f"Dense preds (T×V): {DATA_DIR / 'sessions' / session_id / 'preds.npz'}")
     print(f"SQLite: {DB_PATH}")
+    print("Tip: use `modal run tribe.py` to also render MP4 and export the 3D viewer.")
     if vertex_map is None:
         print(
             "Tip: add configs/vertex_regions.csv (vertex_index,region_name) "

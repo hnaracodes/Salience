@@ -1,4 +1,4 @@
-# Microplan: atlas-backed surface masks and MVPA inference
+﻿# Microplan: atlas-backed surface masks and MVPA inference
 
 Companion doc for **[neural-ux-scout-architecture-plan.md](neural-ux-scout-architecture-plan.md)** and **[neural-ux-scout-phased-delivery-plan.md](neural-ux-scout-phased-delivery-plan.md)**. Execution blueprint for the **strong neuroscience-facing layer** on top of scaffolding in [`activation_store.py`](../../activation_store.py) (within-session percentiles + coarse `vertex_fraction` bins).
 
@@ -9,8 +9,8 @@ Companion doc for **[neural-ux-scout-architecture-plan.md](neural-ux-scout-archi
 Turn dense **`preds[T, V]`** into:
 
 1. **Anatomically meaningful surface masks** via a versioned vertex→parcel/network mapping (replacing mesh-index proxies).
-2. **MVPA features** that preserve the spatial activation pattern inside each network, rather than averaging vertices.
-3. **Continuous classifier traces** from pre-trained `scikit-learn` models (e.g. `LinearSVC` calibrated to probabilities), producing model-relative cognitive-state likelihoods—not hardcoded YAML rule hits.
+2. **Network-level features** that preserve the spatial activation pattern inside each network, rather than averaging vertices.
+3. **Continuous Z-score engagement and cosine-similarity emotion profiles produced without any trained model**, using surface network masks and downloadable NeuroVault templates.
 
 Guardrail (product copy): output language remains **model-relative hypotheses**, aligned with Neural-UX Scout §3 in the main implementation plan.
 
@@ -62,19 +62,24 @@ Minimum columns after upgrade:
   - Validate `len(unique(vertex_index)) == V` and contiguous `0..V-1`.
   - Emit CSV + update manifest counts/shas.
 
-### C. MVPA model bundle `scout_models/<model_id>/`
+### C. `configs/emotion_templates/`
 
 | File | Contents |
 |------|----------|
-| `model.pkl` | Pre-trained `scikit-learn` classifier or calibrated pipeline |
-| `label_map.json` | Class ids/names and probability columns |
-| `meta.json` | `model_id`, TRIBE checkpoint id, training corpus id, mesh, mask definition, window length, CV metrics |
+| `template_anger.npy` | Kragel (2015) anger template, resampled to fsaverage5, L2-normalised, shape `(20484,)` float32 |
+| `template_disgust.npy` | Kragel (2015) disgust template |
+| `template_fear.npy` | Kragel (2015) fear template |
+| `template_happy.npy` | Kragel (2015) happy template |
+| `template_neutral.npy` | Kragel (2015) neutral template |
+| `template_sad.npy` | Kragel (2015) sad template |
+| `template_negative_affect.npy` | PINES (2015) negative affect template, resampled to fsaverage5, L2-normalised |
 
-**How models are built (offline; document in meta):**
+**How templates are produced (one-time offline; no training):**
 
-- Run Tribev2 on labeled clips; keep `preds[T, V]` in native fsaverage5 vertex order.
-- Apply each target network mask without averaging, build 3-second sliding-window vectors, and train/evaluate with Leave-One-Video-Out cross-validation.
-- Persist the trained `sklearn.pipeline.Pipeline` using `joblib.dump()`.
+- Download NIfTI files from NeuroVault (collection #503 for Kragel; image #10704 for PINES) using `scripts/download_emotion_templates.py`.
+- Resample each to fsaverage5 surface via `nilearn.surface.vol_to_surf` (pial surface, ball interpolation).
+- L2-normalise: `template /= np.linalg.norm(template)`.
+- Save as `.npy`. Gitignored; regenerate with `python scripts/download_emotion_templates.py`.
 
 ---
 
@@ -175,7 +180,7 @@ flowchart TD
 ## Integration with `modal run tribe.py::record`
 
 - **Modal / GPU**: inference unchanged; writes `preds.npz` + SQLite peaks (UX scaffolding).
-- **Local CPU post-step**: `python scripts/analyze_session.py --session-id … --model-id …` reads `preds.npz`, computes MVPA probability traces, fills neuro tables + **`scout_data/sessions/<id>/analysis_bundle.json`**.
+- **Local CPU post-step**: `python scripts/run_dual_track.py --session-id …` reads `preds.npz` + `preds_baseline.npz` + precomputed templates, computes engagement and emotion scores, fills neuro tables + **`scout_data/sessions/<id>/analysis_bundle.json`**.
 
 ---
 
@@ -191,7 +196,7 @@ flowchart TD
 
 ## Dependencies (local)
 
-See [`requirements.txt`](../../requirements.txt): `numpy`, `pandas`, `pydantic`, `pyarrow`, `nibabel`, `nilearn`, `scikit-learn`, `joblib`, `pytest`, plus `modal` as needed.
+See [`requirements.txt`](../../requirements.txt): `numpy`, `pandas`, `pydantic`, `pyarrow`, `nibabel`, `nilearn`, `requests`, `pytest`, plus `modal` as needed. `scikit-learn` and `joblib` are **not required** for inference under this architecture.
 
 ---
 
