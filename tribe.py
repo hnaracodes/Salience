@@ -103,6 +103,167 @@ class TribeInference:
         return preds.tolist()
 
     @modal.method()
+    def extract_frame_attention(
+        self,
+        frame_bytes: bytes,
+        capture_h: int = 1080,
+        capture_w: int = 1920,
+    ) -> bytes:
+        """Run DINOv2 ViT with output_attentions=True on a single frame.
+
+        Loads ``facebook/dinov2-large`` from the persistent volume on first call
+        (lazy, separate from TribeModel).  Subsequent calls reuse the cached
+        instance on the same worker.
+
+        Integration note (R0):
+            This method loads DINOv2 *independently* of TribeModel to guarantee
+            ``output_attentions=True`` works without modifying the predict path.
+            If tribev2 exposes the DINOv2 backbone directly in a future release,
+            ``self._dinov2`` can be wired to ``self.model.visual_encoder`` instead.
+
+        Args:
+            frame_bytes: JPEG- or PNG-encoded bytes of a single video frame.
+            capture_h:   Target heatmap height (Playwright capture height, e.g. 1080).
+            capture_w:   Target heatmap width  (Playwright capture width,  e.g. 1920).
+
+        Returns:
+            Serialised float32 ndarray ``(capture_h, capture_w)`` as numpy .npy
+            bytes (use ``numpy.load(io.BytesIO(result))`` to deserialise).
+            Values are ≥ 0 (raw attention, not normalised to 1).
+        """
+        import io
+
+        import numpy as np
+        import torch
+        from PIL import Image
+        from scipy.ndimage import zoom as ndimage_zoom
+        from transformers import AutoImageProcessor, AutoModel
+
+        # Lazy-load DINOv2 (reuses weights already on the persistent volume).
+        if not hasattr(self, "_dinov2"):
+            self._dinov2_processor = AutoImageProcessor.from_pretrained(
+                "facebook/dinov2-large", cache_dir="/cache"
+            )
+            self._dinov2 = AutoModel.from_pretrained(
+                "facebook/dinov2-large", cache_dir="/cache"
+            )
+            self._dinov2 = self._dinov2.cuda().eval()
+
+        # Decode and preprocess frame (→ 224×224 tensor).
+        image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
+        inputs = self._dinov2_processor(images=image, return_tensors="pt")
+        pixel_values = inputs["pixel_values"].cuda()  # [1, 3, 224, 224]
+
+        with torch.no_grad():
+            outputs = self._dinov2(pixel_values, output_attentions=True)
+
+        # Final-block attentions: tuple element shape = (1, num_heads, S, S).
+        last_attn = outputs.attentions[-1]          # [1, num_heads, S, S]
+        attn_np = last_attn[0].cpu().numpy()        # [num_heads, S, S]
+
+        # Derive square patch grid from seq_len (CLS excluded).
+        n_patches = attn_np.shape[-1] - 1
+        grid_size = int(n_patches ** 0.5)
+
+        # Mean-across-heads [CLS] → patch attention; reshape to 2-D grid.
+        cls_attn = attn_np[:, 0, 1:]               # [num_heads, n_patches]
+        patch_grid = cls_attn.mean(axis=0).reshape(grid_size, grid_size).astype(np.float32)
+
+        # Bilinear upscale to Playwright capture resolution.
+        heatmap = ndimage_zoom(
+            patch_grid,
+            (capture_h / grid_size, capture_w / grid_size),
+            order=1,
+        )
+        heatmap = np.clip(heatmap, 0.0, None).astype(np.float32)
+
+        # Serialise as numpy bytes.
+        buf = io.BytesIO()
+        np.save(buf, heatmap)
+        return buf.getvalue()
+
+    @modal.method()
+    def ground_spike_at_t(
+        self,
+        t_spike: int,
+        frame_bytes: bytes,
+        manifest: dict,
+        capture_h: int = 1080,
+        capture_w: int = 1920,
+    ) -> dict:
+        """Decode frame, extract heatmap, run DOM intersection; return grounding payload.
+
+        Combines ``extract_frame_attention`` + DOM attention-density scoring in a
+        single Modal call for callers that do not need to cache heatmaps locally.
+
+        Callers that *do* need cached heatmaps (e.g. ``analyze_session.py --ground``)
+        should call ``extract_frame_attention`` separately and run
+        ``scout_core.dom_intersect`` locally.
+
+        Args:
+            t_spike:    Row index into ``preds[T, 20484]`` (TRIBE TR).
+            frame_bytes: JPEG/PNG bytes of the video frame at ``t_spike``.
+            manifest:   Parsed ``session_manifest.json`` dict with ``dom_snapshots``.
+            capture_h:  Heatmap height (must match Playwright capture resolution).
+            capture_w:  Heatmap width  (must match Playwright capture resolution).
+
+        Returns:
+            Grounding dict ``{dom_id, tag, bbox, attention_density}`` for the winner,
+            or ``{"grounding": None, "reason": "<cause>"}`` if no match found.
+        """
+        import io
+
+        import numpy as np
+
+        # Extract heatmap (reuses lazy-loaded DINOv2 on the same worker).
+        heatmap_bytes = self.extract_frame_attention.local(frame_bytes, capture_h, capture_w)
+        heatmap = np.load(io.BytesIO(heatmap_bytes)).astype(np.float32)
+        img_h, img_w = heatmap.shape
+
+        # Find nearest DOM snapshot by t_idx.
+        snapshots = manifest.get("dom_snapshots", [])
+        if not snapshots:
+            return {"grounding": None, "reason": "no_dom_snapshots_in_manifest"}
+
+        nearest = min(snapshots, key=lambda s: abs(int(s.get("t_idx", 0)) - t_spike))
+        elements = nearest.get("elements", [])
+        if not elements:
+            return {"grounding": None, "reason": "no_elements_in_snapshot"}
+
+        scroll_y = int(nearest.get("scrollY", 0))
+        scroll_x = int(nearest.get("scrollX", 0))
+
+        # Inlined attention-density loop (scout_core not in Modal image).
+        best_density = -1.0
+        winner: dict | None = None
+        for el in elements:
+            if not el.get("is_intersecting_viewport", True):
+                continue
+            bbox = el.get("bbox")
+            if bbox is None or len(bbox) != 4:
+                continue
+            x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            vx, vy = x - scroll_x, y - scroll_y
+            x1, y1 = max(0, vx), max(0, vy)
+            x2, y2 = min(img_w, vx + w), min(img_h, vy + h)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            box_area = (x2 - x1) * (y2 - y1)
+            if box_area == 0:
+                continue
+            density = float(heatmap[y1:y2, x1:x2].sum() / box_area)
+            if density > best_density:
+                best_density = density
+                winner = {
+                    "dom_id": el.get("dom_id", ""),
+                    "tag": el.get("tag", ""),
+                    "bbox": [int(b) for b in bbox],
+                    "attention_density": round(density, 6),
+                }
+
+        return winner or {"grounding": None, "reason": "no_eligible_elements"}
+
+    @modal.method()
     def visualize_brain(self, video_bytes: bytes):
         import os
         import subprocess

@@ -115,12 +115,12 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 **Checkpoints**
 
-- [ ] **P2A-C1:** All 7 `.npy` templates downloaded, resampled, and verified unit-norm (`|norm - 1| < 1e-5`).
-- [ ] **P2A-C2:** `compute_engagement_track()` produces `engagement_score[T]` and threshold labels for one fixture session with a valid baseline.
-- [ ] **P2A-C3:** `compute_emotion_track()` produces `emotion_scores[T, 7]` with all values in `[-1, 1]` for the same fixture session.
-- [ ] **P2A-C4:** `tests/test_dual_track.py` passes: engagement Z-score arithmetic correct, cosine bounds asserted, insufficient-baseline guardrail fires when `T_base < 30`.
+- [x] **P2A-C1:** All 7 `.npy` templates downloaded, resampled, and verified unit-norm (`|norm - 1| < 1e-5`).
+- [x] **P2A-C2:** `compute_engagement_track()` produces `engagement_score[T]` and threshold labels for one fixture session with a valid baseline.
+- [x] **P2A-C3:** `compute_emotion_track()` produces `emotion_scores[T, 7]` with all values in `[-1, 1]` for the same fixture session.
+- [x] **P2A-C4:** `tests/test_dual_track.py` passes: engagement Z-score arithmetic correct, cosine bounds asserted, insufficient-baseline guardrail fires when `T_base < 30`.
 
-**Exit gate:** Engagement score and 7-channel emotion cosine profile written to `analysis_bundle.json` for one session without training any model.
+**Exit gate:** Engagement score and 7-channel emotion cosine profile written to `analysis_bundle.json` for one session without training any model. ✅ *Code complete — awaiting first live session run with baseline.*
 
 ---
 

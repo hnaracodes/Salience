@@ -1,4 +1,4 @@
-# Neural-UX Scout — Implementation Plan & Code Architecture
+﻿# Neural-UX Scout — Implementation Plan & Code Architecture
 
 **Architecture choices captured:** cluster-centroid sub-agents, browser streaming visualization.
 
@@ -12,7 +12,7 @@ This doc aligns with the existing Modal scaffold in [`tribe.py`](../../tribe.py)
 
 - [ ] Vendor/pin tribev2; locate Stage-5 subject injection; spike single-GPU K-way multiplex forward + peak VRAM curve
 - [ ] Define `session_manifest.json` + `analysis_bundle.json` schemas; Playwright recorder writes manifests
-- [ ] Implement vertex→Yeo7 surface masks + MVPA probability traces over network-specific vertex patterns
+- [x] Implement vertex→Yeo7 surface masks + Zero-Shot Dual-Track scores (engagement Z-score + emotion cosine similarity) — `scout_core/dual_track.py`, `scripts/run_dual_track.py`, `scripts/download_emotion_templates.py`
 - [ ] Modal `inference_mux`: micro-batch clusters, return chunked `vertex_ts`; add streaming encoder module
 - [ ] `viz_web`: three.js/vtk.js viewer + WS timeline sync with walkthrough video
 - [ ] Barrier detector: pairwise cluster divergence + DOM timeline intersection + ranked UX issues
@@ -27,7 +27,7 @@ This doc aligns with the existing Modal scaffold in [`tribe.py`](../../tribe.py)
 |------|-----------|
 | Multiplex many demographics | **Cluster embeddings** (prototypes): train/report ~10–50 clusters; optionally maintain **many fine-grained tags** offline while inference uses batched prototypes |
 | Real-time brain viz | **Browser**: stream **compressed per-frame vertex colors + mesh topology once**, or **tile-encoded MP4/WebRTC** of server-rendered views |
-| Emotion / cognition layer | MVPA classifier over **Yeo-7 surface vertex patterns** using nilearn masks + scikit-learn, with optional LLM narrative |
+| Emotion / cognition layer | **Zero-Shot Dual-Track**: VAN/DMN engagement Z-score + Kragel/PINES cosine similarity templates; LLM is narrative-only |
 | Agent understands failing UI | Ground divergence events to **DOM selectors / bounding boxes** from Playwright + screenshot timestamps |
 
 **Non-goals for MVP:** Training full LLaMA/V-JEPA from scratch; claiming clinical diagnostic validity; true simultaneous “700 voxel grid” without defining the volumetric forward model.

@@ -10,6 +10,9 @@ scout_data/sessions/
 # Optional reproducible outputs
 brain_results.mp4
 
+# Emotion templates — regenerate with: python scripts/download_emotion_templates.py
+configs/emotion_templates/*.npy
+
 # Editor / OS
 .DS_Store
 Thumbs.db

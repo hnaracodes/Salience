@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
-"""Offline neuro analysis: parcellation → norms → calibrated rules → SQLite + analysis_bundle.json."""
+"""Offline neuro analysis: parcellation → norms → calibrated rules → SQLite + analysis_bundle.json.
+
+Optional --ground flag extends the pipeline with Spatial Credit Assignment
+(feature isolation): detects dual-track spikes, loads per-spike heatmaps,
+runs DOM intersection, and appends grounding events to analysis_bundle.json.
+
+Workflow (full pipeline):
+    1. modal run tribe.py                               → preds.npz + MP4
+    2. python scripts/run_dual_track.py --session-id X  → dual-track scores
+    3. python scripts/analyze_session.py --session-id X --norm-id Y --ground
+       → parcellation + threshold rules + grounding events in one bundle
+
+The --ground step reads isolation thresholds from configs/isolation_thresholds.yaml
+and loads pre-saved heatmaps from scout_data/sessions/<id>/heatmaps/t_<N>.npy.
+Heatmaps are produced by tribe.py::extract_frame_attention (Modal GPU).
+"""
 
 from __future__ import annotations
 
@@ -8,9 +23,11 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -18,9 +35,10 @@ sys.path.insert(0, str(ROOT))
 from activation_store import DB_PATH, PROJECT_ROOT  # noqa: E402
 from scout_core.aggregate import network_timeseries, parcel_timeseries  # noqa: E402
 from scout_core.constants import network_names_for_ids  # noqa: E402
+from scout_core.dom_intersect import find_nearest_snapshot, ground_snapshot  # noqa: E402
 from scout_core.norms import zscore_network, zscore_roi  # noqa: E402
 from scout_core.parcellation import dense_parcel_labels, load_vertex_table, parcel_to_network_map  # noqa: E402
-from scout_core.schemas import AnalysisBundle, ThresholdContext, analysis_bundle_path  # noqa: E402
+from scout_core.schemas import AnalysisBundle, GroundingEvent, ThresholdContext, analysis_bundle_path  # noqa: E402
 from scout_core.storage_migrations import (  # noqa: E402
     clear_session_neuro_rows,
     ensure_neuro_schema,
@@ -30,6 +48,195 @@ from scout_core.storage_migrations import (  # noqa: E402
 )
 from scout_core.threshold_engine import evaluate_rules  # noqa: E402
 
+_ISO_CONFIG_PATH = ROOT / "configs" / "isolation_thresholds.yaml"
+
+# Fields written by run_dual_track.py that we must preserve across bundle writes.
+_DUAL_TRACK_PASSTHROUGH_KEYS = (
+    "engagement_track",
+    "emotion_track",
+    "grounding_triggers",
+    "dual_track_schema_version",
+)
+
+
+# ---------------------------------------------------------------------------
+# Feature Isolation — grounding helpers
+# ---------------------------------------------------------------------------
+
+def _load_iso_config() -> dict[str, Any]:
+    if _ISO_CONFIG_PATH.is_file():
+        with _ISO_CONFIG_PATH.open(encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _select_spikes(
+    bundle: dict[str, Any],
+    eng_min: float,
+    anger_min: float,
+    combine: str,
+    cooldown_trs: int,
+    max_spikes: int,
+) -> list[dict[str, Any]]:
+    """Filter dual-track trigger events against isolation thresholds.
+
+    Applies cooldown (minimum gap between consecutive spikes) and optional
+    max_spikes cap. Returns a list of spike dicts: {t_idx, triggers}.
+    """
+    raw_triggers = bundle.get("grounding_triggers", [])
+    if not raw_triggers:
+        return []
+
+    # Group triggers by timestep so we can evaluate both conditions at once.
+    by_t: dict[int, dict[str, float]] = {}
+    for tr in raw_triggers:
+        t = int(tr["t_idx"])
+        channel = tr.get("channel", "")
+        value = float(tr.get("value", 0.0))
+        if t not in by_t:
+            by_t[t] = {}
+        by_t[t][channel] = value
+
+    spikes: list[dict[str, Any]] = []
+    last_t = -cooldown_trs - 1
+
+    for t in sorted(by_t.keys()):
+        vals = by_t[t]
+        eng_val = vals.get("engagement", None)
+        anger_val = vals.get("anger", None)
+
+        eng_ok = eng_val is not None and abs(eng_val) >= eng_min
+        anger_ok = anger_val is not None and anger_val >= anger_min
+
+        if combine == "and":
+            passes = eng_ok and anger_ok
+        else:
+            passes = eng_ok or anger_ok
+
+        if not passes:
+            continue
+        if t - last_t < cooldown_trs:
+            continue
+
+        trigger_payload: dict[str, float] = {}
+        if eng_val is not None:
+            trigger_payload["engagement_score"] = round(eng_val, 4)
+        if anger_val is not None:
+            trigger_payload["kragel_anger"] = round(anger_val, 4)
+
+        spikes.append({"t_idx": t, "triggers": trigger_payload})
+        last_t = t
+
+        if max_spikes and len(spikes) >= max_spikes:
+            break
+
+    return spikes
+
+
+def _run_grounding_step(
+    session_dir: Path,
+    existing_bundle: dict[str, Any],
+    iso_cfg: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Detect spikes, load saved heatmaps, run DOM intersection, return events.
+
+    Heatmaps must be pre-saved at session_dir/heatmaps/t_<N>.npy by a prior
+    call to tribe.py::extract_frame_attention. Missing heatmaps produce an
+    event with grounding=None and a grounding_skip_reason.
+
+    Args:
+        session_dir:     Path to scout_data/sessions/<id>/.
+        existing_bundle: Current analysis_bundle dict (may contain dual-track data).
+        iso_cfg:         Parsed isolation_thresholds.yaml.
+
+    Returns:
+        List of GroundingEvent-compatible dicts for events[].
+    """
+    trigger_cfg = iso_cfg.get("trigger", {})
+    eng_min = float(trigger_cfg.get("engagement_score_min", 2.0))
+    anger_min = float(trigger_cfg.get("kragel_anger_min", 0.85))
+    combine = str(trigger_cfg.get("combine", "or"))
+
+    spike_policy = iso_cfg.get("spike_policy", {})
+    max_spikes = int(spike_policy.get("max_spikes_per_session", 20))
+    cooldown_trs = int(spike_policy.get("cooldown_trs", 3))
+
+    heatmaps_subdir = str(iso_cfg.get("heatmaps_dir", "heatmaps"))
+    heatmaps_dir = session_dir / heatmaps_subdir
+
+    # Load manifest (optional — Playwright recorder populates this in P0)
+    manifest: dict[str, Any] = {}
+    manifest_path = session_dir / "session_manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            print(f"WARNING: session_manifest.json is malformed — DOM grounding skipped.", file=sys.stderr)
+
+    spikes = _select_spikes(existing_bundle, eng_min, anger_min, combine, cooldown_trs, max_spikes)
+    print(f"  Grounding: {len(spikes)} spike(s) selected after cooldown / cap filter.")
+
+    events: list[dict[str, Any]] = []
+    for spike in spikes:
+        t = spike["t_idx"]
+        triggers = spike["triggers"]
+
+        heatmap_path = heatmaps_dir / f"t_{t}.npy"
+        if not heatmap_path.is_file():
+            print(f"  t={t}: heatmap not found at {heatmap_path} — recording ungrounded event.")
+            events.append(
+                GroundingEvent(
+                    t_spike=t,
+                    triggers=triggers,
+                    grounding=None,
+                    grounding_skip_reason="heatmap_not_found",
+                ).model_dump()
+            )
+            continue
+
+        heatmap = np.load(heatmap_path).astype(np.float32)
+
+        snapshot = find_nearest_snapshot(manifest, t)
+        if snapshot is None:
+            print(f"  t={t}: no DOM snapshot in manifest — recording ungrounded event.")
+            events.append(
+                GroundingEvent(
+                    t_spike=t,
+                    triggers=triggers,
+                    grounding=None,
+                    grounding_skip_reason="no_manifest_snapshot",
+                ).model_dump()
+            )
+            continue
+
+        winner = ground_snapshot(heatmap, snapshot)
+        if winner is None:
+            print(f"  t={t}: dom_intersect found no eligible element.")
+            events.append(
+                GroundingEvent(
+                    t_spike=t,
+                    triggers=triggers,
+                    grounding=None,
+                    grounding_skip_reason="no_eligible_dom_element",
+                ).model_dump()
+            )
+        else:
+            from scout_core.schemas import GroundingResult
+            print(f"  t={t}: winner → {winner['dom_id']} ({winner['tag']}) density={winner['attention_density']:.4f}")
+            events.append(
+                GroundingEvent(
+                    t_spike=t,
+                    triggers=triggers,
+                    grounding=GroundingResult(**winner),
+                ).model_dump()
+            )
+
+    return events
+
+
+# ---------------------------------------------------------------------------
+# Norm bundle loader
+# ---------------------------------------------------------------------------
 
 def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Path]:
     row = conn.execute(
@@ -44,7 +251,7 @@ def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Pat
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--norm-id", required=True)
     parser.add_argument(
@@ -64,6 +271,17 @@ def main() -> None:
     )
     parser.add_argument("--fps", type=float, default=1.0)
     parser.add_argument("--reducer", choices=("mean", "mean_abs", "median"), default="mean")
+    parser.add_argument(
+        "--ground",
+        action="store_true",
+        default=False,
+        help=(
+            "Run Spatial Credit Assignment after parcellation: detect dual-track spikes, "
+            "load heatmaps from session_dir/heatmaps/t_<N>.npy, intersect with DOM bboxes, "
+            "and append grounding events[] to analysis_bundle.json (schema v2). "
+            "Requires run_dual_track.py to have been run first."
+        ),
+    )
     args = parser.parse_args()
 
     conn = sqlite3.connect(DB_PATH)
@@ -138,6 +356,18 @@ def main() -> None:
     ]
     insert_threshold_hits(conn, hit_rows)
 
+    session_dir = PROJECT_ROOT / "scout_data" / "sessions" / args.session_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    out_json = analysis_bundle_path(session_dir)
+
+    # Preserve dual-track fields that may have been written by run_dual_track.py.
+    existing_bundle: dict[str, Any] = {}
+    if out_json.is_file():
+        try:
+            existing_bundle = json.loads(out_json.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            print("WARNING: existing analysis_bundle.json is malformed — will overwrite.", file=sys.stderr)
+
     bundle = AnalysisBundle(
         session_id=args.session_id,
         norm_id=args.norm_id,
@@ -147,14 +377,42 @@ def main() -> None:
         network_names=names,
         threshold_hits=hit_rows,
     )
-    session_dir = PROJECT_ROOT / "scout_data" / "sessions" / args.session_id
-    session_dir.mkdir(parents=True, exist_ok=True)
-    out_json = analysis_bundle_path(session_dir)
-    out_json.write_text(bundle.model_dump_json(indent=2), encoding="utf-8")
+
+    # Start from the new bundle dict, then layer in passthrough and grounding data.
+    bundle_dict: dict[str, Any] = bundle.model_dump()
+
+    # Restore dual-track fields written by run_dual_track.py (non-destructive merge).
+    for key in _DUAL_TRACK_PASSTHROUGH_KEYS:
+        if key in existing_bundle:
+            bundle_dict[key] = existing_bundle[key]
+
+    # -----------------------------------------------------------------------
+    # Feature Isolation — Spatial Credit Assignment (--ground)
+    # -----------------------------------------------------------------------
+    if args.ground:
+        print("\nSpatial Credit Assignment (--ground) …")
+        iso_cfg = _load_iso_config()
+        if not iso_cfg:
+            print(
+                f"  WARNING: {_ISO_CONFIG_PATH} not found — grounding skipped.",
+                file=sys.stderr,
+            )
+        elif not bundle_dict.get("grounding_triggers"):
+            print(
+                "  No grounding_triggers in bundle — run run_dual_track.py first.",
+                file=sys.stderr,
+            )
+        else:
+            events = _run_grounding_step(session_dir, bundle_dict, iso_cfg)
+            bundle_dict["events"] = events
+            bundle_dict["schema_version"] = 2
+            print(f"  {len(events)} grounding event(s) written to events[].")
+
+    out_json.write_text(json.dumps(bundle_dict, indent=2), encoding="utf-8")
 
     conn.commit()
     conn.close()
-    print(f"Wrote neuro tables + {len(hit_rows)} threshold hits")
+    print(f"\nWrote neuro tables + {len(hit_rows)} threshold hits")
     print(out_json)
 
 

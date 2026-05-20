@@ -1,0 +1,27 @@
+# Spatial Credit Assignment — trigger thresholds for neural spike grounding.
+# Companion to configs/dual_track.yaml. Runs AFTER dual_track scores exist.
+# Orchestration entry point: python scripts/analyze_session.py --ground
+# See docs/implementation-plans/feature_isolation.md for full pipeline spec.
+
+trigger:
+  # Engagement Z-score minimum to flag a timestep as a grounding spike (Track 1).
+  engagement_score_min: 2.0
+  # Kragel anger cosine similarity minimum to flag a grounding spike (Track 2).
+  kragel_anger_min: 0.85
+  # Logical operator for combining both conditions: "or" | "and"
+  combine: "or"
+
+spike_policy:
+  # Maximum number of spikes to ground per session. 0 = unlimited.
+  max_spikes_per_session: 20
+  # Minimum timestep gap between two consecutive selected spikes (cooldown).
+  cooldown_trs: 3
+
+capture:
+  # Playwright capture resolution — heatmap is upscaled to these dimensions.
+  width: 1920
+  height: 1080
+
+# Sub-path inside scout_data/sessions/<id>/ where per-spike heatmaps are saved.
+# Format: heatmaps/t_<N>.npy, float32 ndarray shape (capture_height, capture_width).
+heatmaps_dir: "heatmaps"
