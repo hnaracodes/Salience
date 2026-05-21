@@ -299,7 +299,7 @@ class TribeInference:
         return Path(output_path).read_bytes()
 
 def _default_video_path() -> Path:
-    return Path(__file__).resolve().parent / "videoplayback.mp4"
+    return Path(__file__).resolve().parent / "mrbeast.mp4"
 
 
 def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: bytes):
@@ -329,9 +329,19 @@ def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: 
     scripts_dir = Path(__file__).resolve().parent / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
-    from export_brain_viewer import export_session_viewer  # noqa: WPS433
 
-    viewer_dir = export_session_viewer(session_id)
+    try:
+        from export_brain_viewer import export_session_viewer  # noqa: WPS433
+
+        viewer_dir = export_session_viewer(session_id)
+    except ModuleNotFoundError as exc:
+        if exc.name != "nilearn":
+            raise
+        viewer_dir = None
+        print(
+            "3D viewer export skipped: local Python is missing `nilearn`. "
+            "Run `python3 -m pip install -r requirements.txt` to enable it."
+        )
     return session_id, preds.shape, session_dir, viewer_dir, DB_PATH
 
 
@@ -357,7 +367,8 @@ def main():
     print(f"Dense matrix: {session_dir / 'preds.npz'}")
     print(f"SQLite (summaries + top-64 peaks/timestep): {db_path}")
     print(f"Side-view video: brain_results.mp4 and {session_dir / 'brain_results.mp4'}")
-    print(f"3D viewer: open {viewer_dir / 'index.html'} in a browser")
+    if viewer_dir is not None:
+        print(f"3D viewer: open {viewer_dir / 'index.html'} in a browser")
     print("Inspect numbers: python scripts/inspect_session.py --session-id", session_id)
 
 
@@ -410,4 +421,3 @@ def record():
             "Tip: add configs/vertex_regions.csv (vertex_index,region_name) "
             "to label brain_sector on peak rows."
         )
-

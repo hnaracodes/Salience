@@ -7,6 +7,14 @@ from pathlib import Path
 
 import numpy as np
 
+KRAGEL_EMOTION_COLUMNS = [
+    "contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral",
+]
+LEGACY_EMOTION_COLUMNS = [
+    "anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect",
+]
+KNOWN_EMOTION_COLUMNS = list(dict.fromkeys(KRAGEL_EMOTION_COLUMNS + LEGACY_EMOTION_COLUMNS))
+
 NEURO_SCHEMA = """
 CREATE TABLE IF NOT EXISTS norm_bundle (
     norm_id TEXT PRIMARY KEY,
@@ -83,13 +91,13 @@ CREATE TABLE IF NOT EXISTS session_engagement_trace (
 CREATE TABLE IF NOT EXISTS session_emotion_trace (
     session_id      TEXT NOT NULL,
     t_idx           INTEGER NOT NULL,
-    anger           REAL NOT NULL,
-    disgust         REAL NOT NULL,
+    contentment     REAL NOT NULL,
+    amusement       REAL NOT NULL,
+    surprise        REAL NOT NULL,
     fear            REAL NOT NULL,
-    happy           REAL NOT NULL,
+    anger           REAL NOT NULL,
+    sadness         REAL NOT NULL,
     neutral         REAL NOT NULL,
-    sad             REAL NOT NULL,
-    negative_affect REAL NOT NULL,
     PRIMARY KEY (session_id, t_idx),
     FOREIGN KEY (session_id) REFERENCES sessions(id)
 );
@@ -106,6 +114,16 @@ def ensure_neuro_schema(conn: sqlite3.Connection) -> None:
 def ensure_dual_track_schema(conn: sqlite3.Connection) -> None:
     """Create dual-track tables if they don't exist. Safe to call multiple times."""
     conn.executescript(DUAL_TRACK_SCHEMA)
+    _ensure_emotion_trace_columns(conn)
+
+
+def _ensure_emotion_trace_columns(conn: sqlite3.Connection) -> None:
+    """Add Kragel columns to older wide emotion tables without dropping rows."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(session_emotion_trace)").fetchall()}
+    for col in KRAGEL_EMOTION_COLUMNS:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE session_emotion_trace ADD COLUMN {col} REAL")
+            cols.add(col)
 
 
 def register_norm_bundle(
@@ -290,20 +308,34 @@ def insert_emotion_trace(
     cosine_scores: list,
     template_names: list[str],
 ) -> None:
-    expected = ["anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect"]
     name_to_idx = {n: i for i, n in enumerate(template_names)}
-    col_idx = [name_to_idx[n] for n in expected]
+
+    table_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(session_emotion_trace)").fetchall()
+    }
+    emotion_cols = [c for c in KNOWN_EMOTION_COLUMNS if c in table_cols]
+    if not emotion_cols:
+        raise ValueError("session_emotion_trace has no recognised emotion columns")
+
+    def _value_for(column: str, row: list) -> float:
+        if column in name_to_idx:
+            return float(row[name_to_idx[column]])
+        if column == "sad" and "sadness" in name_to_idx:
+            return float(row[name_to_idx["sadness"]])
+        return 0.0
 
     rows = []
     for t, row in enumerate(cosine_scores):
-        vals = [float(row[i]) for i in col_idx]
+        vals = [_value_for(col, row) for col in emotion_cols]
         rows.append((session_id, t, *vals))
 
+    col_sql = ", ".join(emotion_cols)
+    placeholders = ", ".join("?" for _ in range(2 + len(emotion_cols)))
     conn.executemany(
-        """
+        f"""
         INSERT OR REPLACE INTO session_emotion_trace (
-            session_id, t_idx, anger, disgust, fear, happy, neutral, sad, negative_affect
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            session_id, t_idx, {col_sql}
+        ) VALUES ({placeholders})
         """,
         rows,
     )
