@@ -23,8 +23,8 @@ emotion:
     - anger
     - sadness
     - neutral
-  # Agentic grounding fires when any cosine score exceeds this
-  grounding_trigger: 0.85
+  # Agentic grounding fires when any emotion session-relative Z exceeds this
+  grounding_z_trigger: 2.0
 
 output:
   # Written to scout_data/sessions/<id>/analysis_bundle.json

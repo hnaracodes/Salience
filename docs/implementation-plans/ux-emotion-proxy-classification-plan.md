@@ -11,7 +11,7 @@ Two independent tracks emit a score per TRIBE TR (~1 s):
 | Track | Method | Output |
 |-------|--------|--------|
 | **Track 1 — Visual Engagement** | VAN/DMN vertex averaging + Z-score normalization against a plain-text baseline | `engagement_score[T]` — continuous, values ≈ ±3 |
-| **Track 2 — Discrete Emotion** | Cosine similarity against L2-normalised NeuroVault templates (Kragel 2015 + PINES 2015) | `emotion_scores[T, 7]` — continuous, values in [-1, 1] |
+| **Track 2 — Discrete Emotion** | Whole-brain cosine similarity vs Kragel & LaBar (2015) templates + **session-relative Z-scoring** per channel | `cosine_scores[T, 7]` raw; `z_scores[T, 7]` for triggers |
 
 The LLM layer is **final-stage narrative only**: it receives the numeric profiles and writes summary prose. It does not classify or predict emotion directly. All classification decisions are made deterministically from the scores above.
 
@@ -92,10 +92,9 @@ engagement_score = z_van - z_dmn              # shape (T,)
 
 | Template | Source | Emotions |
 |----------|--------|----------|
-| **Kragel (2015) 6-emotion** | NeuroVault collection #503 | `anger`, `disgust`, `fear`, `happy`, `neutral`, `sad` |
-| **PINES (2015) Negative Affect** | NeuroVault image #10704 | `negative_affect` |
+| **Kragel & LaBar (2015)** | NeuroVault collection **#12383** | `contentment`, `amusement`, `surprise`, `fear`, `anger`, `sadness`, `neutral` |
 
-All templates are volumetric NIfTI in MNI152 space. They require a one-time offline preprocessing step before runtime use.
+All templates are volumetric NIfTI in MNI152 space. They require a one-time offline preprocessing step before runtime use. Cosine similarity uses the full **20,484-vertex** surface (no network masking).
 
 ### Preprocessing (`scripts/download_emotion_templates.py`)
 
@@ -112,28 +111,37 @@ Output: `configs/emotion_templates/` — 7 `.npy` files of shape `(20484,)`, uni
 ### Live inference (per TR, no training required)
 
 ```python
-# Load templates once at startup
+# Load templates once at startup (see configs/dual_track.yaml for label order)
 import numpy as np
-template_names = ["anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect"]
+template_names = ["contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral"]
 templates = np.stack([
     np.load(f"configs/emotion_templates/template_{name}.npy")
     for name in template_names
-])  # shape (7, 20484), each row already L2-normalised
+])  # shape (7, 20484), each row L2-normalised
 
-# Score each timestep
-emotion_scores = np.zeros((T, 7), dtype=np.float32)
-for t in range(T):
-    pred_norm = preds[t] / (np.linalg.norm(preds[t]) + 1e-8)
-    emotion_scores[t] = templates @ pred_norm   # shape (7,) — one score per emotion
+# Whole-brain cosine per timestep (vectorised in scout_core/dual_track.py)
+norms = np.linalg.norm(preds, axis=1, keepdims=True)
+preds_norm = preds / (norms + 1e-8)
+cosine_scores = np.clip(preds_norm @ templates.T, -1.0, 1.0)  # shape (T, 7)
 ```
 
-Output: `emotion_scores[T, 7]` — continuous cosine similarity profile, values in [-1, 1].
+Raw cosine values are often small (e.g. ~0.05) due to domain shift; **do not use absolute cosine thresholds** for UI or grounding.
 
-Channel index → label: `anger(0), disgust(1), fear(2), happy(3), neutral(4), sad(5), negative_affect(6)`.
+### Session-relative Z-scoring (per emotion channel)
+
+After computing `cosine_scores[T, 7]` for the full session, for each channel `i`:
+
+```python
+mu_i = cosine_scores[:, i].mean()
+sigma_i = cosine_scores[:, i].std()
+z_scores[:, i] = (cosine_scores[:, i] - mu_i) / (sigma_i + 1e-8)
+```
+
+Grounding and UI spikes use **relative** thresholds: `z_score > 2.0` (configurable via `configs/dual_track.yaml` → `emotion.grounding_z_trigger`).
 
 ### Guardrail
 
-Cosine similarity is bounded in [-1, 1] by construction. **Do not threshold into binary classes in production analytics.** Surface the full profile to the dashboard and report as _"model-relative hypotheses, not clinical emotion measurement."_
+Cosine similarity is bounded in [-1, 1] by construction. **Do not threshold raw cosine into binary classes in production analytics.** Surface both `cosine_scores` and `z_scores` to the dashboard and report as _"model-relative hypotheses, not clinical emotion measurement."_
 
 ---
 
@@ -143,8 +151,8 @@ Detailed implementation lives in [`feature_isolation.md`](feature_isolation.md) 
 
 **Trigger condition:** fire the agentic grounding forward pass when either of the following hold:
 
-- `engagement_score[t] > 2.0`, **or**
-- any `emotion_scores[t, i] > 0.85`
+- `engagement_score[t] > 2.0` (baseline-relative Z), **or**
+- any emotion `z_scores[t, i] > 2.0` (session-relative Z per channel)
 
 The grounding pass runs a secondary TRIBE forward on the flagged frame with `output_attentions=True`, extracts DINOv2 `[CLS]` token attention weights, upscales to 1920×1080, and intersects the resulting heatmap with Playwright DOM bounding boxes to identify the UI element driving the neural spike.
 
@@ -162,15 +170,31 @@ The grounding pass runs a secondary TRIBE forward on the flagged frame with `out
     "thresholds": { "high": 1.5, "low": -1.5 }
   },
   "emotion_track": {
-    "template_names": ["anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect"],
-    "cosine_scores": [[0.12, -0.03, 0.05, 0.31, 0.08, -0.10, 0.14], ...],
+    "template_names": ["contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral"],
+    "cosine_scores": [[0.05, 0.04, 0.06, 0.05, 0.062, 0.04, 0.05], ...],
+    "z_scores": [[-0.2, -0.5, 0.1, -0.3, 3.1, -0.4, 0.0], ...],
+    "session_stats": { "mu": [...], "sigma": [...] },
+    "z_scoring": "session_relative",
+    "grounding_z_threshold": 2.0,
     "template_source": "neurovault",
-    "template_collection_ids": ["503", "10704"]
-  }
+    "template_collection_ids": ["12383"]
+  },
+  "grounding_triggers": [
+    {
+      "t_idx": 42,
+      "trigger_type": "emotion",
+      "channel": "anger",
+      "value": 3.1,
+      "raw_cosine": 0.062,
+      "z_score": 3.1
+    }
+  ]
 }
 ```
 
-- `scores` and `cosine_scores` are arrays of length `T` aligned to `preds.npz` timestep indices.
+Per-timestep dominant emotion (UI helper): `{"dominant": "anger", "raw_cosine": 0.062, "z_score": 3.1}` via `dominant_emotion_at_timestep()`.
+
+- `scores`, `cosine_scores`, and `z_scores` are arrays of length `T` aligned to `preds.npz` timestep indices.
 - `baseline_flag` is `null` when the baseline is sufficient, or `"insufficient_baseline"` when `T_base < 30`.
 
 ---
@@ -179,8 +203,8 @@ The grounding pass runs a secondary TRIBE forward on the flagged frame with `out
 
 | File | Purpose |
 |------|---------|
-| `scripts/download_emotion_templates.py` | Fetch Kragel (collection #503) + PINES (image #10704) NIfTIs from NeuroVault, `vol_to_surf` resample to fsaverage5, L2-normalize, save `.npy` |
-| `scout_core/dual_track.py` | `compute_engagement_track(preds, preds_baseline, van_idx, dmn_idx, thresholds)` and `compute_emotion_track(preds, templates)` |
+| `scripts/download_emotion_templates.py` | Fetch Kragel collection #12383 NIfTIs from NeuroVault, `vol_to_surf` resample to fsaverage5, L2-normalize, save `.npy` |
+| `scout_core/dual_track.py` | `compute_engagement_track(...)`, `compute_emotion_track(...)` (cosine + session Z), `apply_session_z_scores`, `find_grounding_triggers` |
 | `scripts/run_dual_track.py` | CLI: `--session-id <id>` → loads `preds.npz` + `preds_baseline.npz` + templates → writes engagement + emotion JSON → merges into `analysis_bundle.json` |
 | `configs/emotion_templates/` | 7 unit-norm `.npy` files (gitignored; regenerate with `download_emotion_templates.py`) |
 | `configs/dual_track.yaml` | Engagement thresholds (`high: 1.5`, `low: -1.5`), grounding trigger thresholds, template paths, minimum baseline TRs |

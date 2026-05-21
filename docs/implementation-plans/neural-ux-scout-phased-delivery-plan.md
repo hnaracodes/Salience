@@ -15,7 +15,7 @@ This document breaks [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-ar
 1. **One runnable spine first:** video in → Tribe predict → artifact out → viewer consumes something (even if ugly).
 2. **Contracts before scale:** freeze `session_manifest` / `analysis_bundle` shapes early; version them (`schema_version`).
 3. **Multiplex second:** prove single-subject path on Modal with stable memory, then add `K` clusters with micro-batching.
-4. **Interpretation last-mile:** Zero-Shot Dual-Track scores (engagement Z-score, emotion cosine similarity) before LLM prose; never invert that order for analytics truthfulness.
+4. **Interpretation last-mile:** Zero-Shot Dual-Track scores (engagement baseline-relative Z, emotion session-relative Z on cosine templates) before LLM prose; never invert that order for analytics truthfulness.
 5. **Ethics & reporting floors:** define minimum cluster size and suppressed outputs before shipping comparative demographics UI.
 
 ---
@@ -133,7 +133,7 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 - Vertex → **Yeo-7** mapping artifact (`csv`/`npz`) tied to **fsaverage5** vertex indexing used by Tribe.
 - **`scout_core/dual_track.py`** validated across 3+ real or fixture sessions; no training step required; scores emitted with model-relative guardrail copy.
 - Removal/deprecation of **`emotion_rules.yaml`** from the production inference path.
-- **`analysis_bundle.json` v2** adds `engagement_track` (Z-score + labels) and `emotion_track` (7-channel cosine scores), replacing any `probability_traces` or `mvpa_probability_classifications` fields.
+- **`analysis_bundle.json` v2** adds `engagement_track` (Z-score + labels) and `emotion_track` (7-channel cosine + session-relative `z_scores`); grounding uses Z > 2.0, not absolute cosine thresholds.
 
 **Checkpoints**
 

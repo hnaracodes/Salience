@@ -145,7 +145,7 @@ def run(
     template_dir_raw = emo_cfg.get("template_dir", "configs/emotion_templates")
     template_dir = PROJECT_ROOT / template_dir_raw
     template_names = emo_cfg.get("template_names") or TEMPLATE_NAMES
-    grounding_emo = float(emo_cfg.get("grounding_trigger", 0.85))
+    grounding_emo_z = float(emo_cfg.get("grounding_z_trigger", 2.0))
 
     bundle_filename = str(out_cfg.get("analysis_bundle_filename", "analysis_bundle.json"))
     merge_existing = bool(out_cfg.get("merge_existing", True))
@@ -208,13 +208,21 @@ def run(
         emotion_result = None
     else:
         print(f"  Loaded {len(t_names)} templates from {template_dir.name}/")
-        emotion_result = compute_emotion_track(preds, templates, t_names)
+        emotion_result = compute_emotion_track(
+            preds, templates, t_names, grounding_z_threshold=grounding_emo_z,
+        )
         scores_arr = np.array(emotion_result["cosine_scores"])
+        z_arr = np.array(emotion_result["z_scores"])
         peak_means = scores_arr.mean(axis=0)
+        peak_z = z_arr.max(axis=0)
         summary = "  Mean cosine: " + ", ".join(
             f"{n}={v:.3f}" for n, v in zip(t_names, peak_means.tolist())
         )
         print(summary)
+        z_summary = "  Peak Z:      " + ", ".join(
+            f"{n}={v:.2f}" for n, v in zip(t_names, peak_z.tolist())
+        )
+        print(z_summary)
 
     # -----------------------------------------------------------------------
     # Grounding triggers
@@ -222,7 +230,7 @@ def run(
     triggers = find_grounding_triggers(
         engagement_result, emotion_result,
         engagement_trigger=grounding_eng,
-        emotion_trigger=grounding_emo,
+        emotion_z_trigger=grounding_emo_z,
     )
     print(f"\nGrounding triggers: {len(triggers)}")
 
