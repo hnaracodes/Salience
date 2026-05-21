@@ -8,7 +8,7 @@ Track 1 — Visual Engagement:
 
 Track 2 — Discrete Emotion:
     Computes cosine similarity between each normalised timestep vector and 7
-    pre-downloaded NeuroVault templates (Kragel 2015 × 6 + PINES 2015).
+    pre-downloaded Kragel & LaBar (2015) NeuroVault templates.
 
 See configs/dual_track.yaml for thresholds and template paths.
 See scripts/download_emotion_templates.py to fetch and preprocess templates.
@@ -24,7 +24,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VERTEX_CSV = PROJECT_ROOT / "configs" / "vertex_regions.csv"
 DEFAULT_TEMPLATE_DIR = PROJECT_ROOT / "configs" / "emotion_templates"
-TEMPLATE_NAMES = ["anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect"]
+TEMPLATE_NAMES = ["contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral"]
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ def compute_emotion_track(
         "template_names": list(template_names),
         "cosine_scores": cosine_scores.tolist(),
         "template_source": "neurovault",
-        "template_collection_ids": ["503", "10704"],
+        "template_collection_ids": ["12383"],
     }
 
 

@@ -155,10 +155,10 @@ class TestEmotionTrack:
     def test_perfect_match_yields_score_one(self, unit_norm_templates):
         """A preds row identical to a template should yield cosine score ≈ 1 for that channel."""
         T = 5
-        preds = np.tile(unit_norm_templates[0], (T, 1))  # all rows = template 0 (anger)
+        preds = np.tile(unit_norm_templates[0], (T, 1))  # all rows = template 0
         result = compute_emotion_track(preds, unit_norm_templates, TEMPLATE_NAMES)
         scores = np.array(result["cosine_scores"])
-        assert np.allclose(scores[:, 0], 1.0, atol=1e-5), f"Expected 1.0 for anger column, got {scores[:, 0]}"
+        assert np.allclose(scores[:, 0], 1.0, atol=1e-5), f"Expected 1.0 for first column, got {scores[:, 0]}"
 
     def test_orthogonal_template_yields_zero(self):
         """Preds orthogonal to all templates should yield cosine score ≈ 0."""
@@ -228,7 +228,8 @@ class TestGroundingTriggers:
 
     def test_emotion_trigger_fires_for_correct_channel(self):
         cos = [[0.0] * N_EMOTIONS for _ in range(3)]
-        cos[1][2] = 0.9  # t=1, fear=0.9 > 0.85
+        fear_idx = TEMPLATE_NAMES.index("fear")
+        cos[1][fear_idx] = 0.9  # t=1, fear=0.9 > 0.85
         emo = {"template_names": TEMPLATE_NAMES, "cosine_scores": cos}
         triggers = find_grounding_triggers(None, emo, engagement_trigger=2.0, emotion_trigger=0.85)
         assert len(triggers) == 1

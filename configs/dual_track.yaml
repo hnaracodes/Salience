@@ -7,21 +7,22 @@ engagement:
   # Minimum baseline TRs required; fewer → "insufficient_baseline" flag, Track 1 labels suppressed
   min_baseline_trs: 30
   # Yeo network names as they appear in configs/vertex_regions.csv
-  van_network_name: "VentralAttention"
-  dmn_network_name: "DefaultMode"
+  van_network_name: "SalVentAttn"
+  dmn_network_name: "Default"
 
 emotion:
   # Directory containing downloaded + resampled .npy templates (relative to project root)
   template_dir: "configs/emotion_templates"
-  # Ordered list — index position matches column in cosine_scores output
+  # Native Kragel & LaBar (2015) labels from NeuroVault collection #12383.
+  # Ordered list — index position matches column in cosine_scores output.
   template_names:
-    - anger
-    - disgust
+    - contentment
+    - amusement
+    - surprise
     - fear
-    - happy
+    - anger
+    - sadness
     - neutral
-    - sad
-    - negative_affect
   # Agentic grounding fires when any cosine score exceeds this
   grounding_trigger: 0.85
 

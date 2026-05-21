@@ -39,6 +39,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from activation_store import DATA_DIR, DB_PATH, SESSIONS_DIR
 from scout_core.dual_track import (
+    TEMPLATE_NAMES,
     compute_emotion_track,
     compute_engagement_track,
     find_grounding_triggers,
@@ -143,9 +144,7 @@ def run(
 
     template_dir_raw = emo_cfg.get("template_dir", "configs/emotion_templates")
     template_dir = PROJECT_ROOT / template_dir_raw
-    template_names = emo_cfg.get("template_names") or [
-        "anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect"
-    ]
+    template_names = emo_cfg.get("template_names") or TEMPLATE_NAMES
     grounding_emo = float(emo_cfg.get("grounding_trigger", 0.85))
 
     bundle_filename = str(out_cfg.get("analysis_bundle_filename", "analysis_bundle.json"))
@@ -248,7 +247,7 @@ def run(
             baseline_session_id=baseline_src,
             baseline_trs=engagement_result.get("baseline_trs"),
             baseline_flag=engagement_result.get("baseline_flag"),
-            template_source="neurovault" if emotion_result else None,
+            template_source="neurovault:collection:12383" if emotion_result else None,
             thresholds_json=thresholds_json,
         )
 
