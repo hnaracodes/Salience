@@ -8,7 +8,8 @@ Track 1 — Visual Engagement:
 
 Track 2 — Discrete Emotion:
     Computes cosine similarity between each normalised timestep vector and 7
-    pre-downloaded Kragel & LaBar (2015) NeuroVault templates.
+    pre-downloaded Kragel & LaBar (2015) NeuroVault templates, then session-relative
+    Z-scores per emotion channel for grounding triggers.
 
 See configs/dual_track.yaml for thresholds and template paths.
 See scripts/download_emotion_templates.py to fetch and preprocess templates.
@@ -184,19 +185,65 @@ def compute_engagement_track(
 # Track 2 — Discrete Emotion (Template Matching)
 # ---------------------------------------------------------------------------
 
+def apply_session_z_scores(
+    cosine_scores: np.ndarray,
+) -> tuple[np.ndarray, dict[str, list[float]]]:
+    """Session-relative Z-score per emotion channel over timesteps.
+
+    For each channel i: Z_{t,i} = (X_{t,i} - mu_i) / (sigma_i + 1e-8)
+    where mu_i and sigma_i are the session mean and std of raw cosine scores.
+    """
+    cosine_scores = np.asarray(cosine_scores, dtype=np.float32)
+    mu = cosine_scores.mean(axis=0, keepdims=True)     # (1, n_emotions)
+    sigma = cosine_scores.std(axis=0, keepdims=True)   # (1, n_emotions)
+    # Channels with no session variance → Z≈0 (avoids blow-up when sigma≈0)
+    z_scores = np.where(
+        sigma < 1e-7,
+        0.0,
+        (cosine_scores - mu) / (sigma + 1e-8),
+    ).astype(np.float32)
+    mu = mu.ravel()
+    sigma = sigma.ravel()
+    session_stats = {
+        "mu": mu.tolist(),
+        "sigma": sigma.tolist(),
+    }
+    return z_scores, session_stats
+
+
+def dominant_emotion_at_timestep(
+    cosine_row: list[float] | np.ndarray,
+    z_row: list[float] | np.ndarray,
+    template_names: list[str],
+) -> dict[str, Any]:
+    """Return dominant emotion by max session-relative Z at one timestep."""
+    z_arr = np.asarray(z_row, dtype=np.float32)
+    cos_arr = np.asarray(cosine_row, dtype=np.float32)
+    idx = int(np.argmax(z_arr))
+    name = template_names[idx] if idx < len(template_names) else f"channel_{idx}"
+    return {
+        "dominant": name,
+        "raw_cosine": float(cos_arr[idx]),
+        "z_score": float(z_arr[idx]),
+    }
+
+
 def compute_emotion_track(
     preds: np.ndarray,
     templates: np.ndarray,
     template_names: list[str],
+    *,
+    grounding_z_threshold: float = 2.0,
 ) -> dict[str, Any]:
-    """Compute cosine similarity between each timestep and all emotion templates.
+    """Compute cosine similarity and session-relative Z-scores per emotion.
 
     Args:
-        preds:          Shape (T, V) — live session predictions.
+        preds:          Shape (T, V) — live session predictions (all 20484 vertices).
         templates:      Shape (n_emotions, V) — L2-normalised template vectors.
         template_names: List of emotion labels, length n_emotions.
+        grounding_z_threshold: Z threshold documented in bundle for UI/grounding.
 
-    Returns dict with keys: template_names, cosine_scores, template_source.
+    Returns dict with cosine_scores, z_scores, session_stats, and metadata.
     All cosine_scores values are in [-1, 1] by construction.
     """
     preds = np.asarray(preds, dtype=np.float32)
@@ -212,9 +259,15 @@ def compute_emotion_track(
     # Clamp to [-1, 1] to guard against any floating-point drift
     cosine_scores = np.clip(cosine_scores, -1.0, 1.0)
 
+    z_scores, session_stats = apply_session_z_scores(cosine_scores)
+
     return {
         "template_names": list(template_names),
         "cosine_scores": cosine_scores.tolist(),
+        "z_scores": z_scores.tolist(),
+        "session_stats": session_stats,
+        "z_scoring": "session_relative",
+        "grounding_z_threshold": float(grounding_z_threshold),
         "template_source": "neurovault",
         "template_collection_ids": ["12383"],
     }
@@ -228,11 +281,12 @@ def find_grounding_triggers(
     engagement_result: dict[str, Any] | None,
     emotion_result: dict[str, Any] | None,
     engagement_trigger: float = 2.0,
-    emotion_trigger: float = 0.85,
+    emotion_z_trigger: float = 2.0,
 ) -> list[dict[str, Any]]:
     """Return a list of timestep-indexed grounding trigger events.
 
-    Each event: {t_idx, trigger_type, value, channel}.
+    Engagement uses baseline-relative Z; emotion uses session-relative Z per channel.
+    Each emotion event includes raw_cosine and z_score; value is the Z for filtering.
     """
     triggers: list[dict[str, Any]] = []
 
@@ -245,10 +299,19 @@ def find_grounding_triggers(
     if emotion_result:
         names = emotion_result.get("template_names", [])
         cosine_scores = emotion_result.get("cosine_scores", [])
-        for t, row in enumerate(cosine_scores):
-            for i, v in enumerate(row):
-                if v >= emotion_trigger:
+        z_scores = emotion_result.get("z_scores", [])
+        for t, (cos_row, z_row) in enumerate(zip(cosine_scores, z_scores)):
+            for i, z in enumerate(z_row):
+                if z > emotion_z_trigger:
                     channel = names[i] if i < len(names) else f"channel_{i}"
-                    triggers.append({"t_idx": t, "trigger_type": "emotion", "value": float(v), "channel": channel})
+                    raw = float(cos_row[i]) if i < len(cos_row) else 0.0
+                    triggers.append({
+                        "t_idx": t,
+                        "trigger_type": "emotion",
+                        "channel": channel,
+                        "value": float(z),
+                        "raw_cosine": raw,
+                        "z_score": float(z),
+                    })
 
     return triggers

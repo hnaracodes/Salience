@@ -6,8 +6,8 @@
 trigger:
   # Engagement Z-score minimum to flag a timestep as a grounding spike (Track 1).
   engagement_score_min: 2.0
-  # Kragel anger cosine similarity minimum to flag a grounding spike (Track 2).
-  kragel_anger_min: 0.85
+  # Kragel anger session-relative Z minimum to flag a grounding spike (Track 2).
+  kragel_anger_z_min: 2.0
   # Logical operator for combining both conditions: "or" | "and"
   combine: "or"
 

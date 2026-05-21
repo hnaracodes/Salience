@@ -73,7 +73,7 @@ def _load_iso_config() -> dict[str, Any]:
 def _select_spikes(
     bundle: dict[str, Any],
     eng_min: float,
-    anger_min: float,
+    anger_z_min: float,
     combine: str,
     cooldown_trs: int,
     max_spikes: int,
@@ -106,7 +106,7 @@ def _select_spikes(
         anger_val = vals.get("anger", None)
 
         eng_ok = eng_val is not None and abs(eng_val) >= eng_min
-        anger_ok = anger_val is not None and anger_val >= anger_min
+        anger_ok = anger_val is not None and anger_val > anger_z_min
 
         if combine == "and":
             passes = eng_ok and anger_ok
@@ -122,7 +122,7 @@ def _select_spikes(
         if eng_val is not None:
             trigger_payload["engagement_score"] = round(eng_val, 4)
         if anger_val is not None:
-            trigger_payload["kragel_anger"] = round(anger_val, 4)
+            trigger_payload["kragel_anger_z"] = round(anger_val, 4)
 
         spikes.append({"t_idx": t, "triggers": trigger_payload})
         last_t = t
@@ -154,7 +154,17 @@ def _run_grounding_step(
     """
     trigger_cfg = iso_cfg.get("trigger", {})
     eng_min = float(trigger_cfg.get("engagement_score_min", 2.0))
-    anger_min = float(trigger_cfg.get("kragel_anger_min", 0.85))
+    if "kragel_anger_z_min" in trigger_cfg:
+        anger_z_min = float(trigger_cfg["kragel_anger_z_min"])
+    elif "kragel_anger_min" in trigger_cfg:
+        print(
+            "WARNING: kragel_anger_min is deprecated (absolute cosine); "
+            "use kragel_anger_z_min in isolation_thresholds.yaml.",
+            file=sys.stderr,
+        )
+        anger_z_min = 2.0
+    else:
+        anger_z_min = 2.0
     combine = str(trigger_cfg.get("combine", "or"))
 
     spike_policy = iso_cfg.get("spike_policy", {})
@@ -173,7 +183,7 @@ def _run_grounding_step(
         except json.JSONDecodeError:
             print(f"WARNING: session_manifest.json is malformed — DOM grounding skipped.", file=sys.stderr)
 
-    spikes = _select_spikes(existing_bundle, eng_min, anger_min, combine, cooldown_trs, max_spikes)
+    spikes = _select_spikes(existing_bundle, eng_min, anger_z_min, combine, cooldown_trs, max_spikes)
     print(f"  Grounding: {len(spikes)} spike(s) selected after cooldown / cap filter.")
 
     events: list[dict[str, Any]] = []

@@ -11,8 +11,10 @@ import pytest
 
 from scout_core.dual_track import (
     TEMPLATE_NAMES,
+    apply_session_z_scores,
     compute_emotion_track,
     compute_engagement_track,
+    dominant_emotion_at_timestep,
     find_grounding_triggers,
     load_templates,
 )
@@ -138,12 +140,44 @@ class TestEngagementTrack:
 class TestEmotionTrack:
     def test_output_keys(self, random_preds, unit_norm_templates):
         result = compute_emotion_track(random_preds, unit_norm_templates, TEMPLATE_NAMES)
-        assert set(result.keys()) >= {"template_names", "cosine_scores", "template_source"}
+        assert set(result.keys()) >= {
+            "template_names", "cosine_scores", "z_scores", "session_stats",
+            "z_scoring", "grounding_z_threshold", "template_source",
+        }
+        assert result["z_scoring"] == "session_relative"
+        assert result["grounding_z_threshold"] == 2.0
 
     def test_cosine_scores_shape(self, random_preds, unit_norm_templates):
         result = compute_emotion_track(random_preds, unit_norm_templates, TEMPLATE_NAMES)
         scores = np.array(result["cosine_scores"])
+        z_scores = np.array(result["z_scores"])
         assert scores.shape == (N_TIMESTEPS, N_EMOTIONS), f"Expected ({N_TIMESTEPS}, {N_EMOTIONS}), got {scores.shape}"
+        assert z_scores.shape == scores.shape
+
+    def test_session_z_score_math(self):
+        """Known mu/sigma → verify Z = (X - mu) / (sigma + 1e-8)."""
+        cosine = np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], dtype=np.float32)
+        z, stats = apply_session_z_scores(cosine)
+        mu = np.array(stats["mu"], dtype=np.float32)
+        sigma = np.array(stats["sigma"], dtype=np.float32)
+        expected = (cosine - mu) / (sigma + 1e-8)
+        assert np.allclose(z, expected, atol=1e-5)
+
+    def test_constant_channel_z_near_zero(self):
+        """One flat cosine channel → sigma≈0 → Z≈0 for that channel only."""
+        rng = np.random.default_rng(99)
+        cosine = rng.standard_normal((N_TIMESTEPS, N_EMOTIONS)).astype(np.float32) * 0.01
+        cosine[:, 0] = 0.05  # constant across session for channel 0
+        z, _ = apply_session_z_scores(cosine)
+        assert np.allclose(z[:, 0], 0.0, atol=1e-4)
+
+    def test_dominant_emotion_at_timestep(self):
+        cos_row = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
+        z_row = [0.0, 0.5, 1.0, 2.5, 0.2, -0.1, 0.3]
+        dom = dominant_emotion_at_timestep(cos_row, z_row, TEMPLATE_NAMES)
+        assert dom["dominant"] == "fear"
+        assert dom["raw_cosine"] == pytest.approx(0.04)
+        assert dom["z_score"] == pytest.approx(2.5)
 
     def test_cosine_bounds(self, random_preds, unit_norm_templates):
         """All cosine scores must be in [-1, 1]."""
@@ -215,24 +249,33 @@ class TestTemplateLoading:
 class TestGroundingTriggers:
     def test_no_triggers_below_threshold(self):
         eng = {"scores": [0.5, -0.3, 1.0], "labels": [None, None, None]}
-        emo = {"template_names": TEMPLATE_NAMES, "cosine_scores": [[0.1] * N_EMOTIONS] * 3}
-        triggers = find_grounding_triggers(eng, emo, engagement_trigger=2.0, emotion_trigger=0.85)
+        emo = {
+            "template_names": TEMPLATE_NAMES,
+            "cosine_scores": [[0.05] * N_EMOTIONS] * 3,
+            "z_scores": [[0.5] * N_EMOTIONS] * 3,
+        }
+        triggers = find_grounding_triggers(eng, emo, engagement_trigger=2.0, emotion_z_trigger=2.0)
         assert triggers == []
 
     def test_engagement_trigger_fires(self):
         eng = {"scores": [2.5, 0.0, -2.5], "labels": ["engaging", None, "boring"]}
-        triggers = find_grounding_triggers(eng, None, engagement_trigger=2.0, emotion_trigger=0.85)
+        triggers = find_grounding_triggers(eng, None, engagement_trigger=2.0, emotion_z_trigger=2.0)
         t_idxs = [t["t_idx"] for t in triggers]
         assert 0 in t_idxs  # 2.5 > 2.0
         assert 2 in t_idxs  # abs(-2.5) >= 2.0
 
     def test_emotion_trigger_fires_for_correct_channel(self):
-        cos = [[0.0] * N_EMOTIONS for _ in range(3)]
+        cos = [[0.05] * N_EMOTIONS for _ in range(3)]
+        z = [[0.0] * N_EMOTIONS for _ in range(3)]
         fear_idx = TEMPLATE_NAMES.index("fear")
-        cos[1][fear_idx] = 0.9  # t=1, fear=0.9 > 0.85
-        emo = {"template_names": TEMPLATE_NAMES, "cosine_scores": cos}
-        triggers = find_grounding_triggers(None, emo, engagement_trigger=2.0, emotion_trigger=0.85)
+        cos[1][fear_idx] = 0.06
+        z[1][fear_idx] = 2.5  # session-relative spike despite low raw cosine
+        emo = {"template_names": TEMPLATE_NAMES, "cosine_scores": cos, "z_scores": z}
+        triggers = find_grounding_triggers(None, emo, engagement_trigger=2.0, emotion_z_trigger=2.0)
         assert len(triggers) == 1
         assert triggers[0]["t_idx"] == 1
         assert triggers[0]["channel"] == "fear"
         assert triggers[0]["trigger_type"] == "emotion"
+        assert triggers[0]["z_score"] == pytest.approx(2.5)
+        assert triggers[0]["raw_cosine"] == pytest.approx(0.06)
+        assert triggers[0]["value"] == pytest.approx(2.5)
