@@ -1,0 +1,26 @@
+# Manual section overrides for marketing analytics (hybrid with auto landmarks).
+# Keys are hostnames (no scheme). Selectors match Playwright dom_id or CSS id/class strings.
+
+sites:
+  example.com:
+    sections:
+      - id: hero
+        selectors: ["#hero", "[data-section=hero]", ".hero"]
+      - id: pricing
+        selectors: ["#pricing", "#pricing-table", "[data-section=pricing]"]
+      - id: checkout
+        selectors: ["#checkout", ".checkout-form"]
+
+  localhost:
+    default_script: localhost_demo.yaml
+    sections:
+      - id: main_content
+        selectors: ["main", "#main", "[role=main]"]
+
+  127.0.0.1:
+    default_script: localhost_demo.yaml
+    sections:
+      - id: hero
+        selectors: ["#hero"]
+      - id: pricing
+        selectors: ["#pricing"]

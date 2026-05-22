@@ -38,7 +38,18 @@ from scout_core.constants import network_names_for_ids  # noqa: E402
 from scout_core.dom_intersect import find_nearest_snapshot, ground_snapshot  # noqa: E402
 from scout_core.norms import zscore_network, zscore_roi  # noqa: E402
 from scout_core.parcellation import dense_parcel_labels, load_vertex_table, parcel_to_network_map  # noqa: E402
-from scout_core.schemas import AnalysisBundle, GroundingEvent, ThresholdContext, analysis_bundle_path  # noqa: E402
+from scout_core.schemas import (  # noqa: E402
+    AnalysisBundle,
+    GroundingEvent,
+    SessionCaptureMeta,
+    ThresholdContext,
+    analysis_bundle_path,
+)
+from scout_core.session_align import (  # noqa: E402
+    load_manifest,
+    tr_duration_from_manifest,
+    validate_session_dir,
+)
 from scout_core.storage_migrations import (  # noqa: E402
     clear_session_neuro_rows,
     ensure_neuro_schema,
@@ -56,6 +67,7 @@ _DUAL_TRACK_PASSTHROUGH_KEYS = (
     "emotion_track",
     "grounding_triggers",
     "dual_track_schema_version",
+    "section_report",
 )
 
 
@@ -292,7 +304,36 @@ def main() -> None:
             "Requires run_dual_track.py to have been run first."
         ),
     )
+    parser.add_argument(
+        "--sections",
+        action="store_true",
+        default=False,
+        help=(
+            "Build section_report[] from full-session emotion/engagement tracks and "
+            "session_manifest.json (hybrid URL/landmark/manual sections). "
+            "Uses cached heatmaps for top_elements when present. "
+            "Requires run_dual_track.py; manifest from record_session_manifest.py."
+        ),
+    )
+    parser.add_argument(
+        "--website",
+        action="store_true",
+        default=False,
+        help=(
+            "Website session mode: enables --sections, writes session_capture metadata, "
+            "sets bundle schema_version=3. Requires session_manifest.json v2 + walkthrough video."
+        ),
+    )
+    parser.add_argument(
+        "--with-heatmaps",
+        action="store_true",
+        default=False,
+        help="If heatmaps/ is missing, print hint to run extract_section_heatmaps.py --modal",
+    )
     args = parser.parse_args()
+
+    if args.website:
+        args.sections = True
 
     conn = sqlite3.connect(DB_PATH)
     ensure_neuro_schema(conn)
@@ -397,6 +438,54 @@ def main() -> None:
             bundle_dict[key] = existing_bundle[key]
 
     # -----------------------------------------------------------------------
+    # Website session capture metadata (--website)
+    # -----------------------------------------------------------------------
+    if args.website:
+        manifest = load_manifest(session_dir)
+        if manifest is None:
+            print(
+                "WARNING: session_manifest.json missing — website mode expects v2 manifest.",
+                file=sys.stderr,
+            )
+        else:
+            align = validate_session_dir(session_dir)
+            video_path = (manifest.get("video") or {}).get("path", "walkthrough.mp4")
+            bundle_dict["session_capture"] = SessionCaptureMeta(
+                video_path=video_path,
+                manifest_schema_version=int(manifest.get("schema_version", 1)),
+                tr_duration_sec=tr_duration_from_manifest(manifest),
+                alignment_ok=align.get("ok") if not align.get("skipped") else None,
+                alignment_message=align.get("message"),
+            ).model_dump()
+            bundle_dict["schema_version"] = 3
+        heatmaps_dir = session_dir / "heatmaps"
+        if args.with_heatmaps and not any(heatmaps_dir.glob("t_*.npy")):
+            print(
+                "  No heatmaps in session — run: "
+                "python scripts/extract_section_heatmaps.py --session-id",
+                args.session_id,
+                "--modal --refresh-sections",
+                file=sys.stderr,
+            )
+
+    # -----------------------------------------------------------------------
+    # Section-level marketing analytics (--sections)
+    # -----------------------------------------------------------------------
+    if args.sections:
+        print("\nSection analytics (--sections) …")
+        if not bundle_dict.get("emotion_track"):
+            print(
+                "  No emotion_track in bundle — run run_dual_track.py first.",
+                file=sys.stderr,
+            )
+        else:
+            from scout_core.section_pipeline import run_section_analytics
+
+            section_report = run_section_analytics(session_dir, bundle_dict)
+            bundle_dict["section_report"] = section_report
+            print(f"  {len(section_report)} section(s) in section_report[].")
+
+    # -----------------------------------------------------------------------
     # Feature Isolation — Spatial Credit Assignment (--ground)
     # -----------------------------------------------------------------------
     if args.ground:
@@ -415,8 +504,12 @@ def main() -> None:
         else:
             events = _run_grounding_step(session_dir, bundle_dict, iso_cfg)
             bundle_dict["events"] = events
-            bundle_dict["schema_version"] = 2
+            if bundle_dict.get("schema_version", 1) < 2:
+                bundle_dict["schema_version"] = 2
             print(f"  {len(events)} grounding event(s) written to events[].")
+
+    if args.website and bundle_dict.get("section_report") and bundle_dict.get("schema_version", 1) < 3:
+        bundle_dict["schema_version"] = 3
 
     out_json.write_text(json.dumps(bundle_dict, indent=2), encoding="utf-8")
 

@@ -85,12 +85,38 @@ def analysis_bundle_path(session_dir: Path) -> Path:
 # Top-level analysis bundle
 # ---------------------------------------------------------------------------
 
+class SessionCaptureMeta(BaseModel):
+    """Website session capture metadata (video + manifest alignment)."""
+
+    video_path: str = "walkthrough.mp4"
+    manifest_schema_version: int = 2
+    tr_duration_sec: float = 1.0
+    alignment_ok: bool | None = None
+    alignment_message: str | None = None
+
+
+class MarketingNarrativeSection(BaseModel):
+    section_id: str
+    narrative: str = ""
+    actions: list[str] = Field(default_factory=list)
+
+
+class MarketingNarrative(BaseModel):
+    """LLM-generated prose from structured section_report (not from raw HTML)."""
+
+    executive_summary: str = ""
+    sections: list[MarketingNarrativeSection] = Field(default_factory=list)
+    provider: str = "template"
+    model: str | None = None
+
+
 class AnalysisBundle(BaseModel):
     """Top-level session analysis artifact written to analysis_bundle.json.
 
     schema_version history:
         1 — parcellation + threshold_hits only (analyze_session.py).
         2 — adds ``events`` list with neural spike grounding (feature isolation).
+        3 — website session: section_report, session_capture, marketing_narrative.
     """
 
     schema_version: int = 1
@@ -104,3 +130,7 @@ class AnalysisBundle(BaseModel):
     insight_catalog_version: str = "1"
     # Feature Isolation — populated when --ground flag is used
     events: list[dict[str, Any]] = Field(default_factory=list)
+    # Website pipeline (schema v3)
+    session_capture: SessionCaptureMeta | None = None
+    section_report: list[dict[str, Any]] = Field(default_factory=list)
+    marketing_narrative: MarketingNarrative | None = None

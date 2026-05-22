@@ -2,7 +2,8 @@
 __pycache__/
 *.py[cod]
 .venv/
-
+.env*
+videoplayback.mp4
 # Local runtime / DB (regenerate from Modal + analyze_session)
 *.sqlite
 scout_data/sessions/
@@ -16,3 +17,4 @@ configs/emotion_templates/*.npy
 # Editor / OS
 .DS_Store
 Thumbs.db
+

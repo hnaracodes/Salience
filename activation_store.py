@@ -321,6 +321,7 @@ def _connect() -> sqlite3.Connection:
 def save_cortical_timeseries(
     preds: np.ndarray,
     *,
+    session_id: str | None = None,
     source_video: str,
     mesh_name: str = "fsaverage5",
     vertex_to_region: dict[int, str] | None = None,
@@ -341,7 +342,7 @@ def save_cortical_timeseries(
     denom = max(n_v - 1, 1)
     session_sorted = np.sort(preds.ravel())
 
-    session_id = uuid.uuid4().hex
+    session_id = session_id or uuid.uuid4().hex
     session_dir = SESSIONS_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     npz_path = session_dir / "preds.npz"
@@ -358,25 +359,55 @@ def save_cortical_timeseries(
 
     conn = _connect()
     try:
-        conn.execute(
-            """
-            INSERT INTO sessions (
-                id, created_at, source_video, mesh_name,
-                n_timesteps, n_vertices, preds_npz_path, meta_json, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                session_id,
-                datetime.now(timezone.utc).isoformat(),
-                source_video,
-                mesh_name,
-                n_t,
-                n_v,
-                str(npz_path.relative_to(PROJECT_ROOT)),
-                json.dumps(meta),
-                notes,
-            ),
-        )
+        existing = conn.execute(
+            "SELECT id FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        rel_path = str(npz_path.relative_to(PROJECT_ROOT))
+        if existing:
+            conn.execute(
+                """
+                UPDATE sessions SET
+                    source_video = ?, mesh_name = ?, n_timesteps = ?, n_vertices = ?,
+                    preds_npz_path = ?, meta_json = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    source_video,
+                    mesh_name,
+                    n_t,
+                    n_v,
+                    rel_path,
+                    json.dumps(meta),
+                    notes,
+                    session_id,
+                ),
+            )
+            conn.execute(
+                "DELETE FROM timestep_summary WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM activation_peak WHERE session_id = ?", (session_id,)
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO sessions (
+                    id, created_at, source_video, mesh_name,
+                    n_timesteps, n_vertices, preds_npz_path, meta_json, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    source_video,
+                    mesh_name,
+                    n_t,
+                    n_v,
+                    rel_path,
+                    json.dumps(meta),
+                    notes,
+                ),
+            )
 
         k = min(top_k_peaks, n_v)
         for t in range(n_t):

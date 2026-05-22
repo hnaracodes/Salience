@@ -1,0 +1,18 @@
+# Scripted walkthrough for local fixture (tests + dev).
+# Serve: python -m http.server 8765 --directory tests/fixtures/walkthrough_site
+
+name: localhost_demo
+initial_url: "http://127.0.0.1:8765/index.html"
+viewport:
+  width: 1280
+  height: 720
+duration_sec: 5
+steps:
+  - action: wait_ms
+    ms: 500
+  - action: scroll_to_y
+    y: 400
+  - action: wait_ms
+    ms: 500
+  - action: scroll_to_y
+    y: 800
