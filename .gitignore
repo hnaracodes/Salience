@@ -7,6 +7,7 @@ videoplayback.mp4
 # Local runtime / DB (regenerate from Modal + analyze_session)
 *.sqlite
 scout_data/sessions/
+scout_data/neuroemo
 
 # Optional reproducible outputs
 brain_results.mp4
