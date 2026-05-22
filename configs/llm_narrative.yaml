@@ -1,0 +1,23 @@
+# LLM narrative layer — reads structured section_report only (never raw HTML).
+
+provider: template  # template | openai | anthropic
+model: null
+max_section_chars: 8000
+temperature: 0.3
+
+openai:
+  api_key_env: OPENAI_API_KEY
+  model: gpt-4o-mini
+
+anthropic:
+  api_key_env: ANTHROPIC_API_KEY
+  model: claude-3-5-haiku-latest
+
+prompt:
+  system: |
+    You write UX research summaries from model-relative neural metrics (not clinical diagnoses).
+    Use hypothesis framing: engagement Z-scores and emotion template similarity are proxies, not eye-tracking.
+    Do not invent metrics; only use numbers present in the JSON input.
+  user_task: |
+    Produce an executive_summary (2-4 sentences) and per-section narrative plus up to 3 concrete UX actions.
+    Prioritize sections with negative flags (high_arousal friction, boredom) or weak engagement.

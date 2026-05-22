@@ -255,9 +255,19 @@ Required for intersection (recorder: Playwright explorer per architecture plan; 
 
 ---
 
+## Section-level marketing analytics (implemented)
+
+Tier 1 (CPU, all TRs): [`scout_core/section_analytics.py`](../../scout_core/section_analytics.py) assigns each timestep to a hybrid section (URL + DOM landmarks + [`configs/site_sections.yaml`](../../configs/site_sections.yaml)) and aggregates full-session `emotion_track` / `engagement_track` into `section_report[]`.
+
+Tier 2 (sparse GPU): [`scout_core/section_sampling.py`](../../scout_core/section_sampling.py) picks ≤3 TRs per section; [`scripts/extract_section_heatmaps.py`](../../scripts/extract_section_heatmaps.py) extracts frames / placeholder heatmaps; [`scout_core/dom_intersect.py`](../../scout_core/dom_intersect.py) `score_all_elements` + `rollup_section_elements` fill `top_elements`.
+
+**Website session (orchestrated):** `python scripts/record_website_session.py --script configs/walkthrough_scripts/….yaml` → `modal run tribe.py::record_session` → `extract_section_heatmaps.py --modal --refresh-sections` → `analyze_session.py --website`. See [`docs/runbooks/website-session.md`](../runbooks/website-session.md).
+
+CLI: `python scripts/analyze_session.py --session-id X --norm-id Y --sections` (after `run_dual_track.py`). Repair-only manifest: `python scripts/record_session_manifest.py --session-id X --url …`.
+
 ## Out of scope
 
-- Implementing Python modules, Modal image changes, Playwright recorder, or `viz_web` UI in this document phase.
+- `viz_web` section timeline UI (dashboard).
 - Defining closed-form formulas for Engagement Score and Kragel Anger (owned by Dual-Track / MVPA upstream; thresholds only in YAML).
 - Volumetric (MNI) grounding or eye-tracker fusion.
 

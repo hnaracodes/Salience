@@ -373,6 +373,77 @@ def main():
 
 
 @app.local_entrypoint()
+def record_session(session_id: str):
+    """Predict cortical time series for an existing website session walkthrough video.
+
+    Reads ``scout_data/sessions/<session_id>/walkthrough.mp4`` (or path from
+    ``session_manifest.json``), writes ``preds.npz`` into the same session dir,
+    and registers/updates SQLite.
+
+    Usage: ``modal run tribe.py::record_session --session-id <hex>``
+    """
+    import json
+
+    import numpy as np
+
+    from activation_store import DATA_DIR, DB_PATH, resolve_vertex_regions, save_cortical_timeseries
+    from scout_core.session_align import find_walkthrough_video, load_manifest, validate_session_dir
+
+    if not session_id:
+        raise SystemExit("--session-id is required")
+
+    session_dir = DATA_DIR / "sessions" / session_id
+    if not session_dir.is_dir():
+        raise SystemExit(f"Session directory not found: {session_dir}")
+
+    video_path = find_walkthrough_video(session_dir)
+    if video_path is None:
+        raise SystemExit(
+            f"No walkthrough video in {session_dir}. Run record_website_session.py first."
+        )
+
+    video_data = video_path.read_bytes()
+    predictor = TribeInference()
+    print(f"Predicting from {video_path.name} for session {session_id} …")
+    preds_list = predictor.predict_brain.remote(video_data)
+    preds = np.asarray(preds_list, dtype=np.float32)
+
+    from activation_store import PROJECT_ROOT
+
+    rel_video = (
+        str(video_path.relative_to(PROJECT_ROOT))
+        if video_path.is_relative_to(PROJECT_ROOT)
+        else video_path.name
+    )
+    save_cortical_timeseries(
+        preds,
+        session_id=session_id,
+        source_video=rel_video,
+        mesh_name="fsaverage5",
+        vertex_to_region=resolve_vertex_regions(),
+        top_k_peaks=64,
+        notes="TRIBE v2 website session via record_session",
+        extra_meta={"capture_type": "website_walkthrough"},
+    )
+
+    manifest = load_manifest(session_dir)
+    if manifest is not None:
+        manifest.setdefault("alignment", {})
+        manifest["alignment"]["preds_validation"] = validate_session_dir(session_dir)
+        (session_dir / "session_manifest.json").write_text(
+            json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+
+    print(f"Session id: {session_id}")
+    print(f"preds shape (T×V): {preds.shape[0]} × {preds.shape[1]}")
+    print(f"Dense preds: {session_dir / 'preds.npz'}")
+    print(f"SQLite: {DB_PATH}")
+    if manifest and manifest.get("alignment", {}).get("preds_validation"):
+        print(manifest["alignment"]["preds_validation"].get("message", ""))
+
+
+@app.local_entrypoint()
 def record():
     """Run Tribe prediction and persist cortical time series + SQLite summaries/peaks.
 

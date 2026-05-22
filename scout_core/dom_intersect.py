@@ -107,56 +107,122 @@ def compute_attention_density(
 # Winner selection
 # ---------------------------------------------------------------------------
 
+def score_all_elements(
+    heatmap: np.ndarray,
+    elements: list[dict[str, Any]],
+    scroll_y: int = 0,
+    scroll_x: int = 0,
+    *,
+    min_area: int = 0,
+) -> list[dict[str, Any]]:
+    """Score every eligible element; return list sorted by attention_density descending."""
+    heatmap = np.asarray(heatmap, dtype=np.float32)
+    scored: list[dict[str, Any]] = []
+
+    for el in elements:
+        if not el.get("is_intersecting_viewport", True):
+            continue
+        bbox = el.get("bbox")
+        if bbox is None or len(bbox) != 4:
+            continue
+        w, h = int(bbox[2]), int(bbox[3])
+        if w * h < min_area:
+            continue
+        density = compute_attention_density(heatmap, bbox, scroll_y, scroll_x)
+        if density is None:
+            continue
+        scored.append({
+            "dom_id": el.get("dom_id", ""),
+            "tag": el.get("tag", ""),
+            "bbox": [int(b) for b in bbox],
+            "attention_density": round(float(density), 6),
+        })
+
+    scored.sort(key=lambda x: x["attention_density"], reverse=True)
+    return scored
+
+
 def select_winner(
     heatmap: np.ndarray,
     elements: list[dict[str, Any]],
     scroll_y: int = 0,
     scroll_x: int = 0,
+    *,
+    min_area: int = 0,
 ) -> dict[str, Any] | None:
-    """Select the DOM element with the highest normalized attention density.
+    """Select the DOM element with the highest normalized attention density."""
+    scored = score_all_elements(
+        heatmap, elements, scroll_y, scroll_x, min_area=min_area,
+    )
+    return scored[0] if scored else None
 
-    Iterates all eligible candidates (``is_intersecting_viewport=True`` and
-    a valid ``[X, Y, W, H]`` ``bbox``), scoring each with
-    :func:`compute_attention_density`, and returns the ``argmax``.
 
-    Args:
-        heatmap:  2D float array ``(img_h, img_w)`` at capture resolution.
-        elements: Element dicts from ``dom_snapshots[].elements[]``. Required
-                  keys: ``bbox``. Optional: ``dom_id``, ``tag``, ``z_index``,
-                  ``is_intersecting_viewport``.
-        scroll_y: Vertical scroll offset from the matching dom_snapshot.
-        scroll_x: Horizontal scroll offset from the matching dom_snapshot.
+def _bbox_overlap_ratio(inner: list[int], outer: list[int]) -> float:
+    """Fraction of inner bbox area overlapping outer bbox."""
+    ix, iy, iw, ih = [int(v) for v in inner]
+    ox, oy, ow, oh = [int(v) for v in outer]
+    x1 = max(ix, ox)
+    y1 = max(iy, oy)
+    x2 = min(ix + iw, ox + ow)
+    y2 = min(iy + ih, oy + oh)
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    inter = (x2 - x1) * (y2 - y1)
+    inner_area = max(iw * ih, 1)
+    return inter / inner_area
 
-    Returns:
-        Dict ``{dom_id, tag, bbox, attention_density}`` for the winner,
-        or ``None`` if no eligible candidate exists.
-    """
-    heatmap = np.asarray(heatmap, dtype=np.float32)
-    best_density = -1.0
-    winner: dict[str, Any] | None = None
 
+def filter_elements_to_section(
+    elements: list[dict[str, Any]],
+    section_root_bbox: list[int] | None,
+    *,
+    overlap_min: float = 0.5,
+) -> list[dict[str, Any]]:
+    """Keep elements mostly inside the section root landmark bbox."""
+    if not section_root_bbox or len(section_root_bbox) != 4:
+        return list(elements)
+    filtered: list[dict[str, Any]] = []
     for el in elements:
-        if not el.get("is_intersecting_viewport", True):
-            continue
-
         bbox = el.get("bbox")
         if bbox is None or len(bbox) != 4:
             continue
+        if _bbox_overlap_ratio(bbox, section_root_bbox) >= overlap_min:
+            filtered.append(el)
+    return filtered if filtered else list(elements)
 
-        density = compute_attention_density(heatmap, bbox, scroll_y, scroll_x)
-        if density is None:
-            continue
 
-        if density > best_density:
-            best_density = density
-            winner = {
-                "dom_id": el.get("dom_id", ""),
-                "tag": el.get("tag", ""),
-                "bbox": [int(b) for b in bbox],
-                "attention_density": round(best_density, 6),
-            }
+def rollup_section_elements(
+    samples: list[tuple[int, list[dict[str, Any]]]],
+    *,
+    top_k: int = 5,
+) -> list[dict[str, Any]]:
+    """Mean attention_density per dom_id across sampled timesteps."""
+    accum: dict[str, dict[str, Any]] = {}
+    for _t, scored in samples:
+        for row in scored:
+            dom_id = row.get("dom_id") or ""
+            key = dom_id or str(row.get("bbox"))
+            if key not in accum:
+                accum[key] = {
+                    "dom_id": dom_id,
+                    "tag": row.get("tag", ""),
+                    "bbox": row.get("bbox", []),
+                    "densities": [],
+                }
+            accum[key]["densities"].append(float(row["attention_density"]))
 
-    return winner
+    rolled: list[dict[str, Any]] = []
+    for entry in accum.values():
+        d = entry["densities"]
+        rolled.append({
+            "dom_id": entry["dom_id"],
+            "tag": entry["tag"],
+            "bbox": entry["bbox"],
+            "mean_attention_density": round(float(sum(d) / len(d)), 6),
+            "n_samples": len(d),
+        })
+    rolled.sort(key=lambda x: x["mean_attention_density"], reverse=True)
+    return rolled[:top_k]
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,8 @@ This doc aligns with the existing Modal scaffold in [`tribe.py`](../../tribe.py)
 ## Implementation checklist (from planning session)
 
 - [ ] Vendor/pin tribev2; locate Stage-5 subject injection; spike single-GPU K-way multiplex forward + peak VRAM curve
-- [ ] Define `session_manifest.json` + `analysis_bundle.json` schemas; Playwright recorder writes manifests
+- [x] Website session orchestrator: `record_website_session.py` (MP4 + manifest v2); `run_website_session.py` runbook in `docs/runbooks/website-session.md`
+- [x] Define `session_manifest.json` v2 + `analysis_bundle.json` v3 (section_report, session_capture, marketing_narrative); legacy `record_session_manifest.py` for repair-only
 - [x] Implement vertex→Yeo7 surface masks + Zero-Shot Dual-Track scores (engagement Z-score + emotion cosine similarity) — `scout_core/dual_track.py`, `scripts/run_dual_track.py`, `scripts/download_emotion_templates.py`
 - [ ] Modal `inference_mux`: micro-batch clusters, return chunked `vertex_ts`; add streaming encoder module
 - [ ] `viz_web`: three.js/vtk.js viewer + WS timeline sync with walkthrough video
