@@ -67,6 +67,7 @@ EXPECTED_HEMI_VERTICES = EXPECTED_FSAVERAGE5_VERTICES // 2
 
 EMOTION_CLASSES = ["calm", "afraid", "delighted", "depressed", "excited"]
 WHITE_NOISE_CLASS = "white_noise"
+NEUTRAL_CLASS = "neutral"
 UNLABELED = "unlabeled"
 
 # Published NeuroEmo emotion task: 30 s emotional clips interleaved with 30 s
@@ -290,11 +291,37 @@ def build_tr_labels(
     return np.asarray(labels, dtype=object), times
 
 
-def _class_names(include_white_noise: bool) -> list[str]:
+def _class_names(include_white_noise: bool, include_neutral: bool = False) -> list[str]:
     names = list(EMOTION_CLASSES)
+    if include_neutral:
+        names.append(NEUTRAL_CLASS)
     if include_white_noise:
         names.append(WHITE_NOISE_CLASS)
     return names
+
+
+def _with_balanced_neutral(labels: np.ndarray) -> np.ndarray:
+    """Convert a balanced subset of white-noise TRs to neutral labels.
+
+    The NeuroEmo task has more white-noise TRs than each emotion class. To keep
+    class priors balanced, this selects the same number of white-noise TRs as
+    the smallest emotion class count and leaves the rest unlabeled.
+    """
+    out = np.asarray(labels, dtype=object).copy()
+    emotion_counts = [int(np.sum(out == name)) for name in EMOTION_CLASSES]
+    neutral_count = min(emotion_counts) if emotion_counts else 0
+    white_noise_idx = np.flatnonzero(out == WHITE_NOISE_CLASS)
+    out[white_noise_idx] = UNLABELED
+    if neutral_count <= 0 or white_noise_idx.size == 0:
+        return out
+
+    if white_noise_idx.size <= neutral_count:
+        selected = white_noise_idx
+    else:
+        positions = np.linspace(0, white_noise_idx.size - 1, neutral_count)
+        selected = white_noise_idx[np.rint(positions).astype(np.int64)]
+    out[selected] = NEUTRAL_CLASS
+    return out
 
 
 def _label_ids(labels: np.ndarray, class_names: list[str]) -> np.ndarray:
@@ -386,6 +413,7 @@ def prepare_subject(
     standardize: str,
     bold_lag_s: float,
     include_white_noise: bool,
+    include_neutral: bool,
     drop_transition_trs: int,
     window_trs: int,
     compress: bool,
@@ -414,10 +442,12 @@ def prepare_subject(
         surface.shape[0],
         tr_seconds,
         bold_lag_s=bold_lag_s,
-        include_white_noise=include_white_noise,
+        include_white_noise=include_white_noise or include_neutral,
         drop_transition_trs=drop_transition_trs,
     )
-    class_names = _class_names(include_white_noise)
+    if include_neutral:
+        labels = _with_balanced_neutral(labels)
+    class_names = _class_names(include_white_noise, include_neutral)
     label_ids = _label_ids(labels, class_names)
 
     subject_npz = out_dir / "subjects" / f"{subject}_task-fe_fsaverage5.npz"
@@ -472,7 +502,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Output directory for surface + train artifacts")
     parser.add_argument("--skip-download", action="store_true", help="Use files already present under --raw-dir")
     parser.add_argument("--force-download", action="store_true", help="Re-download files even if present")
-    parser.add_argument("--include-white-noise", action="store_true", help="Include white-noise blocks as an extra class")
+    parser.add_argument("--include-white-noise", action="store_true", help="Include all white-noise blocks as an extra class")
+    parser.add_argument(
+        "--include-neutral",
+        action="store_true",
+        help="Include a balanced subset of white-noise TRs as a neutral class",
+    )
     parser.add_argument("--bold-lag-s", type=float, default=6.0, help="Shift labels by this hemodynamic lag in seconds")
     parser.add_argument(
         "--drop-transition-trs",
@@ -508,7 +543,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_arg_parser().parse_args()
     subjects = _parse_subjects(args.subjects)
-    class_names = _class_names(args.include_white_noise)
+    class_names = _class_names(args.include_white_noise, args.include_neutral)
 
     print("NeuroEmo -> TribeV2-compatible surface formatter")
     print(f"  dataset: {DATASET_ID} snapshot {SNAPSHOT_VERSION}")
@@ -537,6 +572,7 @@ def main() -> None:
             standardize=args.standardize,
             bold_lag_s=args.bold_lag_s,
             include_white_noise=args.include_white_noise,
+            include_neutral=args.include_neutral,
             drop_transition_trs=args.drop_transition_trs,
             window_trs=args.window_trs,
             compress=args.compress,
@@ -611,6 +647,8 @@ def main() -> None:
             "interpolation": args.interpolation,
             "standardize": args.standardize,
             "bold_lag_s": args.bold_lag_s,
+            "include_neutral": args.include_neutral,
+            "neutral_source": "balanced_subset_of_white_noise_trs" if args.include_neutral else None,
             "drop_transition_trs": args.drop_transition_trs,
             "window_trs": args.window_trs,
         },

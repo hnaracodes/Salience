@@ -9,3 +9,5 @@ nilearn>=0.10
 requests>=2.31
 pytest>=8.0
 playwright>=1.40
+scikit-learn>=1.6
+joblib>=1.4
