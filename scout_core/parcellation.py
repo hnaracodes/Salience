@@ -12,6 +12,17 @@ import yaml
 
 EXPECTED_FSAVERAGE5_VERTICES = 20484
 EXPECTED_FSAVERAGE5_HEMI_VERTICES = EXPECTED_FSAVERAGE5_VERTICES // 2
+CANONICAL_VERTEX_ORDER = "lh_then_rh_fsaverage5"
+CANONICAL_HEMISPHERE_ORDER = "lh_then_rh"
+VERTEX_ORDER_ALIASES = {
+    CANONICAL_VERTEX_ORDER: CANONICAL_VERTEX_ORDER,
+    "facebook/tribev2_lh_then_rh": CANONICAL_VERTEX_ORDER,
+    "lh_then_rh_nilearn_fsaverage5": CANONICAL_VERTEX_ORDER,
+}
+HEMISPHERE_ORDER_ALIASES = {
+    CANONICAL_HEMISPHERE_ORDER: CANONICAL_HEMISPHERE_ORDER,
+    "left_then_right": CANONICAL_HEMISPHERE_ORDER,
+}
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,20 @@ def load_parcellation_manifest(path: Path | None) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
+def normalize_vertex_order(value: Any) -> str | None:
+    raw = str(value).strip() if value not in (None, "") else ""
+    if not raw:
+        return None
+    return VERTEX_ORDER_ALIASES.get(raw, raw)
+
+
+def normalize_hemisphere_order(value: Any) -> str | None:
+    raw = str(value).strip() if value not in (None, "") else ""
+    if not raw:
+        return None
+    return HEMISPHERE_ORDER_ALIASES.get(raw, raw)
+
+
 def load_vertex_table(path: Path) -> VertexParcellationTable:
     """Load extended CSV or legacy two-column vertex_index,region_name."""
     vertices: list[int] = []
@@ -102,8 +127,7 @@ def load_vertex_table(path: Path) -> VertexParcellationTable:
                 hemis.append((row.get("hemisphere") or "unknown").strip())
             else:
                 region = (row.get("region_name") or row.get("parcel_label") or "unknown").strip()
-                pid = hash(region) % (2**31 - 1) or 1
-                parcel_ids.append(abs(pid))
+                parcel_ids.append(0)
                 parcel_labels.append(region)
                 yeo_ids.append(0)
                 yeo_names.append("")
@@ -116,6 +140,16 @@ def load_vertex_table(path: Path) -> VertexParcellationTable:
     yn = np.asarray(yeo_ids, dtype=np.int64)[order]
     yn_name = np.asarray(yeo_names, dtype=object)[order]
     hemi = np.asarray(hemis, dtype=object)[order]
+
+    legacy_mask = pid <= 0
+    if np.any(legacy_mask):
+        existing_max = int(pid[~legacy_mask].max()) if np.any(~legacy_mask) else 0
+        legacy_labels = plab[legacy_mask].astype(str).tolist()
+        stable_ids = {
+            label: existing_max + idx + 1
+            for idx, label in enumerate(sorted(set(legacy_labels)))
+        }
+        pid[legacy_mask] = np.asarray([stable_ids[label] for label in legacy_labels], dtype=np.int64)
 
     expected = np.arange(vi.shape[0], dtype=np.int64)
     if not np.array_equal(vi, expected):
@@ -155,6 +189,29 @@ def validate_vertex_table(
     if np.any(np.char.str_len(labels) == 0):
         raise ValueError("parcel_label values must be non-empty")
 
+    label_by_parcel: dict[int, str] = {}
+    network_by_parcel: dict[int, tuple[int, str]] = {}
+    for parcel_id, label, network_id, network_name in zip(
+        table.parcel_id.tolist(),
+        labels.tolist(),
+        table.yeo_network_id.tolist(),
+        np.asarray(table.yeo_network_name).astype(str).tolist(),
+        strict=True,
+    ):
+        parcel_key = int(parcel_id)
+        label_value = str(label)
+        network_value = (int(network_id), str(network_name))
+        prev_label = label_by_parcel.setdefault(parcel_key, label_value)
+        if prev_label != label_value:
+            raise ValueError(
+                f"parcel_id {parcel_key} maps to conflicting labels: {prev_label!r} vs {label_value!r}"
+            )
+        prev_network = network_by_parcel.setdefault(parcel_key, network_value)
+        if prev_network != network_value:
+            raise ValueError(
+                f"parcel_id {parcel_key} maps to conflicting networks: {prev_network!r} vs {network_value!r}"
+            )
+
     parcel_ids = table.parcel_ids
     if expected_n_parcels is not None and len(parcel_ids) != int(expected_n_parcels):
         raise ValueError(f"Expected {expected_n_parcels} parcels, got {len(parcel_ids)}")
@@ -166,6 +223,10 @@ def validate_vertex_table(
             raise ValueError(f"Expected 10242 lh vertices, got {hemi_counts.get('lh', 0)}")
         if hemi_counts.get("rh", 0) != EXPECTED_FSAVERAGE5_HEMI_VERTICES:
             raise ValueError(f"Expected 10242 rh vertices, got {hemi_counts.get('rh', 0)}")
+        if not np.all(hemi[:EXPECTED_FSAVERAGE5_HEMI_VERTICES] == "lh"):
+            raise ValueError("Expected first 10242 vertices to be labeled as lh")
+        if not np.all(hemi[EXPECTED_FSAVERAGE5_HEMI_VERTICES:] == "rh"):
+            raise ValueError("Expected last 10242 vertices to be labeled as rh")
 
     network_names = sorted(
         name for name in set(np.asarray(table.yeo_network_name).astype(str).tolist()) if name
@@ -175,6 +236,8 @@ def validate_vertex_table(
         "n_vertices": int(table.n_vertices),
         "n_parcels": int(len(parcel_ids)),
         "hemisphere_counts": hemi_counts,
+        "hemisphere_order": CANONICAL_HEMISPHERE_ORDER if require_hemispheres else None,
+        "tribe_vertex_order": CANONICAL_VERTEX_ORDER if require_hemispheres else None,
         "network_names": network_names,
         "parcel_size_min": int(parcel_sizes.min()) if parcel_sizes.size else 0,
         "parcel_size_max": int(parcel_sizes.max()) if parcel_sizes.size else 0,
@@ -199,6 +262,24 @@ def validate_manifest_matches_table(
         expected_n_parcels=int(expected_parcels) if expected_parcels is not None else None,
     )
 
+    manifest_mesh = str(manifest.get("mesh") or "").strip()
+    if manifest_mesh and manifest_mesh != "fsaverage5":
+        raise ValueError(f"Unsupported parcellation mesh {manifest_mesh!r}; expected 'fsaverage5'")
+
+    manifest_hemi_order = normalize_hemisphere_order(manifest.get("hemisphere_order"))
+    if manifest_hemi_order not in (None, CANONICAL_HEMISPHERE_ORDER):
+        raise ValueError(
+            f"Unsupported hemisphere order {manifest.get('hemisphere_order')!r}; "
+            f"expected {CANONICAL_HEMISPHERE_ORDER!r}"
+        )
+
+    manifest_vertex_order = normalize_vertex_order(manifest.get("tribe_vertex_order"))
+    if manifest_vertex_order not in (None, CANONICAL_VERTEX_ORDER):
+        raise ValueError(
+            f"Unsupported vertex order {manifest.get('tribe_vertex_order')!r}; "
+            f"expected one of {sorted(VERTEX_ORDER_ALIASES)}"
+        )
+
     if vertex_csv_path is not None:
         expected_hash = (
             manifest.get("artifact_sha256", {}).get("vertex_regions_csv")
@@ -214,8 +295,9 @@ def validate_manifest_matches_table(
             summary["vertex_regions_csv_sha256"] = actual_hash
 
     summary["atlas_id"] = manifest.get("atlas_id")
-    summary["mesh"] = manifest.get("mesh")
-    summary["tribe_vertex_order"] = manifest.get("tribe_vertex_order")
+    summary["mesh"] = manifest_mesh or "fsaverage5"
+    summary["tribe_vertex_order"] = manifest_vertex_order or CANONICAL_VERTEX_ORDER
+    summary["source_vertex_order"] = manifest.get("tribe_vertex_order")
     return summary
 
 

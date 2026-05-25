@@ -26,6 +26,8 @@ class RoiFeatureSpec:
     manifest_path: str | None
     manifest_sha256: str | None
     atlas_id: str | None
+    mesh: str | None
+    vertex_order: str | None
     n_vertices: int
     parcel_ids: np.ndarray
     parcel_labels: np.ndarray
@@ -33,6 +35,7 @@ class RoiFeatureSpec:
     reducers: tuple[str, ...]
     feature_names: tuple[str, ...]
     validation_summary: dict[str, Any]
+    source_metadata: dict[str, Any]
 
     @property
     def n_rois(self) -> int:
@@ -105,6 +108,12 @@ def load_roi_feature_spec(
         manifest_path=str(manifest_path) if manifest_path is not None else None,
         manifest_sha256=manifest_sha,
         atlas_id=str(manifest.get("atlas_id")) if manifest.get("atlas_id") else None,
+        mesh=str(manifest.get("mesh")) if manifest.get("mesh") else None,
+        vertex_order=(
+            str(validation_summary.get("tribe_vertex_order"))
+            if validation_summary.get("tribe_vertex_order")
+            else None
+        ),
         n_vertices=int(table.n_vertices),
         parcel_ids=parcel_ids,
         parcel_labels=parcel_labels,
@@ -112,6 +121,7 @@ def load_roi_feature_spec(
         reducers=reducer_tuple,
         feature_names=feature_names,
         validation_summary=validation_summary,
+        source_metadata=manifest.get("source", {}) if isinstance(manifest.get("source"), dict) else {},
     )
 
 
@@ -158,6 +168,8 @@ def summarise_roi_feature_spec(spec: RoiFeatureSpec, *, include_vertex_map: bool
         "manifest_path": spec.manifest_path,
         "manifest_sha256": spec.manifest_sha256,
         "atlas_id": spec.atlas_id,
+        "mesh": spec.mesh,
+        "vertex_order": spec.vertex_order,
         "n_vertices": int(spec.n_vertices),
         "n_rois": int(spec.n_rois),
         "reducers": list(spec.reducers),
@@ -166,6 +178,7 @@ def summarise_roi_feature_spec(spec: RoiFeatureSpec, *, include_vertex_map: bool
         "parcel_labels": spec.parcel_labels.astype(str).tolist(),
         "feature_names": list(spec.feature_names),
         "validation_summary": spec.validation_summary,
+        "source_metadata": spec.source_metadata,
     }
     if include_vertex_map:
         summary["parcel_id_by_vertex"] = spec.parcel_id_by_vertex.astype(np.int64).tolist()
