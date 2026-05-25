@@ -58,6 +58,7 @@ import requests
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RAW_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "raw"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface"
+DEFAULT_PREPROCESSED_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "preprocessed"
 
 DATASET_ID = "ds005700"
 SNAPSHOT_VERSION = "1.2.0"
@@ -109,6 +110,7 @@ class SubjectArtifact:
     bold_lag_s: float
     n_labeled_trs: int
     class_counts: dict[str, int]
+    preprocessed_nifti: str
 
 
 def _parse_subjects(raw: str) -> list[str]:
@@ -193,6 +195,14 @@ def _load_repetition_time(json_path: Path, fallback: float = 3.0) -> float:
     return float(meta.get("RepetitionTime") or fallback)
 
 
+def _display_path(path: Path) -> str:
+    resolved = path.expanduser().resolve()
+    try:
+        return str(resolved.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _surface_to_time_by_vertex(surface: np.ndarray, *, expected_vertices: int) -> np.ndarray:
     """Convert nilearn vol_to_surf output into (T, V_hemi)."""
     arr = np.asarray(surface, dtype=np.float32)
@@ -207,6 +217,50 @@ def _surface_to_time_by_vertex(surface: np.ndarray, *, expected_vertices: int) -
             f"Unexpected surface shape {arr.shape}; expected one axis to be {expected_vertices}"
         )
     return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+
+def preprocess_bold_nifti(
+    bold_path: Path,
+    *,
+    out_path: Path,
+    tr_seconds: float,
+    force: bool,
+    smooth_fwhm: float,
+    detrend: bool,
+    temporal_standardize: bool,
+    high_pass: float | None,
+    low_pass: float | None,
+) -> Path:
+    """Apply lightweight Nilearn preprocessing before surface projection."""
+    if out_path.is_file() and not force:
+        print(f"  preprocessed exists: {_display_path(out_path)}")
+        return out_path
+
+    from nilearn import image
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    print("  preprocessing BOLD ...")
+    img = image.load_img(str(bold_path))
+    if smooth_fwhm > 0:
+        print(f"    smooth_img fwhm={smooth_fwhm:g}mm")
+        img = image.smooth_img(img, fwhm=smooth_fwhm)
+
+    print(
+        "    clean_img "
+        f"detrend={detrend} standardize={temporal_standardize} "
+        f"high_pass={high_pass} low_pass={low_pass}"
+    )
+    cleaned = image.clean_img(
+        img,
+        detrend=detrend,
+        standardize="zscore_sample" if temporal_standardize else False,
+        high_pass=high_pass,
+        low_pass=low_pass,
+        t_r=float(tr_seconds),
+        ensure_finite=True,
+    )
+    cleaned.to_filename(str(out_path))
+    return out_path
 
 
 def project_bold_to_fsaverage5(
@@ -416,6 +470,14 @@ def prepare_subject(
     include_neutral: bool,
     drop_transition_trs: int,
     window_trs: int,
+    preprocess_bold: bool,
+    preprocessed_dir: Path,
+    force_preprocess: bool,
+    smooth_fwhm: float,
+    detrend: bool,
+    temporal_standardize: bool,
+    high_pass: float | None,
+    low_pass: float | None,
     compress: bool,
     write_subject_files: bool,
 ) -> tuple[SubjectArtifact, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
@@ -432,8 +494,24 @@ def prepare_subject(
 
     print(f"\n{subject} format")
     tr_seconds = _load_repetition_time(json_path)
+    projection_bold_path = bold_path
+    preprocessed_path = ""
+    if preprocess_bold:
+        preprocessed_out = preprocessed_dir / subject / "func" / f"{subject}_task-fe_bold_preproc.nii.gz"
+        projection_bold_path = preprocess_bold_nifti(
+            bold_path,
+            out_path=preprocessed_out,
+            tr_seconds=tr_seconds,
+            force=force_preprocess,
+            smooth_fwhm=smooth_fwhm,
+            detrend=detrend,
+            temporal_standardize=temporal_standardize,
+            high_pass=high_pass,
+            low_pass=low_pass,
+        )
+        preprocessed_path = str(projection_bold_path)
     surface = project_bold_to_fsaverage5(
-        bold_path,
+        projection_bold_path,
         radius=radius,
         interpolation=interpolation,
     )
@@ -477,6 +555,7 @@ def prepare_subject(
         bold_lag_s=float(bold_lag_s),
         n_labeled_trs=int(np.sum(label_ids >= 0)),
         class_counts=class_counts,
+        preprocessed_nifti=preprocessed_path,
     )
     print(f"  surface shape: {surface.shape}; labeled TRs: {artifact.n_labeled_trs}")
     print("  class counts:", ", ".join(f"{k}={v}" for k, v in class_counts.items()))
@@ -500,8 +579,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subjects", default="1-40", help="Subjects to process, e.g. 1-40 or 1,2,sub-03")
     parser.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW_DIR, help="BIDS root for downloaded/raw NeuroEmo files")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Output directory for surface + train artifacts")
+    parser.add_argument(
+        "--preprocessed-dir",
+        type=Path,
+        default=DEFAULT_PREPROCESSED_DIR,
+        help="Cache directory for optional preprocessed BOLD NIfTIs",
+    )
     parser.add_argument("--skip-download", action="store_true", help="Use files already present under --raw-dir")
     parser.add_argument("--force-download", action="store_true", help="Re-download files even if present")
+    parser.add_argument("--preprocess-bold", action="store_true", help="Apply lightweight Nilearn preprocessing before surface projection")
+    parser.add_argument("--force-preprocess", action="store_true", help="Recompute preprocessed BOLD NIfTIs even if cached")
+    parser.add_argument("--smooth-fwhm", type=float, default=5.0, help="Spatial smoothing FWHM in mm for --preprocess-bold; 0 disables")
+    parser.add_argument("--no-detrend", action="store_true", help="Disable temporal detrending in --preprocess-bold")
+    parser.add_argument("--no-temporal-standardize", action="store_true", help="Disable clean_img temporal standardization in --preprocess-bold")
+    parser.add_argument("--high-pass", type=float, default=0.008, help="High-pass cutoff Hz for --preprocess-bold; <=0 disables")
+    parser.add_argument("--low-pass", type=float, default=0.1, help="Low-pass cutoff Hz for --preprocess-bold; <=0 disables")
     parser.add_argument("--include-white-noise", action="store_true", help="Include all white-noise blocks as an extra class")
     parser.add_argument(
         "--include-neutral",
@@ -551,6 +643,16 @@ def main() -> None:
     print(f"  raw_dir: {args.raw_dir}")
     print(f"  out_dir: {args.out_dir}")
     print(f"  classes: {', '.join(class_names)}")
+    if args.preprocess_bold:
+        print(f"  preprocessed_dir: {args.preprocessed_dir}")
+        print(
+            "  preprocessing: "
+            f"smooth_fwhm={args.smooth_fwhm}, "
+            f"detrend={not args.no_detrend}, "
+            f"standardize={not args.no_temporal_standardize}, "
+            f"high_pass={args.high_pass if args.high_pass > 0 else None}, "
+            f"low_pass={args.low_pass if args.low_pass > 0 else None}"
+        )
 
     artifacts: list[SubjectArtifact] = []
     all_X: list[np.ndarray] = []
@@ -575,6 +677,14 @@ def main() -> None:
             include_neutral=args.include_neutral,
             drop_transition_trs=args.drop_transition_trs,
             window_trs=args.window_trs,
+            preprocess_bold=args.preprocess_bold,
+            preprocessed_dir=args.preprocessed_dir,
+            force_preprocess=args.force_preprocess,
+            smooth_fwhm=args.smooth_fwhm,
+            detrend=not args.no_detrend,
+            temporal_standardize=not args.no_temporal_standardize,
+            high_pass=args.high_pass if args.high_pass > 0 else None,
+            low_pass=args.low_pass if args.low_pass > 0 else None,
             compress=args.compress,
             write_subject_files=not args.no_subject_files,
         )
@@ -643,6 +753,20 @@ def main() -> None:
         "preprocessing": {
             "projection": "nilearn.surface.vol_to_surf",
             "surface": "pial",
+            "volume_preprocessing": {
+                "enabled": args.preprocess_bold,
+                "method": "nilearn.image.smooth_img + nilearn.image.clean_img"
+                if args.preprocess_bold
+                else None,
+                "preprocessed_dir": str(args.preprocessed_dir) if args.preprocess_bold else None,
+                "smooth_fwhm": args.smooth_fwhm if args.preprocess_bold else None,
+                "detrend": not args.no_detrend if args.preprocess_bold else None,
+                "temporal_standardize": not args.no_temporal_standardize
+                if args.preprocess_bold
+                else None,
+                "high_pass": args.high_pass if args.preprocess_bold and args.high_pass > 0 else None,
+                "low_pass": args.low_pass if args.preprocess_bold and args.low_pass > 0 else None,
+            },
             "radius": args.radius,
             "interpolation": args.interpolation,
             "standardize": args.standardize,
