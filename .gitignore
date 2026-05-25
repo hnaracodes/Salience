@@ -8,6 +8,7 @@ videoplayback.mp4
 *.sqlite
 scout_data/sessions/
 scout_data/neuroemo
+scout_data/atlases/
 
 # Optional reproducible outputs
 brain_results.mp4
@@ -18,4 +19,3 @@ configs/emotion_templates/*.npy
 # Editor / OS
 .DS_Store
 Thumbs.db
-

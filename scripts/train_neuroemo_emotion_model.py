@@ -31,7 +31,6 @@ Output:
 from __future__ import annotations
 
 import argparse
-import csv
 import io
 import json
 import sys
@@ -44,12 +43,20 @@ from typing import Any
 import joblib
 import numpy as np
 
+from scout_core.roi_features import (
+    RoiFeatureSpec,
+    load_roi_feature_spec,
+    reduce_vertices_to_rois,
+    summarise_roi_feature_spec,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TRAIN_NPZ = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface" / "neuroemo_tribev2_train.npz"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models"
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR / "neuroemo_emotion_model.joblib"
 DEFAULT_METRICS_PATH = DEFAULT_MODEL_DIR / "neuroemo_emotion_metrics.json"
 DEFAULT_VERTEX_CSV = PROJECT_ROOT / "configs" / "vertex_regions.csv"
+DEFAULT_ATLAS_MANIFEST = PROJECT_ROOT / "configs" / "parcellation_manifest.yaml"
 
 
 @dataclass(frozen=True)
@@ -69,7 +76,14 @@ class TrainConfig:
     scale: bool = True
     feature_mode: str = "roi"
     vertex_csv: str = str(DEFAULT_VERTEX_CSV)
-    roi_reducer: str = "mean"
+    roi_reducers: str = "mean"
+    atlas_manifest: str = str(DEFAULT_ATLAS_MANIFEST)
+    temporal_window_trs: int = 1
+    temporal_stride_trs: int = 1
+    temporal_reducer: str = "mean"
+    temporal_contiguity: str = "contiguous"
+    temporal_allow_class_drop: bool = False
+    exclude_labels: str = "neutral"
 
 
 @dataclass(frozen=True)
@@ -82,7 +96,7 @@ class TrainingData:
     source_shape: tuple[int, ...]
     flattened_shape: tuple[int, ...]
     feature_mode: str
-    roi_spec: dict[str, Any] | None
+    roi_spec: RoiFeatureSpec | None
     metadata: dict[str, Any]
 
 
@@ -98,96 +112,206 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
-def _load_roi_spec(vertex_csv: Path, n_vertices: int) -> dict[str, Any]:
-    """Load vertex -> ROI parcel mapping from configs/vertex_regions.csv."""
-    if not vertex_csv.is_file():
-        raise FileNotFoundError(f"ROI vertex CSV not found: {vertex_csv}")
+def _reduce_temporal_window(window: np.ndarray, reducer: str) -> np.ndarray:
+    if reducer == "mean":
+        return window.mean(axis=0)
+    if reducer == "median":
+        return np.median(window, axis=0)
+    if reducer == "last":
+        return window[-1]
+    raise ValueError(f"Unknown temporal reducer: {reducer}")
 
-    rows: list[tuple[int, int, str]] = []
-    with vertex_csv.open(newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if not reader.fieldnames:
-            raise ValueError(f"Empty ROI CSV: {vertex_csv}")
-        fields = set(reader.fieldnames)
-        if "vertex_index" not in fields or "parcel_id" not in fields:
-            raise ValueError(f"{vertex_csv} must contain vertex_index and parcel_id columns")
-        for row in reader:
-            if not row.get("vertex_index") or not row.get("parcel_id"):
-                continue
-            rows.append(
-                (
-                    int(row["vertex_index"]),
-                    int(row["parcel_id"]),
-                    (row.get("parcel_label") or f"parcel_{row['parcel_id']}").strip(),
-                )
-            )
 
-    rows.sort(key=lambda x: x[0])
-    vertex_indices = np.asarray([r[0] for r in rows], dtype=np.int64)
-    expected = np.arange(n_vertices, dtype=np.int64)
-    if vertex_indices.shape[0] != n_vertices or not np.array_equal(vertex_indices, expected):
-        raise ValueError(
-            f"{vertex_csv} must contain contiguous vertex_index 0..{n_vertices - 1}; "
-            f"got {vertex_indices.shape[0]} rows"
+def _apply_temporal_windows(
+    X: np.ndarray,
+    y: np.ndarray,
+    subject: np.ndarray,
+    t_idx: np.ndarray,
+    time_s: np.ndarray,
+    labels: np.ndarray,
+    cfg: TrainConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    """Aggregate TR-level rows into same-subject, same-label temporal windows."""
+    window_trs = int(cfg.temporal_window_trs)
+    stride_trs = int(cfg.temporal_stride_trs)
+    if window_trs < 1:
+        raise ValueError("--temporal-window-trs must be >= 1")
+    if stride_trs < 1:
+        raise ValueError("--temporal-stride-trs must be >= 1")
+    if window_trs == 1:
+        return (
+            X,
+            y,
+            subject,
+            t_idx,
+            time_s,
+            {
+                "enabled": False,
+                "window_trs": 1,
+                "stride_trs": stride_trs,
+                "reducer": cfg.temporal_reducer,
+                "contiguity": cfg.temporal_contiguity,
+                "input_samples": int(X.shape[0]),
+                "output_samples": int(X.shape[0]),
+            },
         )
 
-    parcel_by_vertex = np.asarray([r[1] for r in rows], dtype=np.int64)
-    label_by_parcel: dict[int, str] = {}
-    ordered_parcels: list[int] = []
-    for _, parcel_id, label in rows:
-        if parcel_id not in label_by_parcel:
-            label_by_parcel[parcel_id] = label
-            ordered_parcels.append(parcel_id)
+    if cfg.temporal_contiguity not in ("contiguous", "same_label"):
+        raise ValueError("--temporal-contiguity must be 'contiguous' or 'same_label'")
 
-    return {
-        "source": str(vertex_csv),
-        "n_vertices": int(n_vertices),
-        "parcel_ids": np.asarray(ordered_parcels, dtype=np.int64),
-        "parcel_labels": np.asarray([label_by_parcel[p] for p in ordered_parcels]),
-        "parcel_id_by_vertex": parcel_by_vertex,
+    samples: list[np.ndarray] = []
+    ys: list[int] = []
+    subjects: list[str] = []
+    out_t_idx: list[int] = []
+    out_time_s: list[float] = []
+    window_rows: list[dict[str, Any]] = []
+
+    for subj in sorted(set(subject.tolist())):
+        subj_idx = np.flatnonzero(subject == subj)
+        for class_id in sorted(np.unique(y[subj_idx]).tolist()):
+            group_idx = subj_idx[y[subj_idx] == int(class_id)]
+            group_idx = group_idx[np.argsort(t_idx[group_idx], kind="stable")]
+            if group_idx.size < window_trs:
+                continue
+            for start in range(0, group_idx.size - window_trs + 1, stride_trs):
+                win_idx = group_idx[start : start + window_trs]
+                win_t = t_idx[win_idx]
+                if cfg.temporal_contiguity == "contiguous" and not np.all(np.diff(win_t) == 1):
+                    continue
+                sample = _reduce_temporal_window(X[win_idx], cfg.temporal_reducer)
+                samples.append(sample.astype(np.float32, copy=False))
+                ys.append(int(class_id))
+                subjects.append(str(subj))
+                out_t_idx.append(int(win_t[-1]))
+                out_time_s.append(float(time_s[win_idx][-1]))
+                window_rows.append(
+                    {
+                        "subject": str(subj),
+                        "label": str(labels[int(class_id)]) if int(class_id) < len(labels) else str(class_id),
+                        "label_id": int(class_id),
+                        "start_t_idx": int(win_t[0]),
+                        "end_t_idx": int(win_t[-1]),
+                    }
+                )
+
+    if not samples:
+        raise ValueError(
+            "Temporal aggregation produced no samples. Try a smaller --temporal-window-trs, "
+            "--temporal-contiguity same_label, or verify train NPZ has t_idx/time_s."
+        )
+
+    X_windowed = np.stack(samples).astype(np.float32)
+    y_windowed = np.asarray(ys, dtype=np.int64)
+    subject_windowed = np.asarray(subjects)
+    t_idx_windowed = np.asarray(out_t_idx, dtype=np.int64)
+    time_s_windowed = np.asarray(out_time_s, dtype=np.float32)
+
+    expected_classes = set(range(len(labels)))
+    found_classes = set(y_windowed.tolist())
+    dropped_classes = sorted(expected_classes - found_classes)
+    if dropped_classes and not cfg.temporal_allow_class_drop:
+        dropped_names = [
+            str(labels[class_id]) if class_id < len(labels) else f"class_{class_id}"
+            for class_id in dropped_classes
+        ]
+        raise ValueError(
+            "Temporal aggregation dropped class(es) "
+            f"{dropped_names}. This often happens when labels are sparse, such as the current "
+            "balanced neutral samples. Use --temporal-contiguity same_label, reduce "
+            "--temporal-window-trs, or pass --temporal-allow-class-drop for diagnostics only."
+        )
+
+    summary = {
+        "enabled": True,
+        "window_trs": window_trs,
+        "stride_trs": stride_trs,
+        "reducer": cfg.temporal_reducer,
+        "contiguity": cfg.temporal_contiguity,
+        "input_samples": int(X.shape[0]),
+        "output_samples": int(X_windowed.shape[0]),
+        "dropped_class_ids": dropped_classes,
+        "dropped_class_names": [
+            str(labels[class_id]) if class_id < len(labels) else f"class_{class_id}"
+            for class_id in dropped_classes
+        ],
+        "class_counts": _class_counts(y_windowed, labels),
+        "example_windows": window_rows[:10],
     }
+    return X_windowed, y_windowed, subject_windowed, t_idx_windowed, time_s_windowed, summary
 
 
-def _summarise_roi_spec(roi_spec: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "source": str(roi_spec["source"]),
-        "n_vertices": int(roi_spec["n_vertices"]),
-        "n_rois": int(len(roi_spec["parcel_ids"])),
-        "parcel_ids": np.asarray(roi_spec["parcel_ids"], dtype=np.int64).tolist(),
-        "parcel_labels": np.asarray(roi_spec["parcel_labels"]).astype(str).tolist(),
-    }
+def _parse_excluded_labels(raw: str) -> set[str]:
+    return {item.strip() for item in raw.split(",") if item.strip()}
 
 
-def _reduce_vertices_to_rois(X: np.ndarray, roi_spec: dict[str, Any], reducer: str) -> np.ndarray:
-    """Aggregate vertex features to ROI features, preserving leading dimensions."""
-    arr = np.asarray(X, dtype=np.float32)
-    if arr.ndim not in (2, 3):
-        raise ValueError(f"ROI reduction expects X shape (N,V) or (N,W,V), got {arr.shape}")
+def _filter_and_remap_labels(
+    X: np.ndarray,
+    y: np.ndarray,
+    subject: np.ndarray,
+    t_idx: np.ndarray,
+    time_s: np.ndarray,
+    labels: np.ndarray,
+    *,
+    exclude_labels: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    excluded = _parse_excluded_labels(exclude_labels)
+    if not excluded:
+        return (
+            X,
+            y,
+            subject,
+            t_idx,
+            time_s,
+            labels,
+            {
+                "excluded_labels": [],
+                "input_samples": int(X.shape[0]),
+                "output_samples": int(X.shape[0]),
+                "label_id_map": {int(i): int(i) for i in range(len(labels))},
+            },
+        )
 
-    n_vertices = int(roi_spec["n_vertices"])
-    if arr.shape[-1] != n_vertices:
-        raise ValueError(f"ROI map expects V={n_vertices}, got X shape {arr.shape}")
+    label_names = labels.astype(str)
+    keep_label_ids = [
+        int(i)
+        for i, name in enumerate(label_names.tolist())
+        if str(name) not in excluded
+    ]
+    dropped_label_ids = [
+        int(i)
+        for i, name in enumerate(label_names.tolist())
+        if str(name) in excluded
+    ]
+    if not keep_label_ids:
+        raise ValueError(f"--exclude-labels removed every class: {sorted(excluded)}")
 
-    leading_shape = arr.shape[:-1]
-    flat = arr.reshape(-1, n_vertices)
-    parcel_by_vertex = np.asarray(roi_spec["parcel_id_by_vertex"], dtype=np.int64)
-    parcel_ids = np.asarray(roi_spec["parcel_ids"], dtype=np.int64)
-    out = np.empty((flat.shape[0], len(parcel_ids)), dtype=np.float32)
+    keep_mask = np.isin(y, np.asarray(keep_label_ids, dtype=np.int64))
+    X_keep = X[keep_mask]
+    y_keep_old = y[keep_mask]
+    subject_keep = subject[keep_mask]
+    t_idx_keep = t_idx[keep_mask]
+    time_s_keep = time_s[keep_mask]
 
-    for i, parcel_id in enumerate(parcel_ids.tolist()):
-        idx = np.flatnonzero(parcel_by_vertex == int(parcel_id))
-        if idx.size == 0:
-            out[:, i] = 0.0
-            continue
-        values = flat[:, idx]
-        if reducer == "mean":
-            out[:, i] = values.mean(axis=1)
-        elif reducer == "mean_abs":
-            out[:, i] = np.abs(values).mean(axis=1)
-        else:
-            raise ValueError(f"Unknown ROI reducer: {reducer}")
+    old_to_new = {old_id: new_id for new_id, old_id in enumerate(keep_label_ids)}
+    y_keep = np.asarray([old_to_new[int(class_id)] for class_id in y_keep_old], dtype=np.int64)
+    labels_keep = label_names[keep_label_ids]
 
-    return out.reshape(*leading_shape, len(parcel_ids)).astype(np.float32)
+    return (
+        X_keep,
+        y_keep,
+        subject_keep,
+        t_idx_keep,
+        time_s_keep,
+        labels_keep,
+        {
+            "excluded_labels": sorted(excluded),
+            "dropped_label_ids": dropped_label_ids,
+            "input_samples": int(X.shape[0]),
+            "output_samples": int(X_keep.shape[0]),
+            "label_id_map": {int(old): int(new) for old, new in old_to_new.items()},
+            "remaining_labels": labels_keep.tolist(),
+        },
+    )
 
 
 def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
@@ -206,10 +330,12 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
     y = np.asarray(raw["y"], dtype=np.int64)
     subject = np.asarray(raw["subject"]).astype(str)
     labels = np.asarray(raw["labels"]).astype(str)
+    t_idx = np.asarray(raw["t_idx"], dtype=np.int64) if "t_idx" in raw.files else np.arange(y.shape[0], dtype=np.int64)
+    time_s = np.asarray(raw["time_s"], dtype=np.float32) if "time_s" in raw.files else t_idx.astype(np.float32)
 
-    if X_raw.shape[0] != y.shape[0] or y.shape[0] != subject.shape[0]:
+    if X_raw.shape[0] != y.shape[0] or y.shape[0] != subject.shape[0] or y.shape[0] != t_idx.shape[0]:
         raise ValueError(
-            f"Sample count mismatch: X={X_raw.shape}, y={y.shape}, subject={subject.shape}"
+            f"Sample count mismatch: X={X_raw.shape}, y={y.shape}, subject={subject.shape}, t_idx={t_idx.shape}"
         )
     if X_raw.ndim not in (2, 3):
         raise ValueError(f"Expected X to be 2D or 3D, got shape {X_raw.shape}")
@@ -221,6 +347,28 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
         X_raw = X_raw[valid]
         y = y[valid]
         subject = subject[valid]
+        t_idx = t_idx[valid]
+        time_s = time_s[valid]
+
+    X_raw, y, subject, t_idx, time_s, labels, label_filter_summary = _filter_and_remap_labels(
+        X_raw,
+        y,
+        subject,
+        t_idx,
+        time_s,
+        labels,
+        exclude_labels=cfg.exclude_labels,
+    )
+
+    X_raw, y, subject, t_idx, time_s, temporal_summary = _apply_temporal_windows(
+        X_raw,
+        y,
+        subject,
+        t_idx,
+        time_s,
+        labels,
+        cfg,
+    )
 
     if cfg.max_samples and X_raw.shape[0] > cfg.max_samples:
         rng = np.random.default_rng(cfg.random_state)
@@ -236,19 +384,29 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
         X_raw = X_raw[chosen_arr]
         y = y[chosen_arr]
         subject = subject[chosen_arr]
+        t_idx = t_idx[chosen_arr]
+        time_s = time_s[chosen_arr]
 
     if X_raw.shape[0] == 0:
         raise ValueError("No labeled samples found in training NPZ.")
 
-    roi_spec: dict[str, Any] | None = None
+    roi_spec: RoiFeatureSpec | None = None
     if cfg.feature_mode == "vertices":
         X_features = X_raw
     elif cfg.feature_mode == "roi":
         vertex_csv_path = Path(cfg.vertex_csv).expanduser()
         if not vertex_csv_path.is_absolute():
             vertex_csv_path = PROJECT_ROOT / vertex_csv_path
-        roi_spec = _load_roi_spec(vertex_csv_path, n_vertices=int(X_raw.shape[-1]))
-        X_features = _reduce_vertices_to_rois(X_raw, roi_spec, cfg.roi_reducer)
+        atlas_manifest_path = Path(cfg.atlas_manifest).expanduser() if cfg.atlas_manifest else None
+        if atlas_manifest_path is not None and not atlas_manifest_path.is_absolute():
+            atlas_manifest_path = PROJECT_ROOT / atlas_manifest_path
+        roi_spec = load_roi_feature_spec(
+            vertex_csv_path,
+            n_vertices=int(X_raw.shape[-1]),
+            reducers=cfg.roi_reducers,
+            manifest_path=atlas_manifest_path,
+        )
+        X_features = reduce_vertices_to_rois(X_raw, roi_spec)
     else:
         raise ValueError(f"Unknown feature_mode: {cfg.feature_mode}")
 
@@ -261,6 +419,8 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
         "dataset_id": str(raw["dataset_id"]) if "dataset_id" in raw.files else None,
         "snapshot_version": str(raw["snapshot_version"]) if "snapshot_version" in raw.files else None,
         "input_feature_shape": list(input_shape),
+        "label_filter": label_filter_summary,
+        "temporal_aggregation": temporal_summary,
     }
     return TrainingData(
         X=X,
@@ -478,8 +638,24 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
     print(f"  model feature mode: {data.feature_mode}")
     print(f"  model feature shape: {data.source_shape}")
     print(f"  X flattened shape: {data.X.shape}")
+    label_filter = data.metadata.get("label_filter", {})
+    if label_filter.get("excluded_labels"):
+        print(f"  excluded labels: {', '.join(label_filter['excluded_labels'])}")
+    temporal_summary = data.metadata.get("temporal_aggregation", {})
+    if temporal_summary.get("enabled"):
+        print(
+            "  temporal aggregation: "
+            f"{temporal_summary['window_trs']} TRs, "
+            f"stride {temporal_summary['stride_trs']}, "
+            f"{temporal_summary['reducer']}, "
+            f"{temporal_summary['contiguity']}"
+        )
     if data.roi_spec is not None:
-        print(f"  ROI parcels: {len(data.roi_spec['parcel_ids'])} ({cfg.roi_reducer})")
+        print(
+            f"  ROI parcels: {data.roi_spec.n_rois}; "
+            f"reducers: {', '.join(data.roi_spec.reducers)}; "
+            f"atlas: {data.roi_spec.atlas_id or 'unversioned'}"
+        )
     print(f"  subjects: {len(np.unique(data.subject))}")
     print(f"  class counts: {_class_counts(data.y, data.labels)}")
 
@@ -503,17 +679,14 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
         "feature_shape": list(data.source_shape),
         "flattened_n_features": int(data.X.shape[1]),
         "feature_mode": data.feature_mode,
-        "roi_reducer": cfg.roi_reducer if data.roi_spec is not None else None,
-        "roi_spec": (
-            {
-                **_summarise_roi_spec(data.roi_spec),
-                "parcel_id_by_vertex": np.asarray(data.roi_spec["parcel_id_by_vertex"], dtype=np.int64).tolist(),
-            }
-            if data.roi_spec is not None
-            else None
-        ),
+        "roi_reducers": list(data.roi_spec.reducers) if data.roi_spec is not None else None,
+        "roi_spec": summarise_roi_feature_spec(data.roi_spec, include_vertex_map=True)
+        if data.roi_spec is not None
+        else None,
         "model_type": cfg.model_type,
         "config": asdict(cfg),
+        "label_filter": data.metadata.get("label_filter"),
+        "temporal_aggregation": data.metadata.get("temporal_aggregation"),
         "training_metadata": data.metadata,
     }
     notes = [
@@ -524,7 +697,7 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
     if data.roi_spec is not None:
         notes.insert(
             2,
-            "ROI mode averages vertices within parcel_id groups from configs/vertex_regions.csv before fitting.",
+            "ROI mode reduces vertices within atlas parcel_id groups before fitting.",
         )
 
     metrics = {
@@ -536,8 +709,10 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
         "input_feature_shape": list(data.input_shape),
         "feature_shape": list(data.source_shape),
         "feature_mode": data.feature_mode,
-        "roi_reducer": cfg.roi_reducer if data.roi_spec is not None else None,
-        "roi_spec": _summarise_roi_spec(data.roi_spec) if data.roi_spec is not None else None,
+        "roi_reducers": list(data.roi_spec.reducers) if data.roi_spec is not None else None,
+        "roi_spec": summarise_roi_feature_spec(data.roi_spec) if data.roi_spec is not None else None,
+        "label_filter": data.metadata.get("label_filter"),
+        "temporal_aggregation": data.metadata.get("temporal_aggregation"),
         "labels": data.labels.tolist(),
         "subjects": sorted(np.unique(data.subject).tolist()),
         "class_counts": _class_counts(data.y, data.labels),
@@ -581,7 +756,60 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Feature representation. roi averages vertices by parcel_id before training; vertices keeps 20484 features.",
     )
     parser.add_argument("--vertex-csv", type=Path, default=DEFAULT_VERTEX_CSV, help="vertex_regions.csv with parcel_id column")
-    parser.add_argument("--roi-reducer", choices=("mean", "mean_abs"), default="mean")
+    parser.add_argument(
+        "--roi-reducers",
+        default="mean",
+        help="Comma-separated ROI reducers. Supported: mean,std,mean_abs,max_abs",
+    )
+    parser.add_argument(
+        "--roi-reducer",
+        choices=("mean", "mean_abs", "std", "max_abs"),
+        default=None,
+        help="Deprecated alias for a single --roi-reducers value",
+    )
+    parser.add_argument(
+        "--atlas-manifest",
+        type=Path,
+        default=DEFAULT_ATLAS_MANIFEST,
+        help="Parcellation manifest used to validate the ROI CSV",
+    )
+    parser.add_argument(
+        "--temporal-window-trs",
+        type=int,
+        default=1,
+        help="Aggregate same-subject, same-label TRs into windows before ROI/model training. 1 disables.",
+    )
+    parser.add_argument(
+        "--temporal-stride-trs",
+        type=int,
+        default=1,
+        help="Stride between temporal windows in source TR rows.",
+    )
+    parser.add_argument(
+        "--temporal-reducer",
+        choices=("mean", "median", "last"),
+        default="mean",
+        help="How to reduce each temporal window.",
+    )
+    parser.add_argument(
+        "--temporal-contiguity",
+        choices=("contiguous", "same_label"),
+        default="contiguous",
+        help=(
+            "contiguous requires source t_idx increments of 1; same_label allows windows "
+            "over available same-label samples, useful for sparse diagnostic labels."
+        ),
+    )
+    parser.add_argument(
+        "--temporal-allow-class-drop",
+        action="store_true",
+        help="Allow temporal aggregation to drop classes. Use for diagnostics only.",
+    )
+    parser.add_argument(
+        "--exclude-labels",
+        default="neutral",
+        help="Comma-separated class labels to exclude before training. Default excludes neutral.",
+    )
     return parser
 
 
@@ -602,7 +830,14 @@ def _config_from_args(args: argparse.Namespace) -> TrainConfig:
         scale=not args.no_scale,
         feature_mode=args.feature_mode,
         vertex_csv=str(args.vertex_csv),
-        roi_reducer=args.roi_reducer,
+        roi_reducers=args.roi_reducer or args.roi_reducers,
+        atlas_manifest=str(args.atlas_manifest) if args.atlas_manifest else "",
+        temporal_window_trs=args.temporal_window_trs,
+        temporal_stride_trs=args.temporal_stride_trs,
+        temporal_reducer=args.temporal_reducer,
+        temporal_contiguity=args.temporal_contiguity,
+        temporal_allow_class_drop=args.temporal_allow_class_drop,
+        exclude_labels=args.exclude_labels,
     )
 
 
@@ -630,6 +865,7 @@ if modal is not None:
             "numpy>=1.26.4,<2.1.0",
             "scikit-learn>=1.6,<1.7",
             "joblib>=1.4",
+            "pyyaml>=6",
         )
     )
 
@@ -638,11 +874,16 @@ if modal is not None:
         train_npz_bytes: bytes,
         cfg_payload: dict[str, Any],
         vertex_csv_text: str | None = None,
+        atlas_manifest_text: str | None = None,
     ) -> dict[str, bytes | str]:
         if vertex_csv_text is not None:
             vertex_csv_path = Path(tempfile.gettempdir()) / "vertex_regions.csv"
             vertex_csv_path.write_text(vertex_csv_text, encoding="utf-8")
             cfg_payload = {**cfg_payload, "vertex_csv": str(vertex_csv_path)}
+        if atlas_manifest_text is not None:
+            manifest_path = Path(tempfile.gettempdir()) / "parcellation_manifest.yaml"
+            manifest_path.write_text(atlas_manifest_text, encoding="utf-8")
+            cfg_payload = {**cfg_payload, "atlas_manifest": str(manifest_path)}
         cfg = TrainConfig(**cfg_payload)
         with tempfile.TemporaryDirectory() as td:
             train_path = Path(td) / "neuroemo_tribev2_train.npz"
@@ -673,7 +914,14 @@ if modal is not None:
         no_scale: bool = False,
         feature_mode: str = "roi",
         vertex_csv: str = str(DEFAULT_VERTEX_CSV),
-        roi_reducer: str = "mean",
+        roi_reducers: str = "mean",
+        atlas_manifest: str = str(DEFAULT_ATLAS_MANIFEST),
+        temporal_window_trs: int = 1,
+        temporal_stride_trs: int = 1,
+        temporal_reducer: str = "mean",
+        temporal_contiguity: str = "contiguous",
+        temporal_allow_class_drop: bool = False,
+        exclude_labels: str = "neutral",
     ) -> None:
         """Train NeuroEmo classifier remotely on Modal CPU and save artifacts locally."""
         train_path = Path(train_npz).expanduser()
@@ -698,9 +946,17 @@ if modal is not None:
             scale=not no_scale,
             feature_mode=feature_mode,
             vertex_csv=vertex_csv,
-            roi_reducer=roi_reducer,
+            roi_reducers=roi_reducers,
+            atlas_manifest=atlas_manifest,
+            temporal_window_trs=temporal_window_trs,
+            temporal_stride_trs=temporal_stride_trs,
+            temporal_reducer=temporal_reducer,
+            temporal_contiguity=temporal_contiguity,
+            temporal_allow_class_drop=temporal_allow_class_drop,
+            exclude_labels=exclude_labels,
         )
         vertex_csv_text = None
+        atlas_manifest_text = None
         if feature_mode == "roi":
             vertex_csv_path = Path(vertex_csv).expanduser()
             if not vertex_csv_path.is_absolute():
@@ -708,9 +964,21 @@ if modal is not None:
             if not vertex_csv_path.is_file():
                 raise SystemExit(f"ROI vertex CSV not found: {vertex_csv_path}")
             vertex_csv_text = vertex_csv_path.read_text(encoding="utf-8")
+            manifest_path = Path(atlas_manifest).expanduser() if atlas_manifest else None
+            if manifest_path is not None:
+                if not manifest_path.is_absolute():
+                    manifest_path = PROJECT_ROOT / manifest_path
+                if not manifest_path.is_file():
+                    raise SystemExit(f"Parcellation manifest not found: {manifest_path}")
+                atlas_manifest_text = manifest_path.read_text(encoding="utf-8")
 
         print(f"Uploading training NPZ to Modal: {train_path} ({train_path.stat().st_size / 1e6:.1f} MB)")
-        result = _train_remote.remote(train_path.read_bytes(), asdict(cfg), vertex_csv_text)
+        result = _train_remote.remote(
+            train_path.read_bytes(),
+            asdict(cfg),
+            vertex_csv_text,
+            atlas_manifest_text,
+        )
 
         model_path = Path(output_model).expanduser()
         metrics_path = Path(metrics_json).expanduser()
