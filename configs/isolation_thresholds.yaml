@@ -6,8 +6,11 @@
 trigger:
   # Engagement Z-score minimum to flag a timestep as a grounding spike (Track 1).
   engagement_score_min: 2.0
-  # Kragel anger session-relative Z minimum to flag a grounding spike (Track 2).
-  kragel_anger_z_min: 2.0
+  # Session-relative Z minimum for ANY emotion channel to flag a spike (Track 2).
+  # This replaces the earlier kragel_anger_z_min which was anger-only.
+  emotion_z_min: 2.0
+  # Backward-compat alias (deprecated — use emotion_z_min).
+  # kragel_anger_z_min: 2.0
   # Logical operator for combining both conditions: "or" | "and"
   combine: "or"
 

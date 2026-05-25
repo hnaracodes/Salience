@@ -42,10 +42,16 @@ def build_narrative_payload(bundle: dict[str, Any], *, max_chars: int = 8000) ->
                 {
                     "dom_id": e.get("dom_id"),
                     "tag": e.get("tag"),
-                    "attention_density": e.get("attention_density") or e.get("score"),
+                    "attention_density": (
+                        e.get("mean_attention_density")
+                        or e.get("attention_density")
+                        or e.get("score")
+                    ),
+                    "heatmap_source": e.get("heatmap_source"),
                 }
                 for e in (sec.get("top_elements") or [])[:5]
             ],
+            "heatmap_stats": sec.get("heatmap_stats"),
         })
 
     triggers = bundle.get("grounding_triggers") or []

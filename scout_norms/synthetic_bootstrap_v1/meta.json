@@ -14,6 +14,6 @@
     "Cont",
     "Default"
   ],
-  "parcellation_csv": "/Users/shivanksingh/Documents/TribeV2/configs/vertex_regions.csv",
+  "parcellation_csv": "C:\\Users\\facebook\\Desktop\\TribeV2\\configs\\vertex_regions.csv",
   "leakage_note": "SYNTHETIC BOOTSTRAP \u2014 replace with empirical norms from held-out naturalistic clips before production use."
 }

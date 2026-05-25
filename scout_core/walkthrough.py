@@ -1,4 +1,9 @@
-"""Scripted website walkthrough: DOM extraction, step execution, manifest v2."""
+"""Scripted website walkthrough: DOM extraction, step execution, manifest v2.
+
+DOM snapshots are interleaved with scripted walkthrough actions so that
+``dom_snapshots[t].pts_sec`` describes the actual page state at that moment
+in the recorded video, not the state after all steps completed.
+"""
 
 from __future__ import annotations
 
@@ -97,7 +102,31 @@ def build_manifest_v2(
     }
 
 
+def build_step_schedule(
+    steps: list[dict[str, Any]],
+) -> list[tuple[float, dict[str, Any]]]:
+    """Return [(offset_sec, step)] assigning each step a cumulative time offset.
+
+    Only ``wait_ms`` steps advance the clock; all other actions are
+    considered instantaneous for scheduling purposes.
+    """
+    schedule: list[tuple[float, dict[str, Any]]] = []
+    t_cursor = 0.0
+    for step in steps:
+        schedule.append((t_cursor, step))
+        action = step.get("action") or step.get("type")
+        if action == "wait_ms":
+            t_cursor += step.get("ms", 0) / 1000.0
+    return schedule
+
+
 async def _run_step(page: Any, step: dict[str, Any]) -> None:
+    """Execute a single walkthrough step.
+
+    Note: ``wait_ms`` steps are NOT called through this function when using
+    the merged timeline loop — their duration is already represented as a time
+    gap between scheduled events.
+    """
     action = step.get("action") or step.get("type")
     if action == "goto":
         url = step["url"]
@@ -125,7 +154,19 @@ async def record_website_session_async(
     script: dict[str, Any],
     interval_sec: float = 1.0,
 ) -> dict[str, Any]:
-    """Playwright capture: video + DOM snapshots aligned to TR index."""
+    """Playwright capture: video + DOM snapshots interleaved with walkthrough steps.
+
+    DOM snapshots are taken during the walkthrough (not after all steps complete)
+    so that ``dom_snapshots[t]`` reflects the actual page state at that video
+    timestamp. The merged timeline fires sample events (every ``interval_sec``)
+    and step events at their scheduled wall-clock offsets, in chronological
+    order. At the same timestamp, samples run before steps so each snapshot
+    captures the page state immediately *before* the action that fires at that
+    moment.
+
+    ``wait_ms`` steps are represented purely as gaps between scheduled events —
+    they are NOT re-executed via ``_run_step`` to avoid double-sleeping.
+    """
     from playwright.async_api import async_playwright
 
     viewport = script.get("viewport") or {}
@@ -134,16 +175,32 @@ async def record_website_session_async(
     initial_url = script["initial_url"]
     steps: list[dict[str, Any]] = list(script.get("steps") or [])
 
+    # Compute total capture duration.
     duration_sec = script.get("duration_sec")
     if duration_sec is None:
-        duration_sec = float(script.get("post_steps_duration_sec", 0))
-        for step in steps:
-            if step.get("action") == "wait_ms" or step.get("type") == "wait_ms":
-                duration_sec += step.get("ms", 0) / 1000.0
+        step_total_sec = sum(
+            s.get("ms", 0) / 1000.0
+            for s in steps
+            if (s.get("action") or s.get("type")) == "wait_ms"
+        )
+        duration_sec = step_total_sec + float(script.get("post_steps_duration_sec", 0))
         if duration_sec <= 0:
             duration_sec = 10.0
 
     n_timesteps = expected_tr_count(duration_sec, interval_sec)
+
+    # Build step schedule: cumulative offset per step (only wait_ms advances clock).
+    step_schedule = build_step_schedule(steps)
+
+    # Merged event list: (time_sec, priority, data)
+    # priority=0 for samples (comes first at same time), 1 for steps.
+    all_events: list[tuple[float, int, Any]] = []
+    for t_idx in range(n_timesteps):
+        all_events.append((t_idx * interval_sec, 0, t_idx))  # sample event
+    for t_offset, step in step_schedule:
+        all_events.append((t_offset, 1, step))  # step event
+    all_events.sort(key=lambda x: (x[0], x[1]))
+
     video_dir = session_dir / "_playwright_video"
     video_dir.mkdir(parents=True, exist_ok=True)
 
@@ -157,22 +214,38 @@ async def record_website_session_async(
         )
         page = await context.new_page()
 
+        # Initial navigation is outside the timed capture loop so the clock
+        # starts after the page is fully loaded.
         await page.goto(initial_url, wait_until="networkidle", timeout=120_000)
-        for step in steps:
-            await _run_step(page, step)
 
-        for t in range(n_timesteps):
-            if t > 0:
-                await asyncio.sleep(interval_sec)
-            payload = await page.evaluate(EXTRACT_DOM_JS)
-            snapshots.append({
-                "t_idx": t,
-                "pts_sec": round(t * interval_sec, 3),
-                "url": page.url,
-                "scrollY": int(payload["scrollY"]),
-                "scrollX": int(payload["scrollX"]),
-                "elements": payload["elements"],
-            })
+        current_time = 0.0
+        for event_time, kind, data in all_events:
+            gap = event_time - current_time
+            if gap > 0.001:  # > 1 ms threshold to avoid redundant micro-sleeps
+                await asyncio.sleep(gap)
+                current_time = event_time
+
+            if kind == 0:
+                # DOM sample event
+                t_idx = data
+                payload = await page.evaluate(EXTRACT_DOM_JS)
+                snapshots.append({
+                    "t_idx": t_idx,
+                    "pts_sec": round(event_time, 3),
+                    "url": page.url,
+                    "scrollY": int(payload["scrollY"]),
+                    "scrollX": int(payload["scrollX"]),
+                    "elements": payload["elements"],
+                })
+            else:
+                # Step event
+                step = data
+                action = step.get("action") or step.get("type")
+                if action == "wait_ms":
+                    # Duration already encoded as gap to next event; skip execution.
+                    pass
+                else:
+                    await _run_step(page, step)
 
         await context.close()
         await browser.close()
