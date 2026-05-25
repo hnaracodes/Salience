@@ -43,6 +43,7 @@ from typing import Any
 import joblib
 import numpy as np
 
+from scout_core.parcellation import CANONICAL_VERTEX_ORDER, normalize_vertex_order
 from scout_core.roi_features import (
     RoiFeatureSpec,
     load_roi_feature_spec,
@@ -83,6 +84,7 @@ class TrainConfig:
     temporal_reducer: str = "mean"
     temporal_contiguity: str = "contiguous"
     temporal_allow_class_drop: bool = False
+    temporal_allow_rewindow: bool = False
     exclude_labels: str = "neutral"
 
 
@@ -109,6 +111,20 @@ def _json_ready(value: Any) -> Any:
         return {str(k): _json_ready(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_ready(v) for v in value]
+    return value
+
+
+def _npz_scalar(raw: Any, key: str, default: Any = None) -> Any:
+    if key not in raw.files:
+        return default
+    value = raw[key]
+    if isinstance(value, np.ndarray):
+        if value.shape == ():
+            return value.item()
+        if value.size == 1:
+            item = value.reshape(-1)[0]
+            return item.item() if isinstance(item, np.generic) else item
+        return value.tolist()
     return value
 
 
@@ -330,8 +346,52 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
     y = np.asarray(raw["y"], dtype=np.int64)
     subject = np.asarray(raw["subject"]).astype(str)
     labels = np.asarray(raw["labels"]).astype(str)
-    t_idx = np.asarray(raw["t_idx"], dtype=np.int64) if "t_idx" in raw.files else np.arange(y.shape[0], dtype=np.int64)
-    time_s = np.asarray(raw["time_s"], dtype=np.float32) if "time_s" in raw.files else t_idx.astype(np.float32)
+    source_mesh = str(_npz_scalar(raw, "mesh", "fsaverage5"))
+    source_vertex_order = normalize_vertex_order(_npz_scalar(raw, "vertex_order", CANONICAL_VERTEX_ORDER))
+    source_window_trs = int(_npz_scalar(raw, "source_window_trs", X_raw.shape[1] if X_raw.ndim == 3 else 1))
+    source_sample_axis = str(
+        _npz_scalar(raw, "source_sample_axis", "prep_window" if X_raw.ndim == 3 else "tr")
+    )
+    prep_metadata: dict[str, Any] = {}
+    prep_metadata_json = _npz_scalar(raw, "prep_metadata_json", "")
+    if isinstance(prep_metadata_json, str) and prep_metadata_json.strip():
+        try:
+            loaded = json.loads(prep_metadata_json)
+            if isinstance(loaded, dict):
+                prep_metadata = loaded
+        except json.JSONDecodeError:
+            prep_metadata = {"raw_prep_metadata_json": prep_metadata_json}
+
+    if source_mesh != "fsaverage5":
+        raise ValueError(f"Training NPZ must be in fsaverage5 space, got mesh={source_mesh!r}")
+    if source_vertex_order not in (None, CANONICAL_VERTEX_ORDER):
+        raise ValueError(
+            f"Training NPZ vertex order {source_vertex_order!r} is not supported; "
+            f"expected {CANONICAL_VERTEX_ORDER!r}"
+        )
+
+    has_t_idx = "t_idx" in raw.files
+    has_time_s = "time_s" in raw.files
+    if cfg.temporal_window_trs > 1 and not has_t_idx:
+        raise ValueError(
+            "Temporal aggregation requires source t_idx metadata. Rebuild the NeuroEmo NPZ "
+            "with t_idx/time_s arrays or train without --temporal-window-trs > 1."
+        )
+    if cfg.temporal_window_trs > 1 and not has_time_s:
+        raise ValueError(
+            "Temporal aggregation requires source time_s metadata. Rebuild the NeuroEmo NPZ "
+            "with t_idx/time_s arrays or train without --temporal-window-trs > 1."
+        )
+    t_idx = (
+        np.asarray(raw["t_idx"], dtype=np.int64)
+        if has_t_idx
+        else np.arange(y.shape[0], dtype=np.int64)
+    )
+    time_s = (
+        np.asarray(raw["time_s"], dtype=np.float32)
+        if has_time_s
+        else t_idx.astype(np.float32)
+    )
 
     if X_raw.shape[0] != y.shape[0] or y.shape[0] != subject.shape[0] or y.shape[0] != t_idx.shape[0]:
         raise ValueError(
@@ -339,6 +399,19 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
         )
     if X_raw.ndim not in (2, 3):
         raise ValueError(f"Expected X to be 2D or 3D, got shape {X_raw.shape}")
+    if X_raw.ndim == 3 and source_window_trs != int(X_raw.shape[1]):
+        raise ValueError(
+            f"Training NPZ source_window_trs={source_window_trs} does not match X shape {X_raw.shape}"
+        )
+    if X_raw.ndim == 2 and source_window_trs != 1:
+        raise ValueError(
+            f"Training NPZ source_window_trs={source_window_trs} but X is 2D; expected 1"
+        )
+    if X_raw.ndim == 3 and cfg.temporal_window_trs > 1 and not cfg.temporal_allow_rewindow:
+        raise ValueError(
+            "Training NPZ is already windowed, but a second training-time temporal window was requested. "
+            "Use --temporal-allow-rewindow only for diagnostics."
+        )
 
     input_shape = tuple(int(x) for x in X_raw.shape[1:])
 
@@ -406,6 +479,15 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
             reducers=cfg.roi_reducers,
             manifest_path=atlas_manifest_path,
         )
+        if roi_spec.mesh not in (None, source_mesh):
+            raise ValueError(
+                f"ROI manifest mesh {roi_spec.mesh!r} does not match training NPZ mesh {source_mesh!r}"
+            )
+        if roi_spec.vertex_order not in (None, source_vertex_order, CANONICAL_VERTEX_ORDER):
+            raise ValueError(
+                f"ROI manifest vertex order {roi_spec.vertex_order!r} does not match "
+                f"training NPZ vertex order {source_vertex_order!r}"
+            )
         X_features = reduce_vertices_to_rois(X_raw, roi_spec)
     else:
         raise ValueError(f"Unknown feature_mode: {cfg.feature_mode}")
@@ -419,6 +501,14 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
         "dataset_id": str(raw["dataset_id"]) if "dataset_id" in raw.files else None,
         "snapshot_version": str(raw["snapshot_version"]) if "snapshot_version" in raw.files else None,
         "input_feature_shape": list(input_shape),
+        "source_contract": {
+            "mesh": source_mesh,
+            "vertex_order": source_vertex_order or CANONICAL_VERTEX_ORDER,
+            "source_window_trs": source_window_trs,
+            "source_sample_axis": source_sample_axis,
+            "input_ndim": int(X_raw.ndim),
+            "prep_metadata": prep_metadata,
+        },
         "label_filter": label_filter_summary,
         "temporal_aggregation": temporal_summary,
     }
@@ -440,6 +530,7 @@ def _make_estimator(cfg: TrainConfig):
     from sklearn.linear_model import LogisticRegression, SGDClassifier
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
+    from sklearn.svm import LinearSVC
 
     steps: list[tuple[str, Any]] = []
     if cfg.scale:
@@ -469,6 +560,13 @@ def _make_estimator(cfg: TrainConfig):
             class_weight="balanced",
             random_state=cfg.random_state,
             n_jobs=cfg.n_jobs,
+        )
+    elif cfg.model_type == "linear_svc":
+        clf = LinearSVC(
+            C=cfg.c_value,
+            class_weight="balanced",
+            max_iter=cfg.max_iter,
+            random_state=cfg.random_state,
         )
     else:
         raise ValueError(f"Unknown --model-type {cfg.model_type!r}")
@@ -608,8 +706,11 @@ def _evaluate_group_cv(data: TrainingData, cfg: TrainConfig) -> dict[str, Any]:
         "n_splits": n_splits,
         "folds": fold_rows,
         "mean_accuracy": float(np.mean([row["accuracy"] for row in fold_rows])),
+        "std_accuracy": float(np.std([row["accuracy"] for row in fold_rows])),
         "mean_balanced_accuracy": float(np.mean([row["balanced_accuracy"] for row in fold_rows])),
+        "std_balanced_accuracy": float(np.std([row["balanced_accuracy"] for row in fold_rows])),
         "mean_macro_f1": float(np.mean([row["macro_f1"] for row in fold_rows])),
+        "std_macro_f1": float(np.std([row["macro_f1"] for row in fold_rows])),
         "pooled_accuracy": float(accuracy_score(y_true_concat, y_pred_concat)),
         "pooled_balanced_accuracy": float(balanced_accuracy_score(y_true_concat, y_pred_concat)),
         "pooled_macro_f1": float(f1_score(y_true_concat, y_pred_concat, average="macro", zero_division=0)),
@@ -685,6 +786,7 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
         else None,
         "model_type": cfg.model_type,
         "config": asdict(cfg),
+        "source_contract": data.metadata.get("source_contract"),
         "label_filter": data.metadata.get("label_filter"),
         "temporal_aggregation": data.metadata.get("temporal_aggregation"),
         "training_metadata": data.metadata,
@@ -711,6 +813,7 @@ def train_model_from_npz(train_npz: Path, cfg: TrainConfig) -> tuple[dict[str, A
         "feature_mode": data.feature_mode,
         "roi_reducers": list(data.roi_spec.reducers) if data.roi_spec is not None else None,
         "roi_spec": summarise_roi_feature_spec(data.roi_spec) if data.roi_spec is not None else None,
+        "source_contract": data.metadata.get("source_contract"),
         "label_filter": data.metadata.get("label_filter"),
         "temporal_aggregation": data.metadata.get("temporal_aggregation"),
         "labels": data.labels.tolist(),
@@ -739,9 +842,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-npz", type=Path, default=DEFAULT_TRAIN_NPZ)
     parser.add_argument("--output-model", type=Path, default=DEFAULT_MODEL_PATH)
     parser.add_argument("--metrics-json", type=Path, default=DEFAULT_METRICS_PATH)
-    parser.add_argument("--model-type", choices=("sgd_logistic", "logistic_saga"), default="sgd_logistic")
+    parser.add_argument("--model-type", choices=("sgd_logistic", "logistic_saga", "linear_svc"), default="sgd_logistic")
     parser.add_argument("--cv-splits", type=int, default=5)
-    parser.add_argument("--max-iter", type=int, default=2000)
+    parser.add_argument("--max-iter", type=int, default=3000)
     parser.add_argument("--alpha", type=float, default=0.0001, help="Regularization strength for sgd_logistic")
     parser.add_argument("--c-value", type=float, default=1.0, help="Inverse regularization for logistic_saga")
     parser.add_argument("--random-state", type=int, default=13)
@@ -806,6 +909,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Allow temporal aggregation to drop classes. Use for diagnostics only.",
     )
     parser.add_argument(
+        "--temporal-allow-rewindow",
+        action="store_true",
+        help="Allow a second temporal aggregation pass on already-windowed NPZ inputs. Diagnostics only.",
+    )
+    parser.add_argument(
         "--exclude-labels",
         default="neutral",
         help="Comma-separated class labels to exclude before training. Default excludes neutral.",
@@ -837,6 +945,7 @@ def _config_from_args(args: argparse.Namespace) -> TrainConfig:
         temporal_reducer=args.temporal_reducer,
         temporal_contiguity=args.temporal_contiguity,
         temporal_allow_class_drop=args.temporal_allow_class_drop,
+        temporal_allow_rewindow=args.temporal_allow_rewindow,
         exclude_labels=args.exclude_labels,
     )
 
@@ -921,6 +1030,7 @@ if modal is not None:
         temporal_reducer: str = "mean",
         temporal_contiguity: str = "contiguous",
         temporal_allow_class_drop: bool = False,
+        temporal_allow_rewindow: bool = False,
         exclude_labels: str = "neutral",
     ) -> None:
         """Train NeuroEmo classifier remotely on Modal CPU and save artifacts locally."""
@@ -953,6 +1063,7 @@ if modal is not None:
             temporal_reducer=temporal_reducer,
             temporal_contiguity=temporal_contiguity,
             temporal_allow_class_drop=temporal_allow_class_drop,
+            temporal_allow_rewindow=temporal_allow_rewindow,
             exclude_labels=exclude_labels,
         )
         vertex_csv_text = None

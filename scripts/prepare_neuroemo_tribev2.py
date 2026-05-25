@@ -55,6 +55,8 @@ from typing import Any
 import numpy as np
 import requests
 
+from scout_core.parcellation import CANONICAL_VERTEX_ORDER
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RAW_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "raw"
 DEFAULT_OUT_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface"
@@ -455,6 +457,10 @@ def _write_rows_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def _sample_axis(window_trs: int) -> str:
+    return "tr" if int(window_trs) == 1 else "prep_window"
+
+
 def prepare_subject(
     subject: str,
     *,
@@ -538,6 +544,15 @@ def prepare_subject(
             label_ids=label_ids,
             time_s=times,
             class_names=np.asarray(class_names),
+            mesh=np.asarray("fsaverage5"),
+            vertex_order=np.asarray(CANONICAL_VERTEX_ORDER),
+            source_window_trs=np.asarray(window_trs, dtype=np.int64),
+            source_sample_axis=np.asarray(_sample_axis(window_trs)),
+            bold_lag_s=np.asarray(float(bold_lag_s), dtype=np.float32),
+            drop_transition_trs=np.asarray(int(drop_transition_trs), dtype=np.int64),
+            include_white_noise=np.asarray(bool(include_white_noise)),
+            include_neutral=np.asarray(bool(include_neutral)),
+            preprocess_bold=np.asarray(bool(preprocess_bold)),
         )
 
     class_counts = {
@@ -719,6 +734,18 @@ def main() -> None:
         subject_combined = np.concatenate(all_subject, axis=0)
         t_idx_combined = np.concatenate(all_t_idx, axis=0).astype(np.int64)
         time_s_combined = np.concatenate(all_time_s, axis=0).astype(np.float32)
+        prep_contract = {
+            "mesh": "fsaverage5",
+            "vertex_order": CANONICAL_VERTEX_ORDER,
+            "source_window_trs": int(args.window_trs),
+            "source_sample_axis": _sample_axis(args.window_trs),
+            "bold_lag_s": float(args.bold_lag_s),
+            "drop_transition_trs": int(args.drop_transition_trs),
+            "include_white_noise": bool(args.include_white_noise),
+            "include_neutral": bool(args.include_neutral),
+            "preprocess_bold": bool(args.preprocess_bold),
+            "standardize": args.standardize,
+        }
 
         train_npz = args.out_dir / "neuroemo_tribev2_train.npz"
         _save_npz(
@@ -732,6 +759,16 @@ def main() -> None:
             labels=np.asarray(class_names),
             dataset_id=np.asarray(DATASET_ID),
             snapshot_version=np.asarray(SNAPSHOT_VERSION),
+            mesh=np.asarray("fsaverage5"),
+            vertex_order=np.asarray(CANONICAL_VERTEX_ORDER),
+            source_window_trs=np.asarray(int(args.window_trs), dtype=np.int64),
+            source_sample_axis=np.asarray(_sample_axis(args.window_trs)),
+            bold_lag_s=np.asarray(float(args.bold_lag_s), dtype=np.float32),
+            drop_transition_trs=np.asarray(int(args.drop_transition_trs), dtype=np.int64),
+            include_white_noise=np.asarray(bool(args.include_white_noise)),
+            include_neutral=np.asarray(bool(args.include_neutral)),
+            preprocess_bold=np.asarray(bool(args.preprocess_bold)),
+            prep_metadata_json=np.asarray(json.dumps(prep_contract, sort_keys=True)),
         )
         _write_rows_csv(args.out_dir / "neuroemo_tribev2_labels.csv", label_rows)
         print(f"\nCombined train NPZ: {train_npz}")
@@ -743,7 +780,8 @@ def main() -> None:
         "snapshot_version": SNAPSHOT_VERSION,
         "created_at_unix_ms": int(time.time() * 1000),
         "mesh": "fsaverage5",
-        "vertex_order": "lh_then_rh_nilearn_fsaverage5",
+        "vertex_order": CANONICAL_VERTEX_ORDER,
+        "sample_axis": _sample_axis(args.window_trs),
         "tribev2_expected_shape": ["T", EXPECTED_FSAVERAGE5_VERTICES],
         "class_names": class_names,
         "task_events": [
