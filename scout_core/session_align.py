@@ -15,13 +15,34 @@ def validate_preds_manifest_alignment(
     *,
     tolerance: int = 1,
 ) -> dict[str, Any]:
-    """Return alignment report: ok, n_preds, n_snapshots, delta, message."""
+    """Return alignment report: ok, n_preds, n_snapshots, delta, message.
+
+    Extended fields:
+    - ``overlap_start``: first valid analysis timestep index (always 0).
+    - ``overlap_end``: last timestep index covered by both preds and snapshots.
+    - ``out_of_range_count``: analysis timesteps beyond manifest coverage.
+    - ``mapping``: "exact" | "tolerated" | "clamped" | "invalid".
+    """
     snapshots = manifest.get("dom_snapshots") or []
     n_snap = len(snapshots)
     delta = abs(n_preds - n_snap)
     ok = delta <= tolerance
+
+    overlap_end = min(n_preds, n_snap) - 1
+    out_of_range = max(0, n_preds - n_snap)
+
+    if delta == 0:
+        mapping = "exact"
+    elif ok:
+        mapping = "tolerated"
+    elif n_snap > 0:
+        mapping = "clamped"
+    else:
+        mapping = "invalid"
+
     msg = (
-        f"preds T={n_preds} vs manifest snapshots={n_snap} (delta={delta}, tolerance={tolerance})"
+        f"preds T={n_preds} vs manifest snapshots={n_snap} "
+        f"(delta={delta}, tolerance={tolerance}, mapping={mapping})"
     )
     if not ok:
         msg += " — WARNING: misaligned; check tr_duration_sec and walkthrough duration."
@@ -31,8 +52,18 @@ def validate_preds_manifest_alignment(
         "n_snapshots": n_snap,
         "delta": delta,
         "tolerance": tolerance,
+        "overlap_start": 0,
+        "overlap_end": max(overlap_end, -1),
+        "out_of_range_count": out_of_range,
+        "mapping": mapping,
         "message": msg,
     }
+
+
+def is_timestep_in_manifest(t: int, manifest: dict[str, Any], *, tolerance: int = 0) -> bool:
+    """Return True if ``t`` maps to a valid snapshot index in the manifest."""
+    n_snap = len(manifest.get("dom_snapshots") or [])
+    return t <= (n_snap - 1 + tolerance)
 
 
 def find_walkthrough_video(session_dir: Path) -> Path | None:

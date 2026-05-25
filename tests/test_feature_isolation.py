@@ -16,8 +16,11 @@ import pytest
 from scout_core.dom_intersect import (
     _clip_bbox,
     compute_attention_density,
+    filter_elements_to_section,
     find_nearest_snapshot,
     ground_snapshot,
+    rollup_section_elements,
+    score_all_elements,
     select_winner,
 )
 from scout_core.feature_engine import (
@@ -315,6 +318,87 @@ class TestSelectWinner:
         winner = select_winner(uniform_heatmap, elements)
         assert winner is not None
         assert winner["attention_density"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# dom_intersect — score_all_elements / section helpers
+# ---------------------------------------------------------------------------
+
+class TestScoreAllElements:
+    def test_sorted_descending_and_min_area_respected(self):
+        h = np.zeros((100, 100), dtype=np.float32)
+        h[10:20, 10:20] = 5.0
+        h[40:70, 40:70] = 2.0
+        elements = [
+            {"dom_id": "#small", "tag": "BUTTON", "bbox": [10, 10, 10, 10], "is_intersecting_viewport": True},
+            {"dom_id": "#large", "tag": "SECTION", "bbox": [40, 40, 30, 30], "is_intersecting_viewport": True},
+            {"dom_id": "#tiny", "tag": "SPAN", "bbox": [0, 0, 2, 2], "is_intersecting_viewport": True},
+        ]
+
+        scored = score_all_elements(h, elements, min_area=25)
+
+        assert [row["dom_id"] for row in scored] == ["#small", "#large"]
+        assert scored[0]["attention_density"] > scored[1]["attention_density"]
+
+    def test_scroll_offsets_are_applied(self):
+        h = np.zeros((100, 100), dtype=np.float32)
+        h[0:10, 0:10] = 3.0
+        elements = [
+            {"dom_id": "#scrolled", "tag": "DIV", "bbox": [0, 50, 10, 10], "is_intersecting_viewport": True},
+        ]
+
+        scored = score_all_elements(h, elements, scroll_y=50)
+
+        assert len(scored) == 1
+        assert scored[0]["dom_id"] == "#scrolled"
+        assert scored[0]["attention_density"] == pytest.approx(3.0, rel=1e-5)
+
+
+class TestSectionElementHelpers:
+    def test_filter_elements_to_section_prefers_overlapping_elements(self):
+        section_bbox = [0, 0, 100, 100]
+        elements = [
+            {"dom_id": "#inside", "bbox": [10, 10, 20, 20]},
+            {"dom_id": "#outside", "bbox": [200, 200, 20, 20]},
+        ]
+
+        filtered = filter_elements_to_section(elements, section_bbox, overlap_min=0.5)
+
+        assert [el["dom_id"] for el in filtered] == ["#inside"]
+
+    def test_filter_elements_to_section_falls_back_when_nothing_matches(self):
+        section_bbox = [0, 0, 100, 100]
+        elements = [
+            {"dom_id": "#outside-a", "bbox": [200, 200, 20, 20]},
+            {"dom_id": "#outside-b", "bbox": [300, 300, 20, 20]},
+        ]
+
+        filtered = filter_elements_to_section(elements, section_bbox, overlap_min=0.5)
+
+        assert [el["dom_id"] for el in filtered] == ["#outside-a", "#outside-b"]
+
+    def test_rollup_section_elements_averages_by_dom_id(self):
+        samples = [
+            (
+                0,
+                [
+                    {"dom_id": "#cta", "tag": "BUTTON", "bbox": [0, 0, 10, 10], "attention_density": 0.2},
+                    {"dom_id": "#hero", "tag": "SECTION", "bbox": [0, 0, 100, 40], "attention_density": 0.1},
+                ],
+            ),
+            (
+                5,
+                [
+                    {"dom_id": "#cta", "tag": "BUTTON", "bbox": [0, 0, 10, 10], "attention_density": 0.4},
+                ],
+            ),
+        ]
+
+        rolled = rollup_section_elements(samples, top_k=2)
+
+        assert [row["dom_id"] for row in rolled] == ["#cta", "#hero"]
+        assert rolled[0]["mean_attention_density"] == pytest.approx(0.3, rel=1e-5)
+        assert rolled[0]["n_samples"] == 2
 
 
 # ---------------------------------------------------------------------------

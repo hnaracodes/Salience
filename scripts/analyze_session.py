@@ -41,10 +41,13 @@ from scout_core.parcellation import dense_parcel_labels, load_vertex_table, parc
 from scout_core.schemas import (  # noqa: E402
     AnalysisBundle,
     GroundingEvent,
+    GroundingResult,
+    HeatmapProvenance,
     SessionCaptureMeta,
     ThresholdContext,
     analysis_bundle_path,
 )
+from scout_core.heatmap_extract import read_heatmaps_manifest  # noqa: E402
 from scout_core.session_align import (  # noqa: E402
     load_manifest,
     tr_duration_from_manifest,
@@ -85,15 +88,24 @@ def _load_iso_config() -> dict[str, Any]:
 def _select_spikes(
     bundle: dict[str, Any],
     eng_min: float,
-    anger_z_min: float,
+    emotion_z_min: float,
     combine: str,
     cooldown_trs: int,
     max_spikes: int,
 ) -> list[dict[str, Any]]:
     """Filter dual-track trigger events against isolation thresholds.
 
+    Track 1 (engagement): any trigger with channel=="engagement" and
+    |value| >= eng_min passes.
+
+    Track 2 (emotion): ANY emotion channel (not just anger) with
+    value >= emotion_z_min passes. The highest-scoring channel at each
+    timestep is recorded as ``emotion_channel`` + ``emotion_z`` in the
+    trigger payload.  For backward compatibility, if the winning channel is
+    "anger", ``kragel_anger_z`` is also written.
+
     Applies cooldown (minimum gap between consecutive spikes) and optional
-    max_spikes cap. Returns a list of spike dicts: {t_idx, triggers}.
+    max_spikes cap. Returns [{t_idx, triggers}].
     """
     raw_triggers = bundle.get("grounding_triggers", [])
     if not raw_triggers:
@@ -115,26 +127,37 @@ def _select_spikes(
     for t in sorted(by_t.keys()):
         vals = by_t[t]
         eng_val = vals.get("engagement", None)
-        anger_val = vals.get("anger", None)
+
+        # Find best emotion channel across all non-engagement channels.
+        emotion_channels = {k: v for k, v in vals.items() if k != "engagement"}
+        best_channel: str | None = None
+        best_emotion_z: float = 0.0
+        if emotion_channels:
+            best_channel = max(emotion_channels, key=lambda k: emotion_channels[k])
+            best_emotion_z = emotion_channels[best_channel]
 
         eng_ok = eng_val is not None and abs(eng_val) >= eng_min
-        anger_ok = anger_val is not None and anger_val > anger_z_min
+        emotion_ok = best_channel is not None and best_emotion_z >= emotion_z_min
 
         if combine == "and":
-            passes = eng_ok and anger_ok
+            passes = eng_ok and emotion_ok
         else:
-            passes = eng_ok or anger_ok
+            passes = eng_ok or emotion_ok
 
         if not passes:
             continue
         if t - last_t < cooldown_trs:
             continue
 
-        trigger_payload: dict[str, float] = {}
+        trigger_payload: dict[str, Any] = {}
         if eng_val is not None:
             trigger_payload["engagement_score"] = round(eng_val, 4)
-        if anger_val is not None:
-            trigger_payload["kragel_anger_z"] = round(anger_val, 4)
+        if best_channel is not None and best_emotion_z >= emotion_z_min:
+            trigger_payload["emotion_channel"] = best_channel
+            trigger_payload["emotion_z"] = round(best_emotion_z, 4)
+            # Backward compat: keep kragel_anger_z when anger is the winner.
+            if best_channel == "anger":
+                trigger_payload["kragel_anger_z"] = round(best_emotion_z, 4)
 
         spikes.append({"t_idx": t, "triggers": trigger_payload})
         last_t = t
@@ -166,17 +189,25 @@ def _run_grounding_step(
     """
     trigger_cfg = iso_cfg.get("trigger", {})
     eng_min = float(trigger_cfg.get("engagement_score_min", 2.0))
-    if "kragel_anger_z_min" in trigger_cfg:
-        anger_z_min = float(trigger_cfg["kragel_anger_z_min"])
+
+    # emotion_z_min accepts the new key; fall back to deprecated kragel_anger_z_min.
+    if "emotion_z_min" in trigger_cfg:
+        emotion_z_min = float(trigger_cfg["emotion_z_min"])
+    elif "kragel_anger_z_min" in trigger_cfg:
+        print(
+            "WARNING: kragel_anger_z_min is deprecated; use emotion_z_min in isolation_thresholds.yaml.",
+            file=sys.stderr,
+        )
+        emotion_z_min = float(trigger_cfg["kragel_anger_z_min"])
     elif "kragel_anger_min" in trigger_cfg:
         print(
             "WARNING: kragel_anger_min is deprecated (absolute cosine); "
-            "use kragel_anger_z_min in isolation_thresholds.yaml.",
+            "use emotion_z_min in isolation_thresholds.yaml.",
             file=sys.stderr,
         )
-        anger_z_min = 2.0
+        emotion_z_min = 2.0
     else:
-        anger_z_min = 2.0
+        emotion_z_min = 2.0
     combine = str(trigger_cfg.get("combine", "or"))
 
     spike_policy = iso_cfg.get("spike_policy", {})
@@ -195,8 +226,11 @@ def _run_grounding_step(
         except json.JSONDecodeError:
             print(f"WARNING: session_manifest.json is malformed — DOM grounding skipped.", file=sys.stderr)
 
-    spikes = _select_spikes(existing_bundle, eng_min, anger_z_min, combine, cooldown_trs, max_spikes)
+    spikes = _select_spikes(existing_bundle, eng_min, emotion_z_min, combine, cooldown_trs, max_spikes)
     print(f"  Grounding: {len(spikes)} spike(s) selected after cooldown / cap filter.")
+
+    # Load heatmap manifest for provenance (source / placeholder fields).
+    hm_manifest = read_heatmaps_manifest(heatmaps_dir)
 
     events: list[dict[str, Any]] = []
     for spike in spikes:
@@ -204,6 +238,15 @@ def _run_grounding_step(
         triggers = spike["triggers"]
 
         heatmap_path = heatmaps_dir / f"t_{t}.npy"
+        hm_meta = hm_manifest.get(t, {})
+        provenance = HeatmapProvenance(
+            heatmap_path=str(heatmap_path.relative_to(session_dir)) if heatmap_path.is_file() else None,
+            source=hm_meta.get("source") or ("uniform_placeholder" if hm_meta.get("placeholder") else None),
+            placeholder=bool(hm_meta.get("placeholder", False)),
+            frame_path=hm_meta.get("frame_path"),
+            sha256=hm_meta.get("sha256"),
+        )
+
         if not heatmap_path.is_file():
             print(f"  t={t}: heatmap not found at {heatmap_path} — recording ungrounded event.")
             events.append(
@@ -212,6 +255,7 @@ def _run_grounding_step(
                     triggers=triggers,
                     grounding=None,
                     grounding_skip_reason="heatmap_not_found",
+                    heatmap_provenance=provenance,
                 ).model_dump()
             )
             continue
@@ -227,6 +271,7 @@ def _run_grounding_step(
                     triggers=triggers,
                     grounding=None,
                     grounding_skip_reason="no_manifest_snapshot",
+                    heatmap_provenance=provenance,
                 ).model_dump()
             )
             continue
@@ -240,16 +285,17 @@ def _run_grounding_step(
                     triggers=triggers,
                     grounding=None,
                     grounding_skip_reason="no_eligible_dom_element",
+                    heatmap_provenance=provenance,
                 ).model_dump()
             )
         else:
-            from scout_core.schemas import GroundingResult
             print(f"  t={t}: winner → {winner['dom_id']} ({winner['tag']}) density={winner['attention_density']:.4f}")
             events.append(
                 GroundingEvent(
                     t_spike=t,
                     triggers=triggers,
                     grounding=GroundingResult(**winner),
+                    heatmap_provenance=provenance,
                 ).model_dump()
             )
 

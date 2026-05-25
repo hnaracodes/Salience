@@ -59,6 +59,17 @@ class GroundingResult(BaseModel):
     attention_density: float = 0.0
 
 
+class HeatmapProvenance(BaseModel):
+    """Tracks whether a heatmap came from a real Modal inference or a placeholder."""
+
+    heatmap_path: str | None = None
+    source: str | None = None          # "modal" | "uniform_placeholder" | None
+    placeholder: bool = False
+    frame_path: str | None = None
+    sha256: str | None = None
+    alignment_status: str | None = None  # "exact" | "tolerated" | "clamped" | "invalid"
+
+
 class GroundingEvent(BaseModel):
     """One neural spike + its spatially grounded UI hypothesis.
 
@@ -68,9 +79,10 @@ class GroundingEvent(BaseModel):
 
     type: str = "neural_spike_grounding"
     t_spike: int
-    triggers: dict[str, float] = Field(default_factory=dict)
+    triggers: dict[str, Any] = Field(default_factory=dict)
     grounding: GroundingResult | None = None
     grounding_skip_reason: str | None = None
+    heatmap_provenance: HeatmapProvenance | None = None
 
 
 # ---------------------------------------------------------------------------

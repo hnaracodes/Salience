@@ -39,12 +39,38 @@ def extract_heatmap_modal(frame_path: Path, capture_h: int, capture_w: int) -> n
     return np.load(io.BytesIO(result_bytes)).astype(np.float32)
 
 
+def read_heatmaps_manifest(heatmaps_dir: Path) -> dict[int, dict[str, Any]]:
+    """Return ``{t_idx: entry}`` from an existing heatmaps/manifest.json, or empty dict."""
+    path = heatmaps_dir / "manifest.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {int(e["t_idx"]): e for e in data.get("entries", []) if "t_idx" in e}
+    except (json.JSONDecodeError, KeyError, ValueError):
+        return {}
+
+
 def write_heatmaps_manifest(
     heatmaps_dir: Path,
     entries: list[dict[str, Any]],
+    *,
+    merge: bool = False,
 ) -> None:
+    """Write heatmaps/manifest.json.
+
+    When ``merge=True``, existing entries are preserved unless a new entry for
+    the same ``t_idx`` replaces them, so provenance from earlier runs is not lost.
+    """
     path = heatmaps_dir / "manifest.json"
-    path.write_text(json.dumps({"entries": entries}, indent=2), encoding="utf-8")
+    if merge and path.is_file():
+        existing = read_heatmaps_manifest(heatmaps_dir)
+        for e in entries:
+            existing[int(e["t_idx"])] = e
+        final = sorted(existing.values(), key=lambda x: int(x["t_idx"]))
+    else:
+        final = entries
+    path.write_text(json.dumps({"entries": final}, indent=2), encoding="utf-8")
 
 
 def file_sha256(path: Path) -> str:
