@@ -36,6 +36,7 @@ from typing import Any
 
 import numpy as np
 
+from scout_core.parcellation import CANONICAL_VERTEX_ORDER
 from scout_core.storage_migrations import ensure_neuro_schema
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -324,6 +325,8 @@ def save_cortical_timeseries(
     session_id: str | None = None,
     source_video: str,
     mesh_name: str = "fsaverage5",
+    vertex_order: str = CANONICAL_VERTEX_ORDER,
+    vertex_equivalence: dict[str, Any] | None = None,
     vertex_to_region: dict[int, str] | None = None,
     top_k_peaks: int = 64,
     notes: str | None = None,
@@ -346,13 +349,21 @@ def save_cortical_timeseries(
     session_dir = SESSIONS_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     npz_path = session_dir / "preds.npz"
-    np.savez_compressed(npz_path, preds=preds, mesh_name=np.array(mesh_name))
+    np.savez_compressed(
+        npz_path,
+        preds=preds,
+        mesh_name=np.array(mesh_name),
+        vertex_order=np.array(vertex_order),
+        vertex_equivalence_json=np.array(json.dumps(vertex_equivalence or {}, sort_keys=True)),
+    )
 
     meta = {
         "dtype": str(preds.dtype),
         "shape": [int(n_t), int(n_v)],
         "description": "preds[i,j] = predicted activation at timestep i, fsaverage5 vertex j",
         "interpretation_note": "stimulation_band uses timestep-percentile; location uses vertex_fraction mesh-index proxy unless configs/location_coarse_bands.csv overrides.",
+        "vertex_order": vertex_order,
+        "vertex_equivalence": vertex_equivalence or {},
     }
     if extra_meta:
         meta.update(extra_meta)

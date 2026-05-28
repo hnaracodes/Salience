@@ -1,0 +1,476 @@
+﻿=== vertex equivalence run started 2026-05-27T21:45:00.2547683-07:00 ===
+[2026-05-27 21:45:00] Step 1/2: pytest tests/test_vertex_equivalence.py
+[2026-05-27 21:45:00] ============================= test session starts =============================
+[2026-05-27 21:45:00] platform win32 -- Python 3.14.3, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\.venv\Scripts\python.exe
+[2026-05-27 21:45:00] cachedir: .pytest_cache
+[2026-05-27 21:45:00] rootdir: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2
+[2026-05-27 21:45:00] plugins: anyio-4.13.0
+[2026-05-27 21:45:01] collecting ... collected 4 items
+[2026-05-27 21:45:01] 
+[2026-05-27 21:45:03] tests/test_vertex_equivalence.py::test_mesh_fingerprint_changes_when_faces_change PASSED [ 25%]
+[2026-05-27 21:45:03] tests/test_vertex_equivalence.py::test_validate_vertex_equivalence_summary_rejects_contract_only_by_default PASSED [ 50%]
+[2026-05-27 21:45:03] tests/test_vertex_equivalence.py::test_build_vertex_equivalence_report_marks_mesh_identity_verified PASSED [ 75%]
+[2026-05-27 21:45:03] tests/test_vertex_equivalence.py::test_vertex_equivalence_reference_contains_report_hash PASSED [100%]
+[2026-05-27 21:45:03] 
+[2026-05-27 21:45:03] ============================== 4 passed in 2.07s ==============================
+[2026-05-27 21:45:03] Step 2/2: modal run tribe.py::verify_vertex_equivalence
+[2026-05-27 21:45:03] BOLD: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroemo\raw\sub-01\func\sub-01_task-fe_bold.nii.gz
+[2026-05-27 21:45:03] Modal log: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroemo\vertex_equivalence_modal.log
+[2026-05-27 21:45:03] Command: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\.venv\Scripts\modal.exe run tribe.py::verify_vertex_equivalence --bold-path scout_data/neuroemo/raw/sub-01/func/sub-01_task-fe_bold.nii.gz --output scout_data/neuroemo/vertex_equivalence_report.json --require-status projection_equivalence_verified
+[2026-05-27 21:45:04] [modal] C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\.venv\Lib\site-packages\modal\_utils\async_utils.py:45: DeprecationWarning: 'asyncio.WindowsSelectorEventLoopPolicy' is deprecated and slated for removal in Python 3.16
+[2026-05-27 21:45:04] [modal]   asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+[2026-05-27 21:45:04] [modal] C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\.venv\Lib\site-packages\modal\_utils\async_utils.py:45: DeprecationWarning: 'asyncio.set_event_loop_policy' is deprecated and slated for removal in Python 3.16
+[2026-05-27 21:45:04] [modal]   asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+[2026-05-27 21:45:05] [modal] ✓ Initialized. View run at 
+[2026-05-27 21:45:05] [modal] https://modal.com/apps/hrudayiitb/main/ap-31N50jobO8CYyAOlJTHrXi
+[2026-05-27 21:45:06] [modal] Building image im-qidOZplXEYIWPnqH3BUW7r
+[2026-05-27 21:45:07] [modal] 
+[2026-05-27 21:45:07] [modal] => Step 0: FROM base
+[2026-05-27 21:45:07] [modal] 
+[2026-05-27 21:45:07] [modal] => Step 1: RUN python -m pip install 'nibabel>=5.2'
+[2026-05-27 21:45:09] [modal] Looking in indexes: http://pypi-mirror.modal.local:5555/simple
+[2026-05-27 21:45:09] [modal] Requirement already satisfied: nibabel>=5.2 in /usr/local/lib/python3.12/site-packages (5.4.2)
+[2026-05-27 21:45:09] [modal] Requirement already satisfied: numpy>=1.25 in /usr/local/lib/python3.12/site-packages (from nibabel>=5.2) (2.2.6)
+[2026-05-27 21:45:09] [modal] Requirement already satisfied: packaging>=20 in /usr/local/lib/python3.12/site-packages (from nibabel>=5.2) (26.2)
+[2026-05-27 21:45:09] [modal] Requirement already satisfied: typing-extensions>=4.6 in /usr/local/lib/python3.12/site-packages (from nibabel>=5.2) (4.15.0)
+[2026-05-27 21:45:10] [modal] 
+[2026-05-27 21:45:10] [modal] [notice] A new release of pip is available: 25.1.1 -> 26.1.1
+[2026-05-27 21:45:10] [modal] [notice] To update, run: pip install --upgrade pip
+[2026-05-27 21:45:11] [modal] Saving image...
+[2026-05-27 21:45:12] [modal] Image saved, took 1.17s
+[2026-05-27 21:45:12] [modal] 
+[2026-05-27 21:45:12] [modal] Built image im-qidOZplXEYIWPnqH3BUW7r in 5.90s
+[2026-05-27 21:45:12] [modal] 
+[2026-05-27 21:45:12] [modal] 
+[2026-05-27 21:45:13] [modal] ✓ Created objects.
+[2026-05-27 21:45:13] [modal] ├── 🔨 Created mount C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:45:13] [modal] │   learning\TribeV2\tribe.py
+[2026-05-27 21:45:13] [modal] ├── 🔨 Created mount PythonPackage:scout_core
+[2026-05-27 21:45:13] [modal] ├── 🔨 Created function TribeInference.*.
+[2026-05-27 21:45:13] [modal] └── 🔨 Created function verify_vertex_equivalence_modal.
+[2026-05-27 21:45:14] [modal] Uploading BOLD to Modal (102.3 MB): C:\Users\splas\OneDrive\Desktop\Projects for
+[2026-05-27 21:45:14] [modal] learning\TribeV2\scout_data\neuroemo\raw\sub-01\func\sub-01_task-fe_bold.nii.gz
+[2026-05-27 21:46:22] [modal] Future exception was never retrieved
+[2026-05-27 21:46:22] [modal] future: <Future finished exception=ConnectionError('Connection lost')>
+[2026-05-27 21:46:22] [modal] Traceback (most recent call last):
+[2026-05-27 21:46:22] [modal]   File "C:\Python314\Lib\asyncio\sslproto.py", line 740, in _do_read
+[2026-05-27 21:46:22] [modal]     self._do_read__copied()
+[2026-05-27 21:46:22] [modal]     ~~~~~~~~~~~~~~~~~~~~~^^
+[2026-05-27 21:46:22] [modal]   File "C:\Python314\Lib\asyncio\sslproto.py", line 785, in _do_read__copied
+[2026-05-27 21:46:22] [modal]     chunk = self._sslobj.read(self.max_size)
+[2026-05-27 21:46:22] [modal]   File "C:\Python314\Lib\ssl.py", line 868, in read
+[2026-05-27 21:46:22] [modal]     v = self._sslobj.read(len)
+[2026-05-27 21:46:22] [modal] ssl.SSLError: [SSL: SSLV3_ALERT_BAD_RECORD_MAC] sslv3 alert bad record mac 
+[2026-05-27 21:46:22] [modal] (_ssl.c:2710)
+[2026-05-27 21:46:22] [modal] 
+[2026-05-27 21:46:22] [modal] The above exception was the direct cause of the following exception:
+[2026-05-27 21:46:22] [modal] 
+[2026-05-27 21:46:22] [modal] Traceback (most recent call last):
+[2026-05-27 21:46:22] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:22] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client.py", line 788, in 
+[2026-05-27 21:46:22] [modal] _request
+[2026-05-27 21:46:22] [modal]     resp = await handler(req)
+[2026-05-27 21:46:22] [modal]            ^^^^^^^^^^^^^^^^^^
+[2026-05-27 21:46:22] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:22] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client.py", line 766, in 
+[2026-05-27 21:46:22] [modal] _connect_and_send_request
+[2026-05-27 21:46:22] [modal]     await resp.start(conn)
+[2026-05-27 21:46:22] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:22] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client_reqrep.py", line 539, in
+[2026-05-27 21:46:22] [modal] start
+[2026-05-27 21:46:22] [modal]     message, payload = await protocol.read()  # type: ignore[union-attr]
+[2026-05-27 21:46:22] [modal]                        ^^^^^^^^^^^^^^^^^^^^^
+[2026-05-27 21:46:22] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:22] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\streams.py", line 707, in read
+[2026-05-27 21:46:22] [modal]     await self._waiter
+[2026-05-27 21:46:22] [modal] aiohttp.client_exceptions.ClientOSError: [Errno 1] [SSL: 
+[2026-05-27 21:46:22] [modal] SSLV3_ALERT_BAD_RECORD_MAC] sslv3 alert bad record mac (_ssl.c:2710)
+[2026-05-27 21:46:22] [modal] 
+[2026-05-27 21:46:22] [modal] The above exception was the direct cause of the following exception:
+[2026-05-27 21:46:22] [modal] 
+[2026-05-27 21:46:22] [modal] ConnectionError: Connection lost
+[2026-05-27 21:46:50] [modal] Future exception was never retrieved
+[2026-05-27 21:46:50] [modal] future: <Future finished exception=ConnectionError('Connection lost')>
+[2026-05-27 21:46:50] [modal] Traceback (most recent call last):
+[2026-05-27 21:46:50] [modal]   File "C:\Python314\Lib\asyncio\selector_events.py", line 984, in 
+[2026-05-27 21:46:50] [modal] _read_ready__get_buffer
+[2026-05-27 21:46:50] [modal]     nbytes = self._sock.recv_into(buf)
+[2026-05-27 21:46:50] [modal] ConnectionResetError: [WinError 10054] An existing connection was forcibly 
+[2026-05-27 21:46:50] [modal] closed by the remote host
+[2026-05-27 21:46:50] [modal] 
+[2026-05-27 21:46:50] [modal] The above exception was the direct cause of the following exception:
+[2026-05-27 21:46:50] [modal] 
+[2026-05-27 21:46:50] [modal] Traceback (most recent call last):
+[2026-05-27 21:46:50] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:50] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client.py", line 788, in 
+[2026-05-27 21:46:50] [modal] _request
+[2026-05-27 21:46:50] [modal]     resp = await handler(req)
+[2026-05-27 21:46:50] [modal]            ^^^^^^^^^^^^^^^^^^
+[2026-05-27 21:46:50] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:50] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client.py", line 766, in 
+[2026-05-27 21:46:50] [modal] _connect_and_send_request
+[2026-05-27 21:46:50] [modal]     await resp.start(conn)
+[2026-05-27 21:46:50] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:50] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\client_reqrep.py", line 539, in
+[2026-05-27 21:46:50] [modal] start
+[2026-05-27 21:46:50] [modal]     message, payload = await protocol.read()  # type: ignore[union-attr]
+[2026-05-27 21:46:50] [modal]                        ^^^^^^^^^^^^^^^^^^^^^
+[2026-05-27 21:46:50] [modal]   File "C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:46:50] [modal] learning\TribeV2\.venv\Lib\site-packages\aiohttp\streams.py", line 707, in read
+[2026-05-27 21:46:50] [modal]     await self._waiter
+[2026-05-27 21:46:50] [modal] aiohttp.client_exceptions.ClientOSError: [WinError 10054] An existing connection
+[2026-05-27 21:46:50] [modal] was forcibly closed by the remote host
+[2026-05-27 21:46:50] [modal] 
+[2026-05-27 21:46:50] [modal] The above exception was the direct cause of the following exception:
+[2026-05-27 21:46:50] [modal] 
+[2026-05-27 21:46:50] [modal] ConnectionError: Connection lost
+[2026-05-27 21:48:07] [modal] {
+[2026-05-27 21:48:07] [modal]   "schema_version": 1,
+[2026-05-27 21:48:07] [modal]   "mesh": "fsaverage5",
+[2026-05-27 21:48:07] [modal]   "vertex_order": "lh_then_rh_fsaverage5",
+[2026-05-27 21:48:07] [modal]   "proof_status": "projection_equivalence_verified",
+[2026-05-27 21:48:07] [modal]   "reference_kind": "local_tribev2_package",
+[2026-05-27 21:48:07] [modal]   "reference_detail": "Loaded via 
+[2026-05-27 21:48:07] [modal] tribev2.utils_fmri.TribeSurfaceProjector.get_mesh().",
+[2026-05-27 21:48:07] [modal]   "source_url": null,
+[2026-05-27 21:48:07] [modal]   "mesh_comparison": {
+[2026-05-27 21:48:07] [modal]     "pial_left": {
+[2026-05-27 21:48:07] [modal]       "n_vertices_match": true,
+[2026-05-27 21:48:07] [modal]       "n_faces_match": true,
+[2026-05-27 21:48:07] [modal]       "coords_sha256_match": true,
+[2026-05-27 21:48:07] [modal]       "faces_sha256_match": true
+[2026-05-27 21:48:07] [modal]     },
+[2026-05-27 21:48:07] [modal]     "pial_right": {
+[2026-05-27 21:48:07] [modal]       "n_vertices_match": true,
+[2026-05-27 21:48:07] [modal]       "n_faces_match": true,
+[2026-05-27 21:48:07] [modal]       "coords_sha256_match": true,
+[2026-05-27 21:48:07] [modal]       "faces_sha256_match": true
+[2026-05-27 21:48:07] [modal]     },
+[2026-05-27 21:48:07] [modal]     "white_left": {
+[2026-05-27 21:48:07] [modal]       "n_vertices_match": true,
+[2026-05-27 21:48:07] [modal]       "n_faces_match": true,
+[2026-05-27 21:48:07] [modal]       "coords_sha256_match": true,
+[2026-05-27 21:48:07] [modal]       "faces_sha256_match": true
+[2026-05-27 21:48:07] [modal]     },
+[2026-05-27 21:48:07] [modal]     "white_right": {
+[2026-05-27 21:48:07] [modal]       "n_vertices_match": true,
+[2026-05-27 21:48:07] [modal]       "n_faces_match": true,
+[2026-05-27 21:48:07] [modal]       "coords_sha256_match": true,
+[2026-05-27 21:48:07] [modal]       "faces_sha256_match": true
+[2026-05-27 21:48:07] [modal]     }
+[2026-05-27 21:48:07] [modal]   },
+[2026-05-27 21:48:07] [modal]   "projection_comparison": {
+[2026-05-27 21:48:07] [modal]     "available": true,
+[2026-05-27 21:48:07] [modal]     "verified": true,
+[2026-05-27 21:48:07] [modal]     "max_abs_diff": 0.0,
+[2026-05-27 21:48:07] [modal]     "mean_abs_diff": 0.0,
+[2026-05-27 21:48:07] [modal]     "allclose_atol": 1e-05
+[2026-05-27 21:48:07] [modal]   },
+[2026-05-27 21:48:07] [modal]   "mesh_fingerprints": {
+[2026-05-27 21:48:07] [modal]     "nilearn": {
+[2026-05-27 21:48:07] [modal]       "pial_left": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "09a93e23b794212fc51b5a192da80a30efc3553d8217732e32e0e0c2c03a3770",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "pial_right": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "8079a66e43bf7424335d351a9bf653f273127919005a646f7c82a5496dbdcd4e",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "white_left": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "7bb89759226b0c6a0d2248554059efc71670fd5b54cb7d08e30776b7eed1c216",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "white_right": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "303482f60cea0ff152c5925e4e3e4aa52196ea1efeca6633d4838990af085ab3",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       }
+[2026-05-27 21:48:07] [modal]     },
+[2026-05-27 21:48:07] [modal]     "tribe_reference": {
+[2026-05-27 21:48:07] [modal]       "pial_left": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "09a93e23b794212fc51b5a192da80a30efc3553d8217732e32e0e0c2c03a3770",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "pial_right": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "8079a66e43bf7424335d351a9bf653f273127919005a646f7c82a5496dbdcd4e",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "white_left": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "7bb89759226b0c6a0d2248554059efc71670fd5b54cb7d08e30776b7eed1c216",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "white_right": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "303482f60cea0ff152c5925e4e3e4aa52196ea1efeca6633d4838990af085ab3",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       }
+[2026-05-27 21:48:07] [modal]     }
+[2026-05-27 21:48:07] [modal]   },
+[2026-05-27 21:48:07] [modal]   "bold_path": "/tmp/tmp_6t_0kil.nii.gz",
+[2026-05-27 21:48:07] [modal]   "projection_params": {
+[2026-05-27 21:48:07] [modal]     "radius": 3.0,
+[2026-05-27 21:48:07] [modal]     "interpolation": "linear"
+[2026-05-27 21:48:07] [modal]   },
+[2026-05-27 21:48:07] [modal]   "generated_at_unix_ms": 1779943688345,
+[2026-05-27 21:48:07] [modal]   "runtime_provenance": {
+[2026-05-27 21:48:07] [modal]     "runtime": "modal",
+[2026-05-27 21:48:07] [modal]     "tribev2_version": "unknown",
+[2026-05-27 21:48:07] [modal]     "nilearn_version": "0.13.1",
+[2026-05-27 21:48:07] [modal]     "source_name": "sub-01_task-fe_bold.nii.gz",
+[2026-05-27 21:48:07] [modal]     "modal_image": "tribe_image"
+[2026-05-27 21:48:07] [modal]   },
+[2026-05-27 21:48:07] [modal]   "report_sha256": 
+[2026-05-27 21:48:07] [modal] "25ced97a324a16f4cbf07261e4e613cbb1897ff792d1af9f92a0235bf7c58a8c"
+[2026-05-27 21:48:07] [modal] }
+[2026-05-27 21:48:07] [modal] Report: C:\Users\splas\OneDrive\Desktop\Projects for 
+[2026-05-27 21:48:07] [modal] learning\TribeV2\scout_data\neuroemo\vertex_equivalence_report.json
+[2026-05-27 21:48:07] [modal] {
+[2026-05-27 21:48:07] [modal]   "proof_status": "projection_equivalence_verified",
+[2026-05-27 21:48:07] [modal]   "mesh": "fsaverage5",
+[2026-05-27 21:48:07] [modal]   "vertex_order": "lh_then_rh_fsaverage5",
+[2026-05-27 21:48:07] [modal]   "reference_kind": "local_tribev2_package",
+[2026-05-27 21:48:07] [modal]   "report_path": "C:\\Users\\splas\\OneDrive\\Desktop\\Projects for 
+[2026-05-27 21:48:07] [modal] learning\\TribeV2\\scout_data\\neuroemo\\vertex_equivalence_report.json",
+[2026-05-27 21:48:07] [modal]   "report_sha256": 
+[2026-05-27 21:48:07] [modal] "25ced97a324a16f4cbf07261e4e613cbb1897ff792d1af9f92a0235bf7c58a8c",
+[2026-05-27 21:48:07] [modal]   "schema_version": 1,
+[2026-05-27 21:48:07] [modal]   "mesh_fingerprints": {
+[2026-05-27 21:48:07] [modal]     "nilearn": {
+[2026-05-27 21:48:07] [modal]       "pial_left": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "09a93e23b794212fc51b5a192da80a30efc3553d8217732e32e0e0c2c03a3770",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:07] [modal]       },
+[2026-05-27 21:48:07] [modal]       "pial_right": {
+[2026-05-27 21:48:07] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:07] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:07] [modal]         "coords_shape": [
+[2026-05-27 21:48:07] [modal]           10242,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "faces_shape": [
+[2026-05-27 21:48:07] [modal]           20480,
+[2026-05-27 21:48:07] [modal]           3
+[2026-05-27 21:48:07] [modal]         ],
+[2026-05-27 21:48:07] [modal]         "coords_sha256": 
+[2026-05-27 21:48:07] [modal] "8079a66e43bf7424335d351a9bf653f273127919005a646f7c82a5496dbdcd4e",
+[2026-05-27 21:48:07] [modal]         "faces_sha256": 
+[2026-05-27 21:48:07] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       },
+[2026-05-27 21:48:08] [modal]       "white_left": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "7bb89759226b0c6a0d2248554059efc71670fd5b54cb7d08e30776b7eed1c216",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       },
+[2026-05-27 21:48:08] [modal]       "white_right": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "303482f60cea0ff152c5925e4e3e4aa52196ea1efeca6633d4838990af085ab3",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       }
+[2026-05-27 21:48:08] [modal]     },
+[2026-05-27 21:48:08] [modal]     "tribe_reference": {
+[2026-05-27 21:48:08] [modal]       "pial_left": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "09a93e23b794212fc51b5a192da80a30efc3553d8217732e32e0e0c2c03a3770",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       },
+[2026-05-27 21:48:08] [modal]       "pial_right": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "8079a66e43bf7424335d351a9bf653f273127919005a646f7c82a5496dbdcd4e",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       },
+[2026-05-27 21:48:08] [modal]       "white_left": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "7bb89759226b0c6a0d2248554059efc71670fd5b54cb7d08e30776b7eed1c216",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       },
+[2026-05-27 21:48:08] [modal]       "white_right": {
+[2026-05-27 21:48:08] [modal]         "n_vertices": 10242,
+[2026-05-27 21:48:08] [modal]         "n_faces": 20480,
+[2026-05-27 21:48:08] [modal]         "coords_shape": [
+[2026-05-27 21:48:08] [modal]           10242,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "faces_shape": [
+[2026-05-27 21:48:08] [modal]           20480,
+[2026-05-27 21:48:08] [modal]           3
+[2026-05-27 21:48:08] [modal]         ],
+[2026-05-27 21:48:08] [modal]         "coords_sha256": 
+[2026-05-27 21:48:08] [modal] "303482f60cea0ff152c5925e4e3e4aa52196ea1efeca6633d4838990af085ab3",
+[2026-05-27 21:48:08] [modal]         "faces_sha256": 
+[2026-05-27 21:48:08] [modal] "190a5f3f846d2a64095587c7ebc6264432ca2ba904603debeb848c286282a01d"
+[2026-05-27 21:48:08] [modal]       }
+[2026-05-27 21:48:08] [modal]     }
+[2026-05-27 21:48:08] [modal]   },
+[2026-05-27 21:48:08] [modal]   "projection_comparison": {
+[2026-05-27 21:48:08] [modal]     "available": true,
+[2026-05-27 21:48:08] [modal]     "verified": true,
+[2026-05-27 21:48:08] [modal]     "max_abs_diff": 0.0,
+[2026-05-27 21:48:08] [modal]     "mean_abs_diff": 0.0,
+[2026-05-27 21:48:08] [modal]     "allclose_atol": 1e-05
+[2026-05-27 21:48:08] [modal]   }
+[2026-05-27 21:48:08] [modal] }
+[2026-05-27 21:48:08] [modal] OK: proof_status='projection_equivalence_verified'
+[2026-05-27 21:48:08] [modal] Stopping app - local entrypoint completed.
+[2026-05-27 21:48:09] [modal] ✓ App completed. View run at 
+[2026-05-27 21:48:09] [modal] https://modal.com/apps/hrudayiitb/main/ap-31N50jobO8CYyAOlJTHrXi
+[2026-05-27 21:48:09] Done. Report: scout_data/neuroemo/vertex_equivalence_report.json

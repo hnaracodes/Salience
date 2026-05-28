@@ -36,6 +36,7 @@ from scripts.train_neuroemo_emotion_model import (
     DEFAULT_TRAIN_NPZ,
     DEFAULT_VERTEX_CSV,
     PROJECT_ROOT,
+    TEMPORAL_REDUCER_COMPONENTS,
     TrainConfig,
     _class_counts,
     _json_ready,
@@ -670,7 +671,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--atlas-manifest", type=Path, default=DEFAULT_ATLAS_MANIFEST)
     parser.add_argument("--temporal-window-trs", type=int, default=2)
     parser.add_argument("--temporal-stride-trs", type=int, default=1)
-    parser.add_argument("--temporal-reducer", choices=("mean", "median", "last"), default="mean")
+    parser.add_argument("--temporal-reducer", choices=tuple(TEMPORAL_REDUCER_COMPONENTS), default="mean")
     parser.add_argument("--temporal-contiguity", choices=("contiguous", "same_label"), default="contiguous")
     parser.add_argument("--temporal-allow-class-drop", action="store_true")
     parser.add_argument("--exclude-labels", default="neutral")

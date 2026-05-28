@@ -164,6 +164,14 @@ Simple definition:
 
 **Vertex compatibility:** The same row/column index must mean the same brain surface point in both training data and TribeV2 inference data.
 
+Update after the vertex-equivalence hardening pass:
+
+- `scout_core.vertex_equivalence` now defines a canonical proof schema and report reference contract.
+- `scripts/verify_tribe_vertex_equivalence.py` is Modal-first and is intended to generate the proof artifact once per dependency/runtime revision.
+- `scripts/prepare_neuroemo_tribev2.py` now stores `vertex_equivalence` report references in subject and combined NPZs by consuming the pinned artifact.
+- `configs/parcellation_manifest.yaml` now includes mesh fingerprints plus a `vertex_equivalence` block.
+- `scripts/train_neuroemo_emotion_model.py` now rejects missing or contract-only proof metadata by default, with an explicit legacy override flag for older artifacts.
+
 ---
 
 ## 6. Shared ROI Feature Module

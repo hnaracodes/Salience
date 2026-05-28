@@ -190,13 +190,14 @@ lh vertices first, rh vertices second
 4. Write `configs/vertex_regions.csv`.
 5. Update `configs/parcellation_manifest.yaml`.
 
-Preferred source:
+Preferred source (current default):
 
 ```text
-nilearn.datasets.fetch_atlas_schaefer_2018
+CBIG FreeSurfer5.3 fsaverage5 .annot files (two files only)
+docs/atlas-setup/cbig-schaefer2018-fsaverage5.md
 ```
 
-If the fetched atlas is volumetric rather than directly surface-native, document the projection/resampling method explicitly. Prefer a surface-native `fsaverage5` label source if available.
+Volumetric projection via `nilearn.datasets.fetch_atlas_schaefer_2018` is **deprecated** and only available for diagnostics (`--allow-volume-projection-fallback` on the builder).
 
 Deliverable:
 
@@ -385,7 +386,7 @@ This prevents training/inference ROI drift.
 The ROI upgrade is complete when:
 
 1. `configs/vertex_regions.csv` is generated from a real atlas, not synthetic/demo labels.
-2. `configs/parcellation_manifest.yaml` records atlas identity, mesh, vertex order, counts, and hashes.
+2. `configs/parcellation_manifest.yaml` records atlas identity, mesh, vertex order, counts, hashes, and vertex-equivalence proof metadata.
 3. A validation command confirms all 20,484 vertices are mapped exactly once.
 4. Training can run with the new atlas without changing the NeuroEmo dataset NPZ.
 5. Model artifacts store enough ROI metadata for future inference to reproduce the same features.
@@ -404,6 +405,8 @@ Mitigation:
 - validate hemisphere counts;
 - verify known visual/somatomotor parcels occupy plausible vertex ranges;
 - store atlas hashes;
+- require a vertex-equivalence report or explicit legacy override before training;
+- generate the proof artifact in Modal once, then gate all consumers against its pinned hash;
 - keep a small visual inspection notebook or script.
 
 ### Atlas Projection Error

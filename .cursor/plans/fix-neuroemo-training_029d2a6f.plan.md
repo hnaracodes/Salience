@@ -23,34 +23,43 @@ isProject: false
 # NeuroEmo Training Fix Plan
 
 ## Goal
+
 Fix the five training issues we discussed while preserving your teammate's actual experiment path: prepared NeuroEmo data stays TR-level, the main stronger runs use `--temporal-window-trs 10 --temporal-contiguity contiguous`, `exclude_labels=neutral`, and ROI reducers `mean,std,mean_abs`, and evaluation remains subject-held-out.
 
 ## Scope
+
 Target the current ROI training stack centered on [scripts/build_schaefer_vertex_regions.py](scripts/build_schaefer_vertex_regions.py), [scout_core/parcellation.py](scout_core/parcellation.py), [scout_core/roi_features.py](scout_core/roi_features.py), [scripts/prepare_neuroemo_tribev2.py](scripts/prepare_neuroemo_tribev2.py), [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py), and the comparison path in [scripts/train_neuroemo_specialist_models.py](scripts/train_neuroemo_specialist_models.py).
 
 ## Workstreams
+
 ### 1. Enforce real vertex-order compatibility
+
 Problem addressed: the current validator proves only `0..20483` contiguity and `lh/rh` counts; it does not prove the CSV matches TribeV2's semantic vertex order.
 
 Implementation steps:
+
 - Add a stricter validation layer in [scout_core/parcellation.py](scout_core/parcellation.py) that checks hemisphere boundary ordering, not just counts.
 - Add a mesh-order verification utility that compares the atlas/source surface ordering against the same `fsaverage5` ordering assumed by Tribe outputs and records the result in the validation summary.
 - Fail training early in [scout_core/roi_features.py](scout_core/roi_features.py) / [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py) if the parcellation cannot prove compatibility with the expected Tribe ordering.
 - Expose this check in a small CLI or validation mode so atlas generation can be verified before training runs.
 
 ### 2. Replace projected Schaefer labels with surface-native labels
+
 Problem addressed: [configs/parcellation_manifest.yaml](configs/parcellation_manifest.yaml) shows the current atlas came from `vol_to_surf` plus nearest-neighbor fill, including `filled_unassigned_vertices: 2487`.
 
 Implementation steps:
+
 - Update [scripts/build_schaefer_vertex_regions.py](scripts/build_schaefer_vertex_regions.py) to support a surface-native Schaefer input path (`.label.gii` left/right hemisphere labels) as the primary route.
 - Keep the current volumetric projection path only as an explicit fallback/debug mode, not the default.
 - Regenerate [configs/vertex_regions.csv](configs/vertex_regions.csv) and [configs/parcellation_manifest.yaml](configs/parcellation_manifest.yaml) from the surface-native atlas, including source file hashes and the exact label source used.
 - Propagate atlas provenance into the model artifact via [scout_core/roi_features.py](scout_core/roi_features.py) so downstream consumers can see whether training used surface-native or projected labels.
 
 ### 3. Lock the temporal contract instead of re-windowing blindly
+
 Problem addressed: temporal handling currently exists in both [scripts/prepare_neuroemo_tribev2.py](scripts/prepare_neuroemo_tribev2.py) and [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py), but the current intended workflow is TR-level prepared NPZ data plus 10-TR contiguous windows inside training. The fix is to preserve that contract, carry its metadata cleanly, and guard against future silent double-windowing or fake temporal assumptions.
 
 Implementation steps:
+
 - Preserve the current design in [scripts/prepare_neuroemo_tribev2.py](scripts/prepare_neuroemo_tribev2.py): the combined NPZ remains TR-by-TR unless an explicit prep-stage windowing mode is requested in the future.
 - Expand prep metadata so training artifacts always retain the source temporal assumptions: `bold_lag_s`, `drop_transition_trs`, preprocessing settings, class policy, and source `window_trs`.
 - Update `_load_training_data()` and `_apply_temporal_windows()` in [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py) to make the active contract explicit: current benchmark runs should use training-time 10-TR contiguous windows, while any future pre-windowed NPZ should be detected and rejected unless an explicit diagnostic override is passed.
@@ -58,18 +67,22 @@ Implementation steps:
 - Add artifact/metrics fields that preserve both prep-time and train-time temporal settings so experiment outputs clearly show whether a run used single TRs, training-time 10-TR windows, preprocessed surfaces, or any future alternative windowing path.
 
 ### 4. Clean up atlas metadata bugs and validator gaps
+
 Problem addressed: current atlas metadata is fragile in several places: the Schaefer builder's network parsing is 7-network specific, legacy CSV fallback uses unstable Python `hash()`, and validators do not detect conflicting parcel labels or mixed hemisphere ordering.
 
 Implementation steps:
+
 - Fix the label/network parsing path in [scripts/build_schaefer_vertex_regions.py](scripts/build_schaefer_vertex_regions.py) so atlas metadata is deterministic and correct for the supported atlas variants.
 - Tighten [scout_core/parcellation.py](scout_core/parcellation.py) to detect conflicting `parcel_id -> parcel_label` or `parcel_id -> network` mappings instead of silently accepting the first row.
 - Remove or quarantine unstable legacy behavior in `load_vertex_table()` for old two-column CSVs, especially the process-randomized `hash(region)` fallback.
 - Add validation checks that the first 10,242 vertices are `lh` and the second 10,242 are `rh`, since the current validator only checks totals.
 
 ### 5. Add the intended linear-model baselines and comparison gates
+
 Problem addressed: the main trainer currently supports only `sgd_logistic` and `logistic_saga`, even though the migration direction and past discussion pointed toward stronger linear SVM-style baselines, and your teammate's strongest comparison settings already use `temporal_window_trs=10`, `temporal_contiguity=contiguous`, `roi_reducers=mean,std,mean_abs`, and `exclude_labels=neutral`.
 
 Implementation steps:
+
 - Extend `_make_estimator()` in [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py) to support at least:
   - `linear_svc` (with calibration if probabilities are required),
   - `logistic_saga`,
@@ -80,6 +93,7 @@ Implementation steps:
 - Compare the new linear baselines not only against old projected-Schaefer + SGD, but also against the existing calibrated specialist path in [scripts/train_neuroemo_specialist_models.py](scripts/train_neuroemo_specialist_models.py), so the SVM upgrade is judged against the strongest current non-MLP classical setup.
 
 ## Validation
+
 - Add focused tests around:
   - parcellation semantic-order validation,
   - surface-native label ingestion,
@@ -95,6 +109,7 @@ Implementation steps:
   5. optional preprocessed-vs-non-preprocessed comparison once the atlas/alignment issues are fixed.
 
 ## Suggested execution order
+
 1. Vertex-order enforcement in [scout_core/parcellation.py](scout_core/parcellation.py).
 2. Surface-native Schaefer builder in [scripts/build_schaefer_vertex_regions.py](scripts/build_schaefer_vertex_regions.py).
 3. Temporal-contract enforcement across [scripts/prepare_neuroemo_tribev2.py](scripts/prepare_neuroemo_tribev2.py) and [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py).
@@ -102,4 +117,5 @@ Implementation steps:
 5. Linear-model baseline expansion and experiment reruns in [scripts/train_neuroemo_emotion_model.py](scripts/train_neuroemo_emotion_model.py).
 
 ## Expected outcome
+
 After this plan, low accuracy should no longer be confounded by unknown vertex misalignment, noisy projected parcel labels, ambiguous temporal windowing, fragile atlas metadata, or an underpowered/default-only classifier choice. The remaining model quality will be attributable to the data and feature representation rather than hidden pipeline errors.

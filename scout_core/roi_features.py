@@ -73,6 +73,8 @@ def load_roi_feature_spec(
     n_vertices: int,
     reducers: str | tuple[str, ...] | list[str] = ("mean",),
     manifest_path: Path | None = None,
+    allow_legacy_atlas: bool = False,
+    require_surface_native: bool = True,
 ) -> RoiFeatureSpec:
     if not vertex_csv.is_file():
         raise FileNotFoundError(f"ROI vertex CSV not found: {vertex_csv}")
@@ -85,6 +87,8 @@ def load_roi_feature_spec(
             manifest,
             table,
             vertex_csv_path=vertex_csv,
+            allow_legacy_atlas=allow_legacy_atlas,
+            require_surface_native=require_surface_native,
         )
     else:
         validation_summary = validate_vertex_table(table, n_vertices=n_vertices)

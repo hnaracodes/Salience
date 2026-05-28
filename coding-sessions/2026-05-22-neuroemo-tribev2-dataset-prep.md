@@ -221,7 +221,7 @@ python3 scripts/prepare_neuroemo_tribev2.py \
 
 ## 6. Compatibility With TribeV2
 
-The script currently guarantees **shape-level compatibility**:
+The prep path now records a **proof-bearing compatibility contract** instead of only a shape claim.
 
 ```text
 NeuroEmo formatted sample: 20484 fsaverage5 vertices
@@ -235,35 +235,33 @@ fsaverage5 cortical surface
 left hemisphere then right hemisphere
 ```
 
-However, this does **not yet prove exact vertex-index identity** with TribeV2's original model training pipeline.
-
-Current guarantee:
+Current proof tiers written into prep outputs:
 
 ```text
-T x 20484, fsaverage5, lh-then-rh Nilearn vertex order
+projection_equivalence_verified
+mesh_identity_verified
+contract_only
 ```
 
-Still to verify:
+What now lands by default in this repo:
 
-```text
-TribeV2 vertex j == Nilearn fsaverage5 vertex j for all j
-```
+1. `scripts/verify_tribe_vertex_equivalence.py` runs in **Modal-first mode** and writes a canonical JSON report.
+2. `scripts/prepare_neuroemo_tribev2.py` consumes that pinned report by default (it does not recompute full verification unless explicitly requested).
+3. The verifier report contains:
+   - left/right pial and white mesh coordinate hashes;
+   - left/right face hashes;
+   - comparison mode and source URL;
+   - pass/fail proof status.
+4. Subject NPZs, the combined training NPZ, and `metadata.json` embed `vertex_equivalence` metadata plus report path/hash.
+5. `configs/parcellation_manifest.yaml` carries the same proof metadata for the ROI atlas contract.
 
-Recommended next compatibility check:
+Operational policy:
 
-1. Load TribeV2's own surface projection helper, if available, such as `TribeSurfaceProjector`.
-2. Project the same NeuroEmo BOLD sample through both:
-   - `scripts/prepare_neuroemo_tribev2.py`
-   - TribeV2's projector
-3. Assert the resulting arrays match within floating-point tolerance.
-4. Hash the mesh coordinate and face arrays for:
-   - left pial
-   - right pial
-   - left faces
-   - right faces
-5. Write those hashes into `metadata.json`.
+- Verify once in Modal and pin the proof artifact hash.
+- Validate often in prep/training/session gates by checking that pinned hash/status.
+- Re-run verification only when dependencies/runtime change (Modal image, `tribev2`, `nilearn`, projection params).
 
-This would turn the current compatibility assumption into a testable contract.
+This turns the old compatibility assumption into a testable, persisted contract.
 
 ---
 
