@@ -1,35 +1,56 @@
 #!/usr/bin/env python3
 """Build atlas-backed vertex_regions.csv from Schaefer 2018.
 
-The current TribeV2/NeuroEmo ROI training path expects a dense vertex table:
+The TribeV2/NeuroEmo ROI training path expects a dense vertex table:
 
     vertex_index, parcel_id, parcel_label, yeo_network_id, yeo_network_name, hemisphere
 
-This script fetches Schaefer 2018 from nilearn, projects the volumetric labels to
-fsaverage5, and writes that table in TribeV2 order: left hemisphere vertices
-first, then right hemisphere vertices.
+Default: load CBIG FreeSurfer5.3 surface `.annot` files on fsaverage5 (via nibabel).
+Fallback: volumetric projection only with --allow-volume-projection-fallback.
 
 Usage:
-    python scripts/build_schaefer_vertex_regions.py --n-rois 400 --yeo-networks 7
+    python scripts/build_schaefer_vertex_regions.py --n-rois 400 --yeo-networks 7 \\
+        --data-dir scout_data/atlases/cbig_schaefer2018
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
-import json
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+from scout_core.schaefer_surface_labels import (
+    DEFAULT_ALIGNMENT_REPORT,
+    MAX_FILLED_UNASSIGNED_SURFACE,
+    MAX_FILLED_UNASSIGNED_SURFACE_ANNOT,
+    load_freesurfer_annot,
+    load_nilearn_fsaverage5_coords,
+    network_name_from_label,
+    remap_to_contiguous_parcel_ids,
+    resolve_annot_paths,
+    verify_annot_vertex_order,
+    write_alignment_report,
+)
+from scout_core.vertex_equivalence import (
+    canonical_vertex_equivalence_report_path,
+    load_vertex_equivalence_report,
+    vertex_equivalence_reference,
+)
+
 DEFAULT_VERTEX_CSV = PROJECT_ROOT / "configs" / "vertex_regions.csv"
 DEFAULT_MANIFEST = PROJECT_ROOT / "configs" / "parcellation_manifest.yaml"
-DEFAULT_ATLAS_DATA_DIR = PROJECT_ROOT / "scout_data" / "atlases"
+DEFAULT_ATLAS_DATA_DIR = PROJECT_ROOT / "scout_data" / "atlases" / "cbig_schaefer2018"
 EXPECTED_HEMI_VERTICES = 10242
 EXPECTED_VERTICES = EXPECTED_HEMI_VERTICES * 2
 
@@ -47,25 +68,18 @@ def _normalise_label(label: str) -> str:
     return label
 
 
-def _network_name(label: str) -> str:
-    parts = label.split("_")
-    if len(parts) >= 4 and parts[0].endswith("Networks") and parts[1] in {"LH", "RH"}:
-        return "_".join(parts[2:-1]).strip()
-    return parts[-2].strip() if len(parts) >= 2 else ""
+def _network_id_map(labels: list[str]) -> dict[str, int]:
+    mapping: dict[str, int] = {}
+    for label in labels:
+        name = network_name_from_label(label)
+        if name and name not in mapping:
+            mapping[name] = len(mapping) + 1
+    return mapping
 
 
 def _atlas_labels(labels: Any) -> dict[int, str]:
     decoded = [_normalise_label(_decode_label(item)) for item in labels]
     return {idx: label for idx, label in enumerate(decoded)}
-
-
-def _network_id_map(labels: list[str]) -> dict[str, int]:
-    mapping: dict[str, int] = {}
-    for label in labels:
-        name = _network_name(label)
-        if name and name not in mapping:
-            mapping[name] = len(mapping) + 1
-    return mapping
 
 
 def _project_hemi(labels_img: Any, surf_mesh: str) -> np.ndarray:
@@ -96,7 +110,6 @@ def _surface_coords(surf_mesh: str) -> np.ndarray:
 
 
 def _fill_unassigned_nearest(labels: np.ndarray, surf_mesh: str) -> tuple[np.ndarray, int]:
-    """Fill background labels from the nearest assigned vertex in the same hemi."""
     arr = np.asarray(labels, dtype=np.int64).copy()
     missing = np.flatnonzero(arr <= 0)
     if missing.size == 0:
@@ -138,7 +151,7 @@ def _load_label_gifti(path: Path) -> tuple[np.ndarray, dict[int, str]]:
     return arr, label_by_id
 
 
-def _resolve_surface_label_paths(
+def _resolve_label_gifti_paths(
     *,
     n_rois: int,
     yeo_networks: int,
@@ -159,11 +172,7 @@ def _resolve_surface_label_paths(
     if data_dir is None:
         return None, None
 
-    roots = [
-        data_dir,
-        data_dir / "schaefer_2018",
-        data_dir / "schaefer_2018" / "fsaverage5",
-    ]
+    roots = [data_dir, data_dir / "schaefer_2018", data_dir / "schaefer_2018" / "fsaverage5"]
     files: list[Path] = []
     for root in roots:
         if root.exists():
@@ -221,6 +230,12 @@ def _write_manifest(
     source_metadata: dict[str, Any],
     labels_gii_lh: Path | None,
     labels_gii_rh: Path | None,
+    annot_lh: Path | None,
+    annot_rh: Path | None,
+    vertex_equivalence: dict[str, Any],
+    vertex_equivalence_report_path: Path,
+    vertex_order_proof: dict[str, Any],
+    alignment_report_path: Path,
 ) -> None:
     from scout_core.parcellation import CANONICAL_HEMISPHERE_ORDER, CANONICAL_VERTEX_ORDER
 
@@ -234,15 +249,26 @@ def _write_manifest(
         "n_parcels": n_rois,
         "hemisphere_order": CANONICAL_HEMISPHERE_ORDER,
         "source": source_metadata,
+        "vertex_equivalence": vertex_equivalence,
+        "vertex_order_proof": vertex_order_proof,
+        "mesh_fingerprints": vertex_equivalence.get("mesh_fingerprints", {}),
         "artifact_sha256": {
             "vertex_regions_csv": _sha256(vertex_csv),
             "labels_gii_lh": _sha256(labels_gii_lh) if labels_gii_lh is not None and labels_gii_lh.is_file() else "",
             "labels_gii_rh": _sha256(labels_gii_rh) if labels_gii_rh is not None and labels_gii_rh.is_file() else "",
+            "labels_annot_lh": _sha256(annot_lh) if annot_lh is not None and annot_lh.is_file() else "",
+            "labels_annot_rh": _sha256(annot_rh) if annot_rh is not None and annot_rh.is_file() else "",
+            "vertex_equivalence_report_json": vertex_equivalence.get("report_sha256", ""),
+            "schaefer_annot_alignment_report_json": vertex_order_proof.get("report_sha256", ""),
         },
         "inputs": {
             "labels_gii_lh": str(labels_gii_lh) if labels_gii_lh is not None else "",
             "labels_gii_rh": str(labels_gii_rh) if labels_gii_rh is not None else "",
+            "labels_annot_lh": str(annot_lh) if annot_lh is not None else "",
+            "labels_annot_rh": str(annot_rh) if annot_rh is not None else "",
             "nilearn_fetcher": source_metadata.get("nilearn_fetcher", ""),
+            "vertex_equivalence_report": str(vertex_equivalence_report_path),
+            "schaefer_annot_alignment_report": str(alignment_report_path),
         },
         "labels": labels,
         "created_at_unix_ms": int(time.time() * 1000),
@@ -259,29 +285,130 @@ def build_schaefer_vertex_regions(
     output_csv: Path,
     manifest: Path,
     data_dir: Path | None,
+    annot_lh: Path | None,
+    annot_rh: Path | None,
     labels_gii_lh: Path | None,
     labels_gii_rh: Path | None,
+    vertex_equivalence_report: Path | None,
+    alignment_report: Path | None,
+    allow_volume_projection_fallback: bool,
+    skip_vertex_order_proof: bool,
 ) -> None:
     from nilearn import datasets
 
     fsaverage = datasets.fetch_surf_fsaverage(mesh="fsaverage5")
-    surface_lh, surface_rh = _resolve_surface_label_paths(
-        n_rois=n_rois,
-        yeo_networks=yeo_networks,
-        data_dir=data_dir,
-        labels_gii_lh=labels_gii_lh,
-        labels_gii_rh=labels_gii_rh,
-    )
+    mesh_coords = load_nilearn_fsaverage5_coords()
 
+    annot_lh_path: Path | None = None
+    annot_rh_path: Path | None = None
+    gifti_lh_path: Path | None = None
+    gifti_rh_path: Path | None = None
     label_by_id: dict[int, str] = {}
     source_metadata: dict[str, Any]
-    if surface_lh is not None and surface_rh is not None:
-        lh_labels, lh_label_map = _load_label_gifti(surface_lh)
-        rh_labels, rh_label_map = _load_label_gifti(surface_rh)
+    vertex_order_proof: dict[str, Any] = {}
+    alignment_report_path = (alignment_report or DEFAULT_ALIGNMENT_REPORT).expanduser().resolve()
+
+    try:
+        annot_lh_path, annot_rh_path = resolve_annot_paths(
+            n_rois=n_rois,
+            yeo_networks=yeo_networks,
+            data_dir=data_dir,
+            annot_lh=annot_lh,
+            annot_rh=annot_rh,
+        )
+    except FileNotFoundError:
+        annot_lh_path = None
+        annot_rh_path = None
+
+    if annot_lh_path is None or annot_rh_path is None:
+        gifti_lh_path, gifti_rh_path = _resolve_label_gifti_paths(
+            n_rois=n_rois,
+            yeo_networks=yeo_networks,
+            data_dir=data_dir,
+            labels_gii_lh=labels_gii_lh,
+            labels_gii_rh=labels_gii_rh,
+        )
+
+    if annot_lh_path is not None and annot_rh_path is not None:
+        lh_raw, lh_map = load_freesurfer_annot(annot_lh_path)
+        rh_raw, rh_map = load_freesurfer_annot(annot_rh_path)
+        lh_labels, rh_labels, label_by_id, ordered_labels = remap_to_contiguous_parcel_ids(
+            lh_raw,
+            rh_raw,
+            lh_map,
+            rh_map,
+            n_rois=n_rois,
+        )
+        name_to_parcel_id = {name: pid for pid, name in label_by_id.items()}
+        if not skip_vertex_order_proof:
+            lh_labels, rh_labels, proof = verify_annot_vertex_order(
+                lh_labels,
+                rh_labels,
+                lh_coords=mesh_coords["lh"],
+                rh_coords=mesh_coords["rh"],
+                n_rois=n_rois,
+                yeo_networks=yeo_networks,
+                resolution_mm=resolution_mm,
+                data_dir=data_dir,
+                name_to_parcel_id=name_to_parcel_id,
+            )
+            alignment_payload = write_alignment_report(
+                alignment_report_path,
+                {
+                    "annot_lh": str(annot_lh_path),
+                    "annot_rh": str(annot_rh_path),
+                    "n_rois": n_rois,
+                    "yeo_networks": yeo_networks,
+                    "vertex_order_proof": proof,
+                },
+            )
+            vertex_order_proof = {
+                **proof,
+                "report_path": alignment_payload["report_path"],
+                "report_sha256": alignment_payload["report_sha256"],
+            }
+        else:
+            vertex_order_proof = {
+                "status": "skipped_for_tests",
+                "reorder_applied": False,
+                "report_path": str(alignment_report_path),
+                "report_sha256": "",
+            }
+
+        lh_labels, n_lh_filled = _fill_unassigned_nearest(lh_labels, fsaverage.pial_left)
+        rh_labels, n_rh_filled = _fill_unassigned_nearest(rh_labels, fsaverage.pial_right)
+        filled = n_lh_filled + n_rh_filled
+        if filled > MAX_FILLED_UNASSIGNED_SURFACE_ANNOT:
+            raise ValueError(
+                f"Surface annot fill count {filled} exceeds limit {MAX_FILLED_UNASSIGNED_SURFACE_ANNOT}. "
+                "Check annot files or medial-wall handling."
+            )
+        source_metadata = {
+            "name": "Schaefer2018",
+            "parcels": n_rois,
+            "networks": yeo_networks,
+            "mesh": "fsaverage5",
+            "source_space": "fsaverage5_surface_annot_cbig",
+            "label_source_kind": "surface_annot_cbig",
+            "projection": "",
+            "unassigned_vertex_fill": "nearest_assigned_vertex_within_hemisphere",
+            "filled_unassigned_vertices": filled,
+            "annot_lh": str(annot_lh_path),
+            "annot_rh": str(annot_rh_path),
+            "cbig_release": "FreeSurfer5.3",
+            "nilearn_fetcher": "",
+        }
+    elif gifti_lh_path is not None and gifti_rh_path is not None:
+        lh_labels, lh_label_map = _load_label_gifti(gifti_lh_path)
+        rh_labels, rh_label_map = _load_label_gifti(gifti_rh_path)
         label_by_id.update(lh_label_map)
         label_by_id.update(rh_label_map)
         lh_labels, n_lh_filled = _fill_unassigned_nearest(lh_labels, fsaverage.pial_left)
         rh_labels, n_rh_filled = _fill_unassigned_nearest(rh_labels, fsaverage.pial_right)
+        ordered_labels = [
+            label_by_id.get(i, f"parcel_{i}")
+            for i in range(1, n_rois + 1)
+        ]
         source_metadata = {
             "name": "Schaefer2018",
             "parcels": n_rois,
@@ -292,11 +419,22 @@ def build_schaefer_vertex_regions(
             "projection": "",
             "unassigned_vertex_fill": "nearest_assigned_vertex_within_hemisphere",
             "filled_unassigned_vertices": n_lh_filled + n_rh_filled,
-            "labels_gii_lh": str(surface_lh),
-            "labels_gii_rh": str(surface_rh),
+            "labels_gii_lh": str(gifti_lh_path),
+            "labels_gii_rh": str(gifti_rh_path),
             "nilearn_fetcher": "",
         }
-    else:
+        vertex_order_proof = {
+            "status": "surface_label_gifti_no_projection_check",
+            "reorder_applied": False,
+            "report_path": str(alignment_report_path),
+            "report_sha256": "",
+        }
+    elif allow_volume_projection_fallback:
+        warnings.warn(
+            "Using deprecated volumetric Schaefer projection fallback. "
+            "Download CBIG .annot files for surface-native labels.",
+            stacklevel=2,
+        )
         atlas = datasets.fetch_atlas_schaefer_2018(
             n_rois=n_rois,
             yeo_networks=yeo_networks,
@@ -308,6 +446,10 @@ def build_schaefer_vertex_regions(
         rh_labels = _project_hemi(atlas.maps, fsaverage.pial_right)
         lh_labels, n_lh_filled = _fill_unassigned_nearest(lh_labels, fsaverage.pial_left)
         rh_labels, n_rh_filled = _fill_unassigned_nearest(rh_labels, fsaverage.pial_right)
+        ordered_labels = [
+            label_by_id.get(i, f"parcel_{i}")
+            for i in range(1, n_rois + 1)
+        ]
         source_metadata = {
             "name": "Schaefer2018",
             "parcels": n_rois,
@@ -321,6 +463,24 @@ def build_schaefer_vertex_regions(
             "maps": str(atlas.maps),
             "nilearn_fetcher": "nilearn.datasets.fetch_atlas_schaefer_2018",
         }
+        vertex_order_proof = {
+            "status": "volume_projection_fallback",
+            "reorder_applied": False,
+            "report_path": str(alignment_report_path),
+            "report_sha256": "",
+        }
+    else:
+        raise FileNotFoundError(
+            "No surface-native Schaefer labels found. Download the LH/RH .annot pair per "
+            "docs/atlas-setup/cbig-schaefer2018-fsaverage5.md or pass --allow-volume-projection-fallback "
+            "for diagnostic volumetric projection only."
+        )
+
+    if annot_lh_path is not None:
+        ordered_labels = [
+            label_by_id.get(i, f"parcel_{i}")
+            for i in range(1, n_rois + 1)
+        ]
 
     combined = np.concatenate([lh_labels, rh_labels], axis=0)
 
@@ -329,19 +489,15 @@ def build_schaefer_vertex_regions(
     if np.any(combined <= 0):
         n_zero = int(np.sum(combined <= 0))
         raise ValueError(
-            f"Projected atlas produced {n_zero} unassigned/background vertices. "
-            "Use a surface-native label source or adjust projection settings before training."
+            f"Atlas produced {n_zero} unassigned/background vertices after fill. "
+            "Check surface label source before training."
         )
 
-    ordered_labels = [
-        label_by_id.get(i, f"parcel_{i}")
-        for i in range(1, n_rois + 1)
-    ]
     network_ids = _network_id_map(ordered_labels)
     rows: list[dict[str, Any]] = []
     for vertex_index, parcel_id in enumerate(combined.tolist()):
         parcel_label = label_by_id.get(int(parcel_id), f"parcel_{parcel_id}")
-        network_name = _network_name(parcel_label)
+        network_name = network_name_from_label(parcel_label)
         rows.append(
             {
                 "vertex_index": vertex_index,
@@ -354,6 +510,9 @@ def build_schaefer_vertex_regions(
         )
 
     _write_vertex_csv(output_csv, rows)
+    report_path = canonical_vertex_equivalence_report_path(vertex_equivalence_report)
+    report = load_vertex_equivalence_report(report_path)
+    vertex_equivalence = vertex_equivalence_reference(report, report_path=report_path)
 
     _write_manifest(
         manifest,
@@ -362,8 +521,14 @@ def build_schaefer_vertex_regions(
         yeo_networks=yeo_networks,
         labels=ordered_labels,
         source_metadata=source_metadata,
-        labels_gii_lh=surface_lh,
-        labels_gii_rh=surface_rh,
+        labels_gii_lh=gifti_lh_path,
+        labels_gii_rh=gifti_rh_path,
+        annot_lh=annot_lh_path,
+        annot_rh=annot_rh_path,
+        vertex_equivalence=vertex_equivalence,
+        vertex_equivalence_report_path=report_path,
+        vertex_order_proof=vertex_order_proof,
+        alignment_report_path=alignment_report_path,
     )
 
     print(f"Vertex CSV: {output_csv}")
@@ -371,7 +536,9 @@ def build_schaefer_vertex_regions(
     print(f"Atlas:     Schaefer2018 {n_rois} parcels, {yeo_networks} networks")
     print(f"Vertices:  {len(rows)}")
     print(f"Label src: {source_metadata['label_source_kind']}")
-    print(f"Filled:    {n_lh_filled + n_rh_filled} unassigned atlas vertices")
+    print(f"Filled:    {source_metadata['filled_unassigned_vertices']} unassigned atlas vertices")
+    print(f"Order:     {vertex_order_proof.get('status')}")
+    print(f"Proof:     {vertex_equivalence['proof_status']} ({vertex_equivalence['reference_kind']})")
     print(f"CSV sha:   {_sha256(output_csv)}")
 
 
@@ -383,8 +550,32 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_VERTEX_CSV)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--data-dir", type=Path, default=DEFAULT_ATLAS_DATA_DIR)
-    parser.add_argument("--labels-gii-lh", type=Path, default=None, help="Optional surface-native left hemisphere Schaefer label.gii")
-    parser.add_argument("--labels-gii-rh", type=Path, default=None, help="Optional surface-native right hemisphere Schaefer label.gii")
+    parser.add_argument("--annot-lh", type=Path, default=None, help="CBIG left-hemisphere Schaefer .annot")
+    parser.add_argument("--annot-rh", type=Path, default=None, help="CBIG right-hemisphere Schaefer .annot")
+    parser.add_argument("--labels-gii-lh", type=Path, default=None, help="Optional surface label.gii (LH)")
+    parser.add_argument("--labels-gii-rh", type=Path, default=None, help="Optional surface label.gii (RH)")
+    parser.add_argument(
+        "--allow-volume-projection-fallback",
+        action="store_true",
+        help="Diagnostic only: use Nilearn volumetric projection if .annot files are missing.",
+    )
+    parser.add_argument(
+        "--skip-vertex-order-proof",
+        action="store_true",
+        help="Test-only: skip annot vs projection alignment gate.",
+    )
+    parser.add_argument(
+        "--alignment-report",
+        type=Path,
+        default=None,
+        help="Output path for schaefer annot alignment JSON report.",
+    )
+    parser.add_argument(
+        "--vertex-equivalence-report",
+        type=Path,
+        default=None,
+        help="Pinned vertex equivalence report path. Defaults to scout_data/neuroemo/vertex_equivalence_report.json",
+    )
     return parser
 
 
@@ -397,8 +588,14 @@ def main() -> None:
         output_csv=args.output_csv,
         manifest=args.manifest,
         data_dir=args.data_dir,
+        annot_lh=args.annot_lh,
+        annot_rh=args.annot_rh,
         labels_gii_lh=args.labels_gii_lh,
         labels_gii_rh=args.labels_gii_rh,
+        vertex_equivalence_report=args.vertex_equivalence_report,
+        alignment_report=args.alignment_report,
+        allow_volume_projection_fallback=args.allow_volume_projection_fallback,
+        skip_vertex_order_proof=args.skip_vertex_order_proof,
     )
 
 

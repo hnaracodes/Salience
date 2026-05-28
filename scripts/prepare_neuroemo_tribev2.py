@@ -56,6 +56,14 @@ import numpy as np
 import requests
 
 from scout_core.parcellation import CANONICAL_VERTEX_ORDER
+from scout_core.vertex_equivalence import (
+    build_vertex_equivalence_report,
+    canonical_vertex_equivalence_report_path,
+    load_vertex_equivalence_report,
+    project_bold_to_fsaverage5_tribe_equivalent,
+    vertex_equivalence_reference,
+    write_vertex_equivalence_report,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RAW_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "raw"
@@ -113,6 +121,7 @@ class SubjectArtifact:
     n_labeled_trs: int
     class_counts: dict[str, int]
     preprocessed_nifti: str
+    vertex_equivalence_status: str
 
 
 def _parse_subjects(raw: str) -> list[str]:
@@ -271,32 +280,15 @@ def project_bold_to_fsaverage5(
     radius: float = 3.0,
     interpolation: str = "linear",
 ) -> np.ndarray:
-    """Project a 4D BOLD NIfTI to TribeV2-style fsaverage5 surface shape (T, 20484)."""
-    import nibabel as nib
-    from nilearn import datasets
-    from nilearn.surface import vol_to_surf
-
-    img = nib.load(str(bold_path))
-    if len(img.shape) != 4:
-        raise ValueError(f"Expected 4D BOLD image, got shape {img.shape}: {bold_path}")
-
-    fs = datasets.fetch_surf_fsaverage(mesh="fsaverage5")
+    """Project a 4D BOLD NIfTI with the shared TRIBE-equivalent fsaverage5 path."""
     print("  projecting left hemisphere ...")
-    lh = vol_to_surf(img, fs.pial_left, radius=radius, interpolation=interpolation)
     print("  projecting right hemisphere ...")
-    rh = vol_to_surf(img, fs.pial_right, radius=radius, interpolation=interpolation)
-
-    lh_tv = _surface_to_time_by_vertex(lh, expected_vertices=EXPECTED_HEMI_VERTICES)
-    rh_tv = _surface_to_time_by_vertex(rh, expected_vertices=EXPECTED_HEMI_VERTICES)
-    if lh_tv.shape[0] != rh_tv.shape[0]:
-        raise ValueError(f"Left/right hemisphere TR mismatch: {lh_tv.shape} vs {rh_tv.shape}")
-
-    surface = np.concatenate([lh_tv, rh_tv], axis=1)
-    if surface.shape[1] != EXPECTED_FSAVERAGE5_VERTICES:
-        raise ValueError(
-            f"Projected surface has V={surface.shape[1]}, expected {EXPECTED_FSAVERAGE5_VERTICES}"
-        )
-    return surface.astype(np.float32)
+    return project_bold_to_fsaverage5_tribe_equivalent(
+        bold_path,
+        mesh="fsaverage5",
+        radius=radius,
+        interpolation=interpolation,
+    )
 
 
 def standardize_surface(surface: np.ndarray, mode: str) -> np.ndarray:
@@ -486,6 +478,9 @@ def prepare_subject(
     low_pass: float | None,
     compress: bool,
     write_subject_files: bool,
+    vertex_equivalence_cache: dict[str, Any] | None,
+    vertex_equivalence_report_path: Path | None,
+    recompute_vertex_equivalence: bool,
 ) -> tuple[SubjectArtifact, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
     if skip_download:
         bold_rel, json_rel = _bids_relpaths(subject)
@@ -516,6 +511,27 @@ def prepare_subject(
             low_pass=low_pass,
         )
         preprocessed_path = str(projection_bold_path)
+    vertex_equivalence_summary: dict[str, Any] | None = None
+    if vertex_equivalence_cache is not None:
+        vertex_equivalence_summary = vertex_equivalence_cache.get("summary")
+        if vertex_equivalence_summary is None:
+            report_path = canonical_vertex_equivalence_report_path(vertex_equivalence_report_path)
+            if recompute_vertex_equivalence:
+                report = build_vertex_equivalence_report(
+                    bold_path=projection_bold_path,
+                    mesh="fsaverage5",
+                    radius=radius,
+                    interpolation=interpolation,
+                    runtime_provenance={"runtime": "local", "source": "prepare_neuroemo_tribev2"},
+                )
+                write_vertex_equivalence_report(report, report_path)
+            else:
+                report = load_vertex_equivalence_report(report_path)
+            reference = vertex_equivalence_reference(report, report_path=report_path)
+            vertex_equivalence_cache["summary"] = reference
+            vertex_equivalence_cache["report_path"] = str(report_path)
+            vertex_equivalence_cache["report_sha256"] = str(report.get("report_sha256", ""))
+            vertex_equivalence_summary = reference
     surface = project_bold_to_fsaverage5(
         projection_bold_path,
         radius=radius,
@@ -553,6 +569,15 @@ def prepare_subject(
             include_white_noise=np.asarray(bool(include_white_noise)),
             include_neutral=np.asarray(bool(include_neutral)),
             preprocess_bold=np.asarray(bool(preprocess_bold)),
+            vertex_equivalence_json=np.asarray(
+                json.dumps(vertex_equivalence_summary or {}, sort_keys=True)
+            ),
+            vertex_equivalence_report_path=np.asarray(
+                (vertex_equivalence_cache or {}).get("report_path", "")
+            ),
+            vertex_equivalence_report_sha256=np.asarray(
+                (vertex_equivalence_summary or {}).get("report_sha256", "")
+            ),
         )
 
     class_counts = {
@@ -571,6 +596,9 @@ def prepare_subject(
         n_labeled_trs=int(np.sum(label_ids >= 0)),
         class_counts=class_counts,
         preprocessed_nifti=preprocessed_path,
+        vertex_equivalence_status=str(
+            (vertex_equivalence_summary or {}).get("proof_status", "contract_only")
+        ),
     )
     print(f"  surface shape: {surface.shape}; labeled TRs: {artifact.n_labeled_trs}")
     print("  class counts:", ", ".join(f"{k}={v}" for k, v in class_counts.items()))
@@ -644,6 +672,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--compress", action="store_true", help="Use compressed NPZ output; smaller but slower")
     parser.add_argument("--no-subject-files", action="store_true", help="Only write combined training NPZ")
     parser.add_argument("--no-combined", action="store_true", help="Only write per-subject surface NPZ files")
+    parser.add_argument(
+        "--vertex-equivalence-report",
+        type=Path,
+        default=None,
+        help="Pinned proof artifact path. Defaults to scout_data/neuroemo/vertex_equivalence_report.json",
+    )
+    parser.add_argument(
+        "--recompute-vertex-equivalence",
+        action="store_true",
+        help="Recompute and overwrite the vertex equivalence report in this run (diagnostic mode).",
+    )
     return parser
 
 
@@ -676,6 +715,7 @@ def main() -> None:
     all_t_idx: list[np.ndarray] = []
     all_time_s: list[np.ndarray] = []
     label_rows: list[dict[str, Any]] = []
+    vertex_equivalence_cache: dict[str, Any] = {}
 
     for subject in subjects:
         artifact, samples = prepare_subject(
@@ -702,6 +742,9 @@ def main() -> None:
             low_pass=args.low_pass if args.low_pass > 0 else None,
             compress=args.compress,
             write_subject_files=not args.no_subject_files,
+            vertex_equivalence_cache=vertex_equivalence_cache,
+            vertex_equivalence_report_path=args.vertex_equivalence_report,
+            recompute_vertex_equivalence=args.recompute_vertex_equivalence,
         )
         artifacts.append(artifact)
 
@@ -745,6 +788,7 @@ def main() -> None:
             "include_neutral": bool(args.include_neutral),
             "preprocess_bold": bool(args.preprocess_bold),
             "standardize": args.standardize,
+            "vertex_equivalence": vertex_equivalence_cache.get("summary"),
         }
 
         train_npz = args.out_dir / "neuroemo_tribev2_train.npz"
@@ -769,6 +813,13 @@ def main() -> None:
             include_neutral=np.asarray(bool(args.include_neutral)),
             preprocess_bold=np.asarray(bool(args.preprocess_bold)),
             prep_metadata_json=np.asarray(json.dumps(prep_contract, sort_keys=True)),
+            vertex_equivalence_json=np.asarray(
+                json.dumps(vertex_equivalence_cache.get("summary", {}), sort_keys=True)
+            ),
+            vertex_equivalence_report_path=np.asarray(vertex_equivalence_cache.get("report_path", "")),
+            vertex_equivalence_report_sha256=np.asarray(
+                vertex_equivalence_cache.get("report_sha256", "")
+            ),
         )
         _write_rows_csv(args.out_dir / "neuroemo_tribev2_labels.csv", label_rows)
         print(f"\nCombined train NPZ: {train_npz}")
@@ -790,7 +841,8 @@ def main() -> None:
         ],
         "preprocessing": {
             "projection": "nilearn.surface.vol_to_surf",
-            "surface": "pial",
+            "projection_reference": "TRIBE-equivalent pial+white SurfaceProjector contract",
+            "surface": "pial_with_white_inner_mesh",
             "volume_preprocessing": {
                 "enabled": args.preprocess_bold,
                 "method": "nilearn.image.smooth_img + nilearn.image.clean_img"
@@ -814,6 +866,8 @@ def main() -> None:
             "drop_transition_trs": args.drop_transition_trs,
             "window_trs": args.window_trs,
         },
+        "vertex_equivalence": vertex_equivalence_cache.get("summary", {}),
+        "vertex_equivalence_report_path": vertex_equivalence_cache.get("report_path", ""),
         "warning": (
             "OpenNeuro NeuroEmo files are raw BIDS fMRI. Direct fsaverage5 projection "
             "is a format bridge for model development, not a substitute for subject-level "

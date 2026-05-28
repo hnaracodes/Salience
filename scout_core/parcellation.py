@@ -24,6 +24,18 @@ HEMISPHERE_ORDER_ALIASES = {
     "left_then_right": CANONICAL_HEMISPHERE_ORDER,
 }
 
+SURFACE_NATIVE_LABEL_KINDS = frozenset({"surface_annot_cbig", "surface_label_gifti"})
+ALLOWED_VERTEX_ORDER_PROOF_STATUSES = frozenset(
+    {
+        "annot_matches_nilearn_projection",
+        "annot_reordered_by_coordinate_map",
+        "surface_label_gifti_no_projection_check",
+        "skipped_for_tests",
+    }
+)
+MAX_FILLED_UNASSIGNED_SURFACE = 500
+MAX_FILLED_UNASSIGNED_SURFACE_ANNOT = 2000
+
 
 @dataclass(frozen=True)
 class VertexParcellationTable:
@@ -250,6 +262,9 @@ def validate_manifest_matches_table(
     table: VertexParcellationTable,
     *,
     vertex_csv_path: Path | None = None,
+    allow_legacy_atlas: bool = False,
+    require_surface_native: bool = True,
+    require_hemispheres: bool = True,
 ) -> dict[str, Any]:
     if not manifest:
         return {}
@@ -260,6 +275,7 @@ def validate_manifest_matches_table(
         table,
         n_vertices=expected_vertices,
         expected_n_parcels=int(expected_parcels) if expected_parcels is not None else None,
+        require_hemispheres=require_hemispheres,
     )
 
     manifest_mesh = str(manifest.get("mesh") or "").strip()
@@ -293,6 +309,75 @@ def validate_manifest_matches_table(
                     f"vertex_regions_csv sha256 mismatch: manifest={expected_hash} actual={actual_hash}"
                 )
             summary["vertex_regions_csv_sha256"] = actual_hash
+
+    vertex_equivalence = manifest.get("vertex_equivalence")
+    if vertex_equivalence is not None:
+        from scout_core.vertex_equivalence import validate_vertex_equivalence_summary
+
+        validated_vertex_equivalence = validate_vertex_equivalence_summary(
+            vertex_equivalence if isinstance(vertex_equivalence, dict) else {},
+            allow_contract_only=True,
+        )
+        expected_report_hash = (
+            manifest.get("artifact_sha256", {}).get("vertex_equivalence_report_json")
+            if isinstance(manifest.get("artifact_sha256"), dict)
+            else None
+        )
+        if expected_report_hash and validated_vertex_equivalence.get("report_sha256") != expected_report_hash:
+            raise ValueError(
+                "vertex_equivalence report sha256 mismatch: "
+                f"manifest={expected_report_hash} "
+                f"reported={validated_vertex_equivalence.get('report_sha256')}"
+            )
+        summary["vertex_equivalence"] = validated_vertex_equivalence
+    mesh_fingerprints = manifest.get("mesh_fingerprints")
+    if isinstance(mesh_fingerprints, dict):
+        summary["mesh_fingerprints"] = mesh_fingerprints
+
+    source = manifest.get("source") if isinstance(manifest.get("source"), dict) else {}
+    label_source_kind = str(source.get("label_source_kind") or "").strip()
+    summary["label_source_kind"] = label_source_kind or None
+
+    if label_source_kind == "volume_projection_fallback":
+        if allow_legacy_atlas:
+            summary["legacy_atlas_warning"] = (
+                "Training with deprecated volume_projection_fallback atlas; retrain after surface-native regen."
+            )
+        else:
+            raise ValueError(
+                "Parcellation manifest uses deprecated volume_projection_fallback labels. "
+                "Regenerate atlas with scripts/build_schaefer_vertex_regions.py and CBIG .annot files, "
+                "or pass allow_legacy_atlas=True for diagnostics only."
+            )
+
+    if require_surface_native and label_source_kind in SURFACE_NATIVE_LABEL_KINDS:
+        filled = source.get("filled_unassigned_vertices")
+        fill_limit = (
+            MAX_FILLED_UNASSIGNED_SURFACE_ANNOT
+            if label_source_kind == "surface_annot_cbig"
+            else MAX_FILLED_UNASSIGNED_SURFACE
+        )
+        if filled is not None and int(filled) > fill_limit:
+            raise ValueError(
+                f"Surface-native atlas filled {int(filled)} unassigned vertices "
+                f"(limit {fill_limit}). Check annot quality."
+            )
+
+    vertex_order_proof = manifest.get("vertex_order_proof")
+    if isinstance(vertex_order_proof, dict):
+        summary["vertex_order_proof"] = vertex_order_proof
+        if require_surface_native and label_source_kind == "surface_annot_cbig":
+            status = str(vertex_order_proof.get("status") or "").strip()
+            if status not in ALLOWED_VERTEX_ORDER_PROOF_STATUSES:
+                raise ValueError(
+                    f"Invalid vertex_order_proof.status {status!r}; expected one of "
+                    f"{sorted(ALLOWED_VERTEX_ORDER_PROOF_STATUSES)}"
+                )
+    elif require_surface_native and label_source_kind == "surface_annot_cbig":
+        raise ValueError(
+            "Surface annot atlas manifest is missing vertex_order_proof metadata. "
+            "Regenerate configs/parcellation_manifest.yaml with the updated builder."
+        )
 
     summary["atlas_id"] = manifest.get("atlas_id")
     summary["mesh"] = manifest_mesh or "fsaverage5"

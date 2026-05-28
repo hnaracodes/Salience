@@ -43,6 +43,10 @@ from typing import Any
 import joblib
 import numpy as np
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from scout_core.parcellation import CANONICAL_VERTEX_ORDER, normalize_vertex_order
 from scout_core.roi_features import (
     RoiFeatureSpec,
@@ -50,8 +54,13 @@ from scout_core.roi_features import (
     reduce_vertices_to_rois,
     summarise_roi_feature_spec,
 )
+from scout_core.vertex_equivalence import (
+    canonical_vertex_equivalence_report_path,
+    load_vertex_equivalence_report,
+    validate_vertex_equivalence_summary,
+    vertex_equivalence_reference,
+)
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TRAIN_NPZ = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface" / "neuroemo_tribev2_train.npz"
 DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models"
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR / "neuroemo_emotion_model.joblib"
@@ -86,6 +95,7 @@ class TrainConfig:
     temporal_allow_class_drop: bool = False
     temporal_allow_rewindow: bool = False
     exclude_labels: str = "neutral"
+    allow_unverified_vertex_equivalence: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,14 +138,109 @@ def _npz_scalar(raw: Any, key: str, default: Any = None) -> Any:
     return value
 
 
-def _reduce_temporal_window(window: np.ndarray, reducer: str) -> np.ndarray:
-    if reducer == "mean":
+TEMPORAL_REDUCER_COMPONENTS: dict[str, tuple[str, ...]] = {
+    "mean": ("mean",),
+    "median": ("median",),
+    "last": ("last",),
+    "early_mean": ("early_mean",),
+    "late_mean": ("late_mean",),
+    "late_minus_early": ("late_minus_early",),
+    "slope": ("slope",),
+    "within_window_std": ("within_window_std",),
+    "last_minus_first": ("last_minus_first",),
+    "dynamic_basic": ("mean", "within_window_std", "last_minus_first", "slope"),
+    "static_dynamic": (
+        "mean",
+        "early_mean",
+        "late_mean",
+        "late_minus_early",
+        "slope",
+        "within_window_std",
+        "last_minus_first",
+    ),
+}
+
+
+def _temporal_component(window: np.ndarray, component: str) -> np.ndarray:
+    if component == "mean":
         return window.mean(axis=0)
-    if reducer == "median":
+    if component == "median":
         return np.median(window, axis=0)
-    if reducer == "last":
+    if component == "last":
         return window[-1]
-    raise ValueError(f"Unknown temporal reducer: {reducer}")
+    if component == "early_mean":
+        split = max(1, window.shape[0] // 2)
+        return window[:split].mean(axis=0)
+    if component == "late_mean":
+        split = max(1, window.shape[0] // 2)
+        return window[split:].mean(axis=0) if split < window.shape[0] else window[-1]
+    if component == "late_minus_early":
+        return _temporal_component(window, "late_mean") - _temporal_component(window, "early_mean")
+    if component == "within_window_std":
+        return window.std(axis=0)
+    if component == "last_minus_first":
+        return window[-1] - window[0]
+    if component == "slope":
+        if window.shape[0] == 1:
+            return np.zeros(window.shape[1], dtype=np.float32)
+        t = np.arange(window.shape[0], dtype=np.float32)
+        t = t - t.mean()
+        denom = float(np.sum(t * t))
+        if denom <= 0:
+            return np.zeros(window.shape[1], dtype=np.float32)
+        centered = window - window.mean(axis=0, keepdims=True)
+        return (t[:, None] * centered).sum(axis=0) / denom
+    raise ValueError(f"Unknown temporal reducer component: {component}")
+
+
+def _reduce_temporal_window(window: np.ndarray, reducer: str) -> np.ndarray:
+    components = TEMPORAL_REDUCER_COMPONENTS.get(reducer)
+    if components is None:
+        raise ValueError(
+            f"Unknown temporal reducer: {reducer}. "
+            f"Supported: {sorted(TEMPORAL_REDUCER_COMPONENTS)}"
+        )
+    reduced = [_temporal_component(window, component) for component in components]
+    if len(reduced) == 1:
+        return reduced[0].astype(np.float32, copy=False)
+    return np.stack(reduced, axis=0).astype(np.float32, copy=False)
+
+
+def _parse_json_dict(raw_value: Any) -> dict[str, Any]:
+    if isinstance(raw_value, dict):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.strip():
+        try:
+            loaded = json.loads(raw_value)
+        except json.JSONDecodeError:
+            return {"raw_json": raw_value}
+        return loaded if isinstance(loaded, dict) else {"raw_json": raw_value}
+    return {}
+
+
+def _compare_vertex_equivalence_fingerprints(
+    source_summary: dict[str, Any],
+    roi_summary: dict[str, Any] | None,
+) -> None:
+    if not roi_summary:
+        return
+    source_mesh = (source_summary.get("mesh_fingerprints") or {}).get("nilearn") or {}
+    roi_mesh = (roi_summary.get("mesh_fingerprints") or {}).get("nilearn") or {}
+    for hemi_name in ("pial_left", "pial_right", "white_left", "white_right"):
+        source_hemi = source_mesh.get(hemi_name) if isinstance(source_mesh, dict) else None
+        roi_hemi = roi_mesh.get(hemi_name) if isinstance(roi_mesh, dict) else None
+        if not source_hemi or not roi_hemi:
+            continue
+        if source_hemi.get("coords_sha256") != roi_hemi.get("coords_sha256"):
+            raise ValueError(
+                f"Vertex equivalence mesh coords mismatch for {hemi_name}: "
+                f"train_npz={source_hemi.get('coords_sha256')} manifest={roi_hemi.get('coords_sha256')}"
+            )
+        if source_hemi.get("faces_sha256") != roi_hemi.get("faces_sha256"):
+            raise ValueError(
+                f"Vertex equivalence mesh faces mismatch for {hemi_name}: "
+                f"train_npz={source_hemi.get('faces_sha256')} manifest={roi_hemi.get('faces_sha256')}"
+            )
 
 
 def _apply_temporal_windows(
@@ -166,9 +271,13 @@ def _apply_temporal_windows(
                 "window_trs": 1,
                 "stride_trs": stride_trs,
                 "reducer": cfg.temporal_reducer,
+                "reducer_components": list(
+                    TEMPORAL_REDUCER_COMPONENTS.get(cfg.temporal_reducer, (cfg.temporal_reducer,))
+                ),
                 "contiguity": cfg.temporal_contiguity,
                 "input_samples": int(X.shape[0]),
                 "output_samples": int(X.shape[0]),
+                "output_sample_shape": list(X.shape[1:]),
             },
         )
 
@@ -242,9 +351,11 @@ def _apply_temporal_windows(
         "window_trs": window_trs,
         "stride_trs": stride_trs,
         "reducer": cfg.temporal_reducer,
+        "reducer_components": list(TEMPORAL_REDUCER_COMPONENTS[cfg.temporal_reducer]),
         "contiguity": cfg.temporal_contiguity,
         "input_samples": int(X.shape[0]),
         "output_samples": int(X_windowed.shape[0]),
+        "output_sample_shape": list(X_windowed.shape[1:]),
         "dropped_class_ids": dropped_classes,
         "dropped_class_names": [
             str(labels[class_id]) if class_id < len(labels) else f"class_{class_id}"
@@ -361,6 +472,30 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
                 prep_metadata = loaded
         except json.JSONDecodeError:
             prep_metadata = {"raw_prep_metadata_json": prep_metadata_json}
+    vertex_equivalence_summary = _parse_json_dict(_npz_scalar(raw, "vertex_equivalence_json", ""))
+    if not vertex_equivalence_summary and cfg.feature_mode == "roi":
+        report_path = canonical_vertex_equivalence_report_path()
+        if report_path.is_file():
+            report = load_vertex_equivalence_report(report_path)
+            vertex_equivalence_summary = vertex_equivalence_reference(
+                report, report_path=report_path
+            )
+    vertex_equivalence_summary = validate_vertex_equivalence_summary(
+        vertex_equivalence_summary,
+        allow_contract_only=cfg.allow_unverified_vertex_equivalence,
+    )
+    source_vertex_equivalence_report_sha256 = str(
+        _npz_scalar(raw, "vertex_equivalence_report_sha256", "") or ""
+    ).strip()
+    if (
+        source_vertex_equivalence_report_sha256
+        and vertex_equivalence_summary.get("report_sha256") != source_vertex_equivalence_report_sha256
+    ):
+        raise ValueError(
+            "Training NPZ vertex_equivalence_report_sha256 mismatch: "
+            f"array={source_vertex_equivalence_report_sha256} "
+            f"metadata={vertex_equivalence_summary.get('report_sha256')}"
+        )
 
     if source_mesh != "fsaverage5":
         raise ValueError(f"Training NPZ must be in fsaverage5 space, got mesh={source_mesh!r}")
@@ -488,6 +623,26 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
                 f"ROI manifest vertex order {roi_spec.vertex_order!r} does not match "
                 f"training NPZ vertex order {source_vertex_order!r}"
             )
+        roi_vertex_equivalence = validate_vertex_equivalence_summary(
+            roi_spec.validation_summary.get("vertex_equivalence")
+            if isinstance(roi_spec.validation_summary, dict)
+            else {},
+            allow_contract_only=cfg.allow_unverified_vertex_equivalence,
+        )
+        _compare_vertex_equivalence_fingerprints(
+            vertex_equivalence_summary,
+            roi_vertex_equivalence,
+        )
+        if (
+            source_vertex_equivalence_report_sha256
+            and roi_vertex_equivalence.get("report_sha256")
+            and source_vertex_equivalence_report_sha256 != roi_vertex_equivalence.get("report_sha256")
+        ):
+            raise ValueError(
+                "ROI manifest vertex equivalence report hash does not match training NPZ: "
+                f"train_npz={source_vertex_equivalence_report_sha256} "
+                f"manifest={roi_vertex_equivalence.get('report_sha256')}"
+            )
         X_features = reduce_vertices_to_rois(X_raw, roi_spec)
     else:
         raise ValueError(f"Unknown feature_mode: {cfg.feature_mode}")
@@ -508,6 +663,7 @@ def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
             "source_sample_axis": source_sample_axis,
             "input_ndim": int(X_raw.ndim),
             "prep_metadata": prep_metadata,
+            "vertex_equivalence": vertex_equivalence_summary,
         },
         "label_filter": label_filter_summary,
         "temporal_aggregation": temporal_summary,
@@ -890,7 +1046,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--temporal-reducer",
-        choices=("mean", "median", "last"),
+        choices=tuple(TEMPORAL_REDUCER_COMPONENTS),
         default="mean",
         help="How to reduce each temporal window.",
     )
@@ -917,6 +1073,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--exclude-labels",
         default="neutral",
         help="Comma-separated class labels to exclude before training. Default excludes neutral.",
+    )
+    parser.add_argument(
+        "--allow-unverified-vertex-equivalence",
+        action="store_true",
+        help="Allow legacy or contract-only vertex-equivalence metadata. Use only for older artifacts.",
     )
     return parser
 
@@ -947,6 +1108,7 @@ def _config_from_args(args: argparse.Namespace) -> TrainConfig:
         temporal_allow_class_drop=args.temporal_allow_class_drop,
         temporal_allow_rewindow=args.temporal_allow_rewindow,
         exclude_labels=args.exclude_labels,
+        allow_unverified_vertex_equivalence=args.allow_unverified_vertex_equivalence,
     )
 
 

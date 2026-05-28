@@ -29,6 +29,8 @@ tribe_image = (
         # Quote extras so bash does not treat `[plotting]` as a glob.
         'pip install -e "/root/tribev2[plotting]"',
     )
+    .pip_install("nibabel>=5.2")
+    .add_local_python_source("scout_core")
 )
 @app.cls(
     gpu="A100", 
@@ -298,8 +300,148 @@ class TribeInference:
 
         return Path(output_path).read_bytes()
 
+
+@app.function(
+    image=tribe_image,
+    volumes={"/cache": volume},
+    secrets=[modal.Secret.from_name("huggingface-secret")],
+    timeout=1200,
+)
+def verify_vertex_equivalence_modal(
+    bold_nifti_bytes: bytes,
+    *,
+    source_name: str = "modal_input.nii.gz",
+    radius: float = 3.0,
+    interpolation: str = "linear",
+    allclose_atol: float = 1e-5,
+) -> dict:
+    import tempfile
+
+    import nilearn
+    import tribev2
+
+    from scout_core.vertex_equivalence import build_vertex_equivalence_report
+
+    with tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False) as tmp:
+        tmp.write(bold_nifti_bytes)
+        tmp_path = Path(tmp.name)
+
+    report = build_vertex_equivalence_report(
+        bold_path=tmp_path,
+        mesh="fsaverage5",
+        radius=radius,
+        interpolation=interpolation,
+        allclose_atol=allclose_atol,
+        runtime_provenance={
+            "runtime": "modal",
+            "tribev2_version": getattr(tribev2, "__version__", "unknown"),
+            "nilearn_version": getattr(nilearn, "__version__", "unknown"),
+            "source_name": source_name,
+            "modal_image": "tribe_image",
+        },
+    )
+    return report
+
+
+def _vertex_equivalence_status_rank(value: str) -> int:
+    order = {
+        "contract_only": 0,
+        "mesh_identity_verified": 1,
+        "projection_equivalence_verified": 2,
+    }
+    return order.get(value, -1)
+
+
+@app.local_entrypoint()
+def verify_vertex_equivalence(
+    bold_path: str,
+    output: str = "scout_data/neuroemo/vertex_equivalence_report.json",
+    radius: float = 3.0,
+    interpolation: str = "linear",
+    allclose_atol: float = 1e-5,
+    require_status: str = "projection_equivalence_verified",
+):
+    """Generate vertex-equivalence proof on Modal and write the canonical JSON report.
+
+    Usage::
+
+        modal run tribe.py::verify_vertex_equivalence \\
+            --bold-path scout_data/neuroemo/raw/sub-01/func/sub-01_task-fe_bold.nii.gz
+    """
+    import json
+
+    from scout_core.vertex_equivalence import (
+        canonical_vertex_equivalence_report_path,
+        load_vertex_equivalence_report,
+        validate_vertex_equivalence_summary,
+        vertex_equivalence_reference,
+        write_vertex_equivalence_report,
+    )
+
+    project_root = Path(__file__).resolve().parent
+    bold = Path(bold_path).expanduser()
+    if not bold.is_absolute():
+        bold = project_root / bold
+    if not bold.is_file():
+        raise SystemExit(f"BOLD not found: {bold}")
+
+    out = Path(output).expanduser()
+    if not out.is_absolute():
+        out = project_root / out
+    output_path = canonical_vertex_equivalence_report_path(out)
+
+    size_mb = bold.stat().st_size / 1e6
+    print(f"Uploading BOLD to Modal ({size_mb:.1f} MB): {bold}")
+    report = verify_vertex_equivalence_modal.remote(
+        bold.read_bytes(),
+        source_name=bold.name,
+        radius=radius,
+        interpolation=interpolation,
+        allclose_atol=allclose_atol,
+    )
+    write_vertex_equivalence_report(report, output_path)
+    print(json.dumps(report, indent=2))
+    print(f"Report: {output_path}")
+    print(
+        json.dumps(
+            vertex_equivalence_reference(report, report_path=output_path),
+            indent=2,
+        )
+    )
+    if require_status and _vertex_equivalence_status_rank(report["proof_status"]) < _vertex_equivalence_status_rank(
+        require_status
+    ):
+        raise SystemExit(
+            f"vertex_equivalence proof_status={report['proof_status']!r} did not reach "
+            f"required {require_status!r}"
+        )
+    validate_vertex_equivalence_summary(load_vertex_equivalence_report(output_path), allow_contract_only=True)
+    print(f"OK: proof_status={report['proof_status']!r}")
+
+
 def _default_video_path() -> Path:
     return Path(__file__).resolve().parent / "mrbeast.mp4"
+
+
+def _session_vertex_equivalence_meta() -> dict:
+    try:
+        from scout_core.vertex_equivalence import (
+            canonical_vertex_equivalence_report_path,
+            load_vertex_equivalence_report,
+            vertex_equivalence_reference,
+        )
+
+        report_path = canonical_vertex_equivalence_report_path()
+        report = load_vertex_equivalence_report(report_path)
+        return vertex_equivalence_reference(report, report_path=report_path)
+    except Exception as exc:  # best-effort provenance; never block persistence
+        return {
+            "mesh": "fsaverage5",
+            "vertex_order": "lh_then_rh_fsaverage5",
+            "proof_status": "contract_only",
+            "reference_kind": "unavailable",
+            "reference_detail": f"Could not compute session vertex equivalence metadata: {exc}",
+        }
 
 
 def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: bytes):
@@ -313,10 +455,12 @@ def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: 
 
     preds = np.load(io.BytesIO(preds_npz_bytes))["preds"]
     vertex_map = resolve_vertex_regions()
+    vertex_equivalence = _session_vertex_equivalence_meta()
     session_id = save_cortical_timeseries(
         preds,
         source_video=video_path.name,
         mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
         vertex_to_region=vertex_map,
         top_k_peaks=64,
         notes="TRIBE v2 prediction via modal run tribe.py",
@@ -407,6 +551,7 @@ def record_session(session_id: str):
     print(f"Predicting from {video_path.name} for session {session_id} …")
     preds_list = predictor.predict_brain.remote(video_data)
     preds = np.asarray(preds_list, dtype=np.float32)
+    vertex_equivalence = _session_vertex_equivalence_meta()
 
     from activation_store import PROJECT_ROOT
 
@@ -420,6 +565,7 @@ def record_session(session_id: str):
         session_id=session_id,
         source_video=rel_video,
         mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
         vertex_to_region=resolve_vertex_regions(),
         top_k_peaks=64,
         notes="TRIBE v2 website session via record_session",
@@ -474,10 +620,12 @@ def record():
     preds = np.asarray(preds_list, dtype=np.float32)
 
     vertex_map = resolve_vertex_regions()
+    vertex_equivalence = _session_vertex_equivalence_meta()
     session_id = save_cortical_timeseries(
         preds,
         source_video=video_path.name,
         mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
         vertex_to_region=vertex_map,
         top_k_peaks=64,
         notes="TRIBE v2 demo prediction; emotion/Yeo semantics require downstream mapping.",
