@@ -15,8 +15,8 @@ source:
   projection: ''
   unassigned_vertex_fill: nearest_assigned_vertex_within_hemisphere
   filled_unassigned_vertices: 1743
-  annot_lh: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\lh.Schaefer2018_400Parcels_7Networks_order.annot
-  annot_rh: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\rh.Schaefer2018_400Parcels_7Networks_order.annot
+  annot_lh: scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\lh.Schaefer2018_400Parcels_7Networks_order.annot
+  annot_rh: scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\rh.Schaefer2018_400Parcels_7Networks_order.annot
   cbig_release: FreeSurfer5.3
   nilearn_fetcher: ''
 vertex_equivalence:
@@ -24,7 +24,7 @@ vertex_equivalence:
   mesh: fsaverage5
   vertex_order: lh_then_rh_fsaverage5
   reference_kind: local_tribev2_package
-  report_path: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroEmoCode\vertex_equivalence_report.json
+  report_path: scout_data\neuroEmoCode\vertex_equivalence_report.json
   report_sha256: 25ced97a324a16f4cbf07261e4e613cbb1897ff792d1af9f92a0235bf7c58a8c
   schema_version: 1
   mesh_fingerprints: &id001
@@ -142,7 +142,7 @@ vertex_order_proof:
     low overlap is expected.'
   status: annot_matches_nilearn_projection
   reorder_applied: false
-  report_path: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroEmoCode\schaefer_annot_alignment_report.json
+  report_path: scout_data\neuroEmoCode\schaefer_annot_alignment_report.json
   report_sha256: 67d2d64752a13228841cf69ec85838fc5c6d0ed60d45dc46e431dca9c97a238a
 mesh_fingerprints: *id001
 artifact_sha256:
@@ -156,11 +156,11 @@ artifact_sha256:
 inputs:
   labels_gii_lh: ''
   labels_gii_rh: ''
-  labels_annot_lh: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\lh.Schaefer2018_400Parcels_7Networks_order.annot
-  labels_annot_rh: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\rh.Schaefer2018_400Parcels_7Networks_order.annot
+  labels_annot_lh: scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\lh.Schaefer2018_400Parcels_7Networks_order.annot
+  labels_annot_rh: scout_data\atlases\cbig_schaefer2018\FreeSurfer5.3\fsaverage5\label\rh.Schaefer2018_400Parcels_7Networks_order.annot
   nilearn_fetcher: ''
-  vertex_equivalence_report: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroEmoCode\vertex_equivalence_report.json
-  schaefer_annot_alignment_report: C:\Users\splas\OneDrive\Desktop\Projects for learning\TribeV2\scout_data\neuroEmoCode\schaefer_annot_alignment_report.json
+  vertex_equivalence_report: scout_data\neuroEmoCode\vertex_equivalence_report.json
+  schaefer_annot_alignment_report: scout_data\neuroEmoCode\schaefer_annot_alignment_report.json
 labels:
 - 7Networks_LH_Cont_Cing_1
 - 7Networks_LH_Cont_Cing_2
