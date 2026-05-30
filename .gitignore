@@ -2,17 +2,24 @@
 __pycache__/
 *.py[cod]
 .venv/
-.env*
-videoplayback.mp4
+.env
+.env.*
+!.env.example
+# Local demo videos (regenerate or place locally; not versioned)
+*.mp4
 # Local runtime / DB (regenerate from Modal + analyze_session)
 *.sqlite
 scout_data/sessions/
+scout_data/baseline/
 scout_data/neuroEmoCode
 scout_data/neuroemo
 scout_data/atlases/
+scout_data/*.log
+debug-*.log
 
 # Optional reproducible outputs
 brain_results.mp4
+brain_results_gray.mp4
 
 # Emotion templates — regenerate with: python scripts/download_emotion_templates.py
 configs/emotion_templates/*.npy

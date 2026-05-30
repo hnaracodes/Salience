@@ -35,6 +35,6 @@
     "net_27",
     "net_28"
   ],
-  "parcellation_csv": "C:\\Users\\splas\\OneDrive\\Desktop\\Projects for learning\\TribeV2\\configs\\vertex_regions.csv",
+  "parcellation_csv": "configs/vertex_regions.csv",
   "leakage_note": "SYNTHETIC BOOTSTRAP \u2014 replace with empirical norms from held-out naturalistic clips before production use."
 }
