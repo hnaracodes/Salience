@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurora — Neural UX Scout Fixture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-void: #030712;
+      --accent-cyan: #22d3ee;
+      --accent-violet: #a78bfa;
+      --accent-rose: #fb7185;
+      --accent-amber: #fbbf24;
+      --glass: rgba(255, 255, 255, 0.06);
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: auto; }
+    body {
+      margin: 0;
+      font-family: "Outfit", system-ui, sans-serif;
+      background: var(--bg-void);
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+
+    /* Ambient mesh — shifts hue as you scroll (JS sets --scroll) */
+    .ambient {
+      position: fixed;
+      inset: -20%;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at calc(20% + var(--scroll, 0) * 30%) 20%,
+          rgba(34, 211, 238, 0.35), transparent 55%),
+        radial-gradient(ellipse 60% 40% at calc(80% - var(--scroll, 0) * 20%) 60%,
+          rgba(167, 139, 250, 0.4), transparent 50%),
+        radial-gradient(ellipse 50% 60% at 50% calc(100% - var(--scroll, 0) * 40%),
+          rgba(251, 113, 133, 0.25), transparent 55%),
+        linear-gradient(180deg, #030712 0%, #0f172a 40%, #1e1b4b 100%);
+      filter: blur(0px);
+      transition: background-position 0.1s linear;
+    }
+
+    .grain {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.04;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    #particle-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    .page {
+      position: relative;
+      z-index: 10;
+    }
+
+    /* —— Header —— */
+    header[role="banner"] {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      background: linear-gradient(180deg, rgba(3, 7, 18, 0.85), transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    header h1 {
+      margin: 0;
+      font-family: "Syne", sans-serif;
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    nav { display: flex; gap: 1.5rem; }
+    nav a {
+      color: rgba(248, 250, 252, 0.7);
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: color 0.3s var(--ease-out-expo);
+    }
+    nav a:hover { color: var(--accent-cyan); }
+
+    /* —— Sections —— */
+    section {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 6rem 2rem 4rem;
+      overflow: hidden;
+    }
+
+    .section-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Reveal on scroll */
+    .reveal {
+      opacity: 0;
+      transform: translateY(48px) scale(0.98);
+      filter: blur(8px);
+      transition:
+        opacity 1.1s var(--ease-out-expo),
+        transform 1.2s var(--ease-out-expo),
+        filter 1s var(--ease-out-expo);
+    }
+    .reveal.is-visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+    .reveal-delay-1 { transition-delay: 0.12s; }
+    .reveal-delay-2 { transition-delay: 0.24s; }
+    .reveal-delay-3 { transition-delay: 0.36s; }
+
+    /* —— Hero —— */
+    #hero {
+      min-height: 110vh;
+      align-items: center;
+      text-align: center;
+    }
+    #hero::before {
+      content: "";
+      position: absolute;
+      inset: 10% 15%;
+      background: conic-gradient(from 180deg at 50% 50%,
+        transparent, var(--accent-cyan), var(--accent-violet), var(--accent-rose), transparent);
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.35;
+      animation: hero-orb 14s var(--ease-in-out) infinite alternate;
+    }
+    @keyframes hero-orb {
+      0% { transform: scale(0.9) rotate(0deg); opacity: 0.3; }
+      100% { transform: scale(1.15) rotate(25deg); opacity: 0.5; }
+    }
+
+    .hero-title {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(2.8rem, 8vw, 5.5rem);
+      font-weight: 800;
+      line-height: 1.05;
+      margin: 0 0 1rem;
+      letter-spacing: -0.03em;
+    }
+    .hero-title .line {
+      display: block;
+      background: linear-gradient(135deg, #fff 0%, var(--accent-cyan) 40%, var(--accent-violet) 70%, var(--accent-rose) 100%);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 6s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%, 100% { background-position: 0% center; }
+      50% { background-position: 100% center; }
+    }
+
+    .hero-sub {
+      font-size: 1.15rem;
+      color: rgba(248, 250, 252, 0.65);
+      max-width: 520px;
+      margin: 0 auto 2rem;
+      line-height: 1.6;
+    }
+
+    .btn-primary {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem 2rem;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #030712;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(34, 211, 238, 0.35), 0 0 80px rgba(167, 139, 250, 0.2);
+      transition: transform 0.4s var(--ease-out-expo), box-shadow 0.4s;
+    }
+    .btn-primary::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.5) 50%, transparent 60%);
+      transform: translateX(-120%);
+      animation: btn-sheen 3s ease-in-out infinite;
+    }
+    @keyframes btn-sheen {
+      0%, 70%, 100% { transform: translateX(-120%); }
+      85% { transform: translateX(120%); }
+    }
+    .btn-primary:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 0 60px rgba(34, 211, 238, 0.5);
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.4);
+    }
+    .scroll-hint .chevron {
+      width: 24px;
+      height: 24px;
+      border-right: 2px solid var(--accent-cyan);
+      border-bottom: 2px solid var(--accent-cyan);
+      transform: rotate(45deg);
+      animation: bounce-chevron 2s var(--ease-in-out) infinite;
+    }
+    @keyframes bounce-chevron {
+      0%, 100% { transform: rotate(45deg) translateY(0); opacity: 0.5; }
+      50% { transform: rotate(45deg) translateY(8px); opacity: 1; }
+    }
+
+    /* —— Experience (parallax cards) —— */
+    #experience {
+      background: linear-gradient(180deg, transparent, rgba(15, 23, 42, 0.6));
+    }
+    #experience h2 {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      margin: 0 0 0.5rem;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      margin-top: 2.5rem;
+      perspective: 1200px;
+    }
+    .card {
+      position: relative;
+      padding: 1.75rem;
+      border-radius: 20px;
+      background: var(--glass);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+      transform-style: preserve-3d;
+      transition: transform 0.6s var(--ease-out-expo), box-shadow 0.6s;
+      will-change: transform;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(135deg, rgba(34,211,238,0.5), transparent, rgba(167,139,250,0.5));
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+    .card h3 { margin: 0 0 0.5rem; font-size: 1.1rem; color: var(--accent-cyan); }
+    .card p { margin: 0; font-size: 0.9rem; color: rgba(248, 250, 252, 0.6); line-height: 1.5; }
+    .card:nth-child(1) { --card-hue: 190; }
+    .card:nth-child(2) { --card-hue: 270; }
+    .card:nth-child(3) { --card-hue: 350; }
+
+    /* —— Gallery (kinetic type) —— */
+    #gallery {
+      min-height: 120vh;
+      justify-content: flex-start;
+      padding-top: 8rem;
+    }
+    #gallery h2 {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      margin: 0;
+      white-space: nowrap;
+    }
+    .marquee-wrap {
+      margin-top: 3rem;
+      overflow: hidden;
+      mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    }
+    .marquee {
+      display: flex;
+      gap: 3rem;
+      width: max-content;
+      animation: marquee 28s linear infinite;
+    }
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .marquee span {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(3rem, 10vw, 7rem);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: -0.04em;
+      background: linear-gradient(90deg, var(--accent-violet), var(--accent-rose), var(--accent-amber));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      opacity: 0.9;
+    }
+    .orb-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 4rem;
+    }
+    .orb {
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.3), transparent 50%),
+        conic-gradient(from 0deg, var(--accent-cyan), var(--accent-violet), var(--accent-rose), var(--accent-cyan));
+      animation: orb-pulse 4s ease-in-out infinite;
+      box-shadow: 0 0 60px rgba(167, 139, 250, 0.3);
+    }
+    .orb:nth-child(2) { animation-delay: -1s; }
+    .orb:nth-child(3) { animation-delay: -2s; }
+    .orb:nth-child(4) { animation-delay: -3s; }
+    @keyframes orb-pulse {
+      0%, 100% { transform: scale(0.92); filter: hue-rotate(0deg); }
+      50% { transform: scale(1.05); filter: hue-rotate(40deg); }
+    }
+
+    /* —— Pricing —— */
+    #pricing {
+      background: linear-gradient(180deg, rgba(30, 27, 75, 0.5), transparent);
+    }
+    #pricing h2 {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      text-align: center;
+      margin: 0 0 2rem;
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      align-items: stretch;
+    }
+    .price-card {
+      padding: 2rem;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: transform 0.5s var(--ease-out-expo), border-color 0.5s;
+    }
+    .price-card.featured {
+      transform: scale(1.05);
+      border-color: rgba(34, 211, 238, 0.4);
+      box-shadow: 0 0 80px rgba(34, 211, 238, 0.15);
+      background: linear-gradient(180deg, rgba(34, 211, 238, 0.08), rgba(167, 139, 250, 0.05));
+    }
+    .price-card h3 { margin: 0 0 0.25rem; font-size: 1rem; color: var(--accent-cyan); }
+    .price-card .amount {
+      font-family: "Syne", sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin: 0.5rem 0 1rem;
+    }
+    .price-card button {
+      width: 100%;
+      padding: 0.85rem;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: transparent;
+      color: #fff;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    .price-card button:hover {
+      background: rgba(34, 211, 238, 0.15);
+      border-color: var(--accent-cyan);
+    }
+
+    /* —— CTA finale —— */
+    #cta {
+      min-height: 90vh;
+      text-align: center;
+      background: radial-gradient(ellipse 100% 80% at 50% 100%, rgba(251, 113, 133, 0.2), transparent 60%);
+    }
+    #cta h2 {
+      font-family: "Syne", sans-serif;
+      font-size: clamp(2.2rem, 6vw, 4rem);
+      margin: 0 0 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+  <div class="page">
+    <header role="banner">
+      <h1 id="site-logo">Aurora</h1>
+      <nav role="navigation" aria-label="Primary">
+        <a href="#hero">Home</a>
+        <a href="#experience">Experience</a>
+        <a href="#gallery">Gallery</a>
+        <a href="#pricing">Pricing</a>
+      </nav>
+    </header>
+
+    <section id="hero" data-section="hero">
+      <div class="section-inner">
+        <h2 class="hero-title reveal">
+          <span class="line">Motion that</span>
+          <span class="line">feels impossible</span>
+        </h2>
+        <p class="hero-sub reveal reveal-delay-1">
+          Scroll-driven gradients, glass depth, and particle fields — built for Neural UX Scout capture tests.
+        </p>
+        <button type="button" class="btn-primary reveal reveal-delay-2" id="cta-hero">
+          Enter the flow
+        </button>
+      </div>
+      <div class="scroll-hint" aria-hidden="true">
+        <span>Scroll</span>
+        <div class="chevron"></div>
+      </div>
+    </section>
+
+    <section id="experience" data-section="experience">
+      <div class="section-inner">
+        <h2 class="reveal">Depth &amp; parallax</h2>
+        <p class="reveal reveal-delay-1" style="color: rgba(248,250,252,0.6); max-width: 480px;">
+          Cards tilt toward the cursor. Each scroll stop should read as a distinct visual chapter in your walkthrough video.
+        </p>
+        <div class="cards">
+          <article class="card reveal reveal-delay-1">
+            <h3>Velocity</h3>
+            <p>GPU-friendly transforms and layered blurs tuned for screen recording.</p>
+          </article>
+          <article class="card reveal reveal-delay-2">
+            <h3>Spectrum</h3>
+            <p>Cyan–violet–rose gradients shift as the ambient mesh tracks scroll position.</p>
+          </article>
+          <article class="card reveal reveal-delay-3">
+            <h3>Signal</h3>
+            <p>High-contrast motion gives TRIBEv2 more stimulus to work with than flat fixtures.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="gallery" data-section="gallery">
+      <div class="section-inner">
+        <h2 class="reveal">Kinetic gallery</h2>
+        <div class="marquee-wrap reveal reveal-delay-1">
+          <div class="marquee" aria-hidden="true">
+            <span>Wonder</span><span>Flow</span><span>Light</span><span>Depth</span><span>Wonder</span><span>Flow</span><span>Light</span><span>Depth</span>
+          </div>
+        </div>
+        <div class="orb-grid reveal reveal-delay-2">
+          <div class="orb"></div>
+          <div class="orb"></div>
+          <div class="orb"></div>
+          <div class="orb"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" data-section="pricing">
+      <div class="section-inner">
+        <h2 class="reveal">Choose your orbit</h2>
+        <div class="pricing-grid">
+          <article class="price-card reveal reveal-delay-1">
+            <h3>Starter</h3>
+            <p class="amount">$0</p>
+            <button type="button">Launch demo</button>
+          </article>
+          <article class="price-card featured reveal reveal-delay-2">
+            <h3>Pro</h3>
+            <p class="amount">$49</p>
+            <button type="button">Start trial</button>
+          </article>
+          <article class="price-card reveal reveal-delay-3">
+            <h3>Studio</h3>
+            <p class="amount">$199</p>
+            <button type="button">Contact</button>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="cta" data-section="cta">
+      <div class="section-inner">
+        <h2 class="reveal">Ready for inference?</h2>
+        <p class="reveal reveal-delay-1" style="color: rgba(248,250,252,0.65); margin-bottom: 2rem;">
+          This finale section anchors the deepest scroll in your Playwright script.
+        </p>
+        <button type="button" class="btn-primary reveal reveal-delay-2">Record session</button>
+      </div>
+    </section>
+
+    <footer role="contentinfo" style="padding: 3rem 2rem; text-align: center; color: rgba(248,250,252,0.35); font-size: 0.85rem;">
+      TRIBE walkthrough fixture · Aurora showcase
+    </footer>
+  </div>
+
+  <main role="main" id="main" hidden aria-hidden="true">
+    <!-- Legacy selector for site_sections.yaml compatibility -->
+    <p>Main landmark for section analytics fallbacks.</p>
+  </main>
+
+  <script>
+    (function () {
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const ambient = document.querySelector(".ambient");
+      const canvas = document.getElementById("particle-canvas");
+      const ctx = canvas.getContext("2d");
+      let particles = [];
+      let w = 0, h = 0, scrollNorm = 0;
+
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      }
+      window.addEventListener("resize", resize);
+      resize();
+
+      function initParticles(n) {
+        particles = Array.from({ length: n }, () => ({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          r: 1 + Math.random() * 2.5,
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: (Math.random() - 0.5) * 0.6,
+          hue: 180 + Math.random() * 120,
+        }));
+      }
+      initParticles(reduced ? 40 : 120);
+
+      function drawParticles() {
+        ctx.clearRect(0, 0, w, h);
+        const maxScroll = Math.max(document.documentElement.scrollHeight - h, 1);
+        scrollNorm = window.scrollY / maxScroll;
+        document.documentElement.style.setProperty("--scroll", scrollNorm.toFixed(4));
+
+        for (const p of particles) {
+          if (!reduced) {
+            p.x += p.vx + scrollNorm * 0.3;
+            p.y += p.vy;
+            if (p.x < 0) p.x = w;
+            if (p.x > w) p.x = 0;
+            if (p.y < 0) p.y = h;
+            if (p.y > h) p.y = 0;
+          }
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+          g.addColorStop(0, `hsla(${p.hue + scrollNorm * 80}, 90%, 70%, 0.9)`);
+          g.addColorStop(1, "transparent");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        requestAnimationFrame(drawParticles);
+      }
+      drawParticles();
+
+      // Scroll reveals
+      const reveals = document.querySelectorAll(".reveal");
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) e.target.classList.add("is-visible");
+          });
+        },
+        { threshold: 0.12, rootMargin: "0px 0px -8% 0px" }
+      );
+      reveals.forEach((el) => io.observe(el));
+      // Hero visible on load
+      document.querySelectorAll("#hero .reveal").forEach((el) => el.classList.add("is-visible"));
+
+      // Card tilt (desktop)
+      if (!reduced) {
+        document.querySelectorAll(".card").forEach((card) => {
+          card.addEventListener("mousemove", (e) => {
+            const r = card.getBoundingClientRect();
+            const x = (e.clientX - r.left) / r.width - 0.5;
+            const y = (e.clientY - r.top) / r.height - 0.5;
+            card.style.transform = `perspective(800px) rotateY(${x * 12}deg) rotateX(${-y * 12}deg) translateZ(12px)`;
+          });
+          card.addEventListener("mouseleave", () => {
+            card.style.transform = "";
+          });
+        });
+      }
+
+      // CTA micro-interaction
+      document.getElementById("cta-hero")?.addEventListener("click", () => {
+        window.scrollTo({ top: window.innerHeight * 0.95, behavior: reduced ? "auto" : "smooth" });
+      });
+    })();
+  </script>
+</body>
+</html>

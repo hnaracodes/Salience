@@ -1,0 +1,49 @@
+# Marketing display scores — session-relative 0–100 layer on dual-track + preds.
+# Does NOT replace engagement_track (VAN/DMN Z) or emotion_track (Kragel templates).
+# See scout_core/marketing_scores.py and docs/runbooks/website-session.md.
+
+compound_weights:
+  engagement: 0.7
+  novelty: 0.3
+
+metric_centers:
+  opening: 1.05
+  sustain: 0.95
+  transition: 0.22
+  stability: 0.58
+  density: 0.72
+
+metric_spreads:
+  opening: 0.35
+  sustain: 0.30
+  transition: 0.16
+  stability: 0.20
+  density: 0.18
+
+metric_labels:
+  opening: Opening hold
+  sustain: Sustain
+  transition: Visual change
+  stability: Signal stability
+  density: Engagement density
+
+drop_thresholds:
+  engagement_z: -0.65
+  novelty_z: -0.20
+  max_markers: 6
+
+edge_mask:
+  skip_first_trs: 1
+  skip_last_trs: 1
+  tail_buffer_sec: 5.0
+  min_duration_for_tail_sec: 8.0
+
+section_score:
+  method: engagement_mean_to_display
+
+disclaimer: >-
+  Session-relative display scores derived from neural engagement and temporal change;
+  not eye-tracking, not guaranteed conversion, and not a clinical emotion diagnosis.
+
+# Deferred multi-session comparison (ViralAnalyser-style):
+# comparison_score = 0.48 * early_avg + 0.34 * signal_avg + 0.18 * floor_score

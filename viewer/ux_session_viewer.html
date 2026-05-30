@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TRIBE UX Session Viewer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed; }
+    #hud { padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid #2a2f3a; }
+    #main { display: flex; flex-wrap: wrap; height: calc(100vh - 52px); }
+    #stageWrap { position: relative; flex: 1 1 640px; min-width: 320px; background: #000; }
+    #walkVideo, #heatmapCanvas, #bboxCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
+    #heatmapCanvas, #bboxCanvas { pointer-events: none; }
+    #sidebar { flex: 0 0 320px; padding: 12px; overflow-y: auto; border-left: 1px solid #2a2f3a; font-size: 13px; }
+    .meta { opacity: 0.85; }
+    select, input[type=range] { max-width: 100%; }
+    .bbox-label { font-size: 11px; fill: #7eb8ff; }
+    #scoreCurve { width: 100%; height: 72px; background: #161922; border-radius: 6px; margin-bottom: 10px; }
+    #activationCurve { width: 100%; height: 72px; background: #161922; border-radius: 6px; margin-bottom: 10px; }
+    .score-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #2a3142; margin-right: 6px; font-size: 12px; }
+    .score-chip.strong { background: #1f4d3a; color: #9ef0c3; }
+    .score-chip.weak { background: #4d2a1f; color: #f0c09e; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <label>Timestep <span id="tLabel">0</span>
+      <input type="range" id="tSlider" min="0" max="0" value="0" step="1" />
+    </label>
+    <label>Section <select id="sectionSelect"></select></label>
+    <span class="meta" id="statusMeta">Loading…</span>
+  </div>
+  <div id="main">
+    <div id="stageWrap">
+      <video id="walkVideo" muted playsinline></video>
+      <canvas id="heatmapCanvas"></canvas>
+      <svg id="bboxCanvas" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div id="sidebar">
+      <div id="overallScore" class="meta"></div>
+      <p class="meta" style="margin:0 0 4px">Engagement + novelty (0–100)</p>
+      <svg id="scoreCurve" viewBox="0 0 300 72" preserveAspectRatio="none"></svg>
+      <p class="meta" style="margin:8px 0 4px">Mean brain activation (0–100)</p>
+      <svg id="activationCurve" viewBox="0 0 300 72" preserveAspectRatio="none"></svg>
+      <h3 id="secTitle">Section</h3>
+      <p id="secMetrics" class="meta"></p>
+      <ul id="secTips"></ul>
+      <h4>Top elements</h4>
+      <ul id="topEl"></ul>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const base = params.get("base") || ".";
+
+    const walkVideo = document.getElementById("walkVideo");
+    const heatmapCanvas = document.getElementById("heatmapCanvas");
+    const bboxCanvas = document.getElementById("bboxCanvas");
+    const ctx = heatmapCanvas.getContext("2d");
+    const tSlider = document.getElementById("tSlider");
+    const tLabel = document.getElementById("tLabel");
+    const sectionSelect = document.getElementById("sectionSelect");
+    const statusMeta = document.getElementById("statusMeta");
+
+    let viewerBundle = {};
+    let sessionManifest = { dom_snapshots: [] };
+    let heatmapImg = new Image();
+    let currentT = 0;
+
+    async function loadJson(path) {
+      const res = await fetch(`${base}/${path}`);
+      if (!res.ok) throw new Error(`${path}: ${res.status}`);
+      return res.json();
+    }
+
+    function nearestSnapshot(t) {
+      const snaps = sessionManifest.dom_snapshots || [];
+      if (!snaps.length) return null;
+      return snaps.reduce((a, b) =>
+        Math.abs((a.t_idx || 0) - t) <= Math.abs((b.t_idx || 0) - t) ? a : b
+      );
+    }
+
+    function resizeCanvases() {
+      const wrap = document.getElementById("stageWrap");
+      const w = wrap.clientWidth;
+      const h = wrap.clientHeight;
+      heatmapCanvas.width = w;
+      heatmapCanvas.height = h;
+      bboxCanvas.setAttribute("width", w);
+      bboxCanvas.setAttribute("height", h);
+      bboxCanvas.style.width = w + "px";
+      bboxCanvas.style.height = h + "px";
+    }
+
+    function drawBboxes(snapshot, topElements) {
+      const wrap = document.getElementById("stageWrap");
+      const cw = wrap.clientWidth;
+      const ch = wrap.clientHeight;
+      const cap = viewerBundle.capture || { width: 1920, height: 1080 };
+      const scaleX = cw / cap.width;
+      const scaleY = ch / cap.height;
+      const scrollY = snapshot.scrollY || 0;
+      const scrollX = snapshot.scrollX || 0;
+      const highlight = new Set((topElements || []).map(e => e.dom_id));
+
+      bboxCanvas.innerHTML = "";
+      for (const el of snapshot.elements || []) {
+        if (!el.is_intersecting_viewport) continue;
+        const [x, y, bw, bh] = el.bbox;
+        const vx = (x - scrollX) * scaleX;
+        const vy = (y - scrollY) * scaleY;
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", vx);
+        rect.setAttribute("y", vy);
+        rect.setAttribute("width", bw * scaleX);
+        rect.setAttribute("height", bh * scaleY);
+        rect.setAttribute("fill", "none");
+        rect.setAttribute("stroke", highlight.has(el.dom_id) ? "#ff6b6b" : "#7eb8ff");
+        rect.setAttribute("stroke-width", highlight.has(el.dom_id) ? 3 : 1);
+        bboxCanvas.appendChild(rect);
+      }
+    }
+
+    function drawHeatmap() {
+      if (!heatmapImg.src) {
+        ctx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+        return;
+      }
+      ctx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(heatmapImg, 0, 0, heatmapCanvas.width, heatmapCanvas.height);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawScoreCurve() {
+      const svg = document.getElementById("scoreCurve");
+      const ms = viewerBundle.marketing_scores;
+      if (!ms || !ms.display_curve || !(ms.display_curve.points || []).length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const pts = ms.display_curve.points;
+      const w = 300;
+      const h = 72;
+      const pad = 4;
+      const coords = pts.map((p, i) => {
+        const x = pad + (i / Math.max(pts.length - 1, 1)) * (w - pad * 2);
+        const y = h - pad - (p.display_score / 100) * (h - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+      const current = pts.find(p => p.t_idx === currentT);
+      let marker = "";
+      if (current) {
+        const x = pad + (current.t_idx / Math.max(pts.length - 1, 1)) * (w - pad * 2);
+        const y = h - pad - (current.display_score / 100) * (h - pad * 2);
+        marker = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#ff6b6b"/>`;
+      }
+      svg.innerHTML = `<polyline fill="none" stroke="#7eb8ff" stroke-width="2" points="${coords}"/>${marker}`;
+    }
+
+    function drawActivationCurve() {
+      const svg = document.getElementById("activationCurve");
+      const aa = (viewerBundle.marketing_scores || {}).activation_analysis
+        || (viewerBundle.activation_track ? {
+          display_curve: {
+            points: (viewerBundle.activation_track.raw_scores || []).map((v, t_idx) => ({
+              t_idx,
+              display_score: v,
+            })),
+          },
+        } : null);
+      const curve = aa && aa.display_curve;
+      if (!curve || !(curve.points || []).length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const pts = curve.points;
+      const w = 300;
+      const h = 72;
+      const pad = 4;
+      const maxScore = Math.max(...pts.map(p => p.display_score || 0), 100);
+      const coords = pts.map((p, i) => {
+        const x = pad + (i / Math.max(pts.length - 1, 1)) * (w - pad * 2);
+        const y = h - pad - ((p.display_score || 0) / maxScore) * (h - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+      const current = pts.find(p => p.t_idx === currentT);
+      let marker = "";
+      if (current) {
+        const x = pad + (current.t_idx / Math.max(pts.length - 1, 1)) * (w - pad * 2);
+        const y = h - pad - ((current.display_score || 0) / maxScore) * (h - pad * 2);
+        marker = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#ffd166"/>`;
+      }
+      svg.innerHTML = `<polyline fill="none" stroke="#ffd166" stroke-width="2" points="${coords}"/>${marker}`;
+    }
+
+    function renderOverallScore() {
+      const el = document.getElementById("overallScore");
+      const ms = viewerBundle.marketing_scores;
+      if (!ms || ms.overall_score == null) {
+        el.textContent = "";
+        return;
+      }
+      el.textContent = `Session score ${ms.overall_score}/100 · display avg ${ms.display_curve?.avg_score ?? "—"}`;
+      const aa = ms.activation_analysis;
+      if (aa && aa.session_summary) {
+        el.textContent += ` · activation avg ${aa.display_curve?.avg_score ?? "—"}/100`;
+      }
+    }
+
+    function updateSidebar(sectionId) {
+      const sec = (viewerBundle.sections || []).find(s => s.section_id === sectionId);
+      document.getElementById("secTitle").textContent = sectionId || "—";
+      if (!sec) {
+        document.getElementById("secMetrics").textContent = "";
+        document.getElementById("secTips").innerHTML = "";
+        document.getElementById("topEl").innerHTML = "";
+        return;
+      }
+      let scoreHtml = "";
+      if (sec.marketing_score != null) {
+        const cls = sec.marketing_label === "strongest" ? "strong" : sec.marketing_label === "weakest" ? "weak" : "";
+        scoreHtml = `<span class="score-chip ${cls}">${sec.marketing_score}/100</span>`;
+      }
+      if (sec.activation_score != null) {
+        const cls = sec.activation_label === "strongest" ? "strong" : sec.activation_label === "weakest" ? "weak" : "";
+        scoreHtml += `<span class="score-chip ${cls}">act ${sec.activation_score}/100</span>`;
+      }
+      document.getElementById("secMetrics").innerHTML =
+        `${scoreHtml} dwell ${sec.dwell_sec ?? "—"}s · flags: ${(sec.flags || []).join(", ") || "none"}`
+        + (sec.activation_mean_raw != null ? ` · mean|preds|=${Number(sec.activation_mean_raw).toFixed(3)}` : "");
+      document.getElementById("secTips").innerHTML = (sec.recommendations || [])
+        .map(t => `<li>${t}</li>`).join("");
+      document.getElementById("topEl").innerHTML = (sec.top_elements || [])
+        .map(e => `<li><b>${e.dom_id}</b> (${e.tag}) score=${(e.attention_density || e.score || 0).toFixed?.(3) ?? e.score}</li>`)
+        .join("") || "<li class='meta'>No heatmap credit yet</li>";
+    }
+
+    async function setTimestep(t) {
+      currentT = t;
+      tLabel.textContent = String(t);
+      const tr = (viewerBundle.capture && sessionManifest.tr_mapping)
+        ? (sessionManifest.tr_mapping.tr_duration_sec || 1)
+        : 1;
+      if (walkVideo.src) {
+        walkVideo.currentTime = t * tr;
+      }
+      const key = String(t);
+      const hmPath = (viewerBundle.heatmap_index || {})[key];
+      if (hmPath) {
+        heatmapImg = new Image();
+        heatmapImg.onload = () => { drawHeatmap(); };
+        heatmapImg.src = `${base}/${hmPath}`;
+      } else {
+        heatmapImg = new Image();
+        drawHeatmap();
+      }
+      const snap = nearestSnapshot(t);
+      const sec = (viewerBundle.sections || []).find(s =>
+        (s.sample_t_indices || []).includes(t)
+      );
+      const topEl = sec ? sec.top_elements : [];
+      if (snap) drawBboxes(snap, topEl);
+      if (sec) {
+        sectionSelect.value = sec.section_id;
+        updateSidebar(sec.section_id);
+      }
+      drawScoreCurve();
+      drawActivationCurve();
+    }
+
+    async function init() {
+      viewerBundle = await loadJson("viewer_bundle.json");
+      try {
+        sessionManifest = await loadJson(viewerBundle.manifest_path || "../session_manifest.json");
+      } catch (e) {
+        statusMeta.textContent = "No session_manifest (bboxes disabled)";
+      }
+      const nT = Math.max(1, viewerBundle.n_timesteps || 1) - 1;
+      tSlider.max = String(nT);
+      const samples = viewerBundle.sample_t_indices || [];
+      if (samples.length) tSlider.value = String(samples[0]);
+
+      if (viewerBundle.video) {
+        walkVideo.src = `${base}/${viewerBundle.video}`;
+        walkVideo.addEventListener("loadedmetadata", () => {
+          resizeCanvases();
+          setTimestep(parseInt(tSlider.value, 10));
+        });
+      } else {
+        statusMeta.textContent = "No walkthrough video in bundle";
+      }
+
+      sectionSelect.innerHTML = (viewerBundle.sections || [])
+        .map(s => `<option value="${s.section_id}">${s.section_id}</option>`)
+        .join("");
+      sectionSelect.addEventListener("change", () => {
+        const sec = (viewerBundle.sections || []).find(s => s.section_id === sectionSelect.value);
+        if (sec && (sec.sample_t_indices || []).length) {
+          tSlider.value = String(sec.sample_t_indices[0]);
+          setTimestep(sec.sample_t_indices[0]);
+        }
+        updateSidebar(sectionSelect.value);
+      });
+      if (viewerBundle.sections && viewerBundle.sections[0]) {
+        updateSidebar(viewerBundle.sections[0].section_id);
+      }
+
+      tSlider.addEventListener("input", () => setTimestep(parseInt(tSlider.value, 10)));
+      window.addEventListener("resize", resizeCanvases);
+      resizeCanvases();
+      statusMeta.textContent = `Session ${viewerBundle.session_id}`;
+      renderOverallScore();
+      drawScoreCurve();
+      drawActivationCurve();
+      setTimestep(parseInt(tSlider.value, 10));
+    }
+
+    init().catch(err => { statusMeta.textContent = err.message; console.error(err); });
+  </script>
+</body>
+</html>

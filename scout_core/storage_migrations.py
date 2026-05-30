@@ -7,6 +7,14 @@ from pathlib import Path
 
 import numpy as np
 
+KRAGEL_EMOTION_COLUMNS = [
+    "contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral",
+]
+LEGACY_EMOTION_COLUMNS = [
+    "anger", "disgust", "fear", "happy", "neutral", "sad", "negative_affect",
+]
+KNOWN_EMOTION_COLUMNS = list(dict.fromkeys(KRAGEL_EMOTION_COLUMNS + LEGACY_EMOTION_COLUMNS))
+
 NEURO_SCHEMA = """
 CREATE TABLE IF NOT EXISTS norm_bundle (
     norm_id TEXT PRIMARY KEY,
@@ -59,9 +67,63 @@ CREATE INDEX IF NOT EXISTS idx_roi_ts ON session_roi_timeseries(session_id, t_id
 CREATE INDEX IF NOT EXISTS idx_net_ts ON session_network_timeseries(session_id, t_idx);
 """
 
+DUAL_TRACK_SCHEMA = """
+CREATE TABLE IF NOT EXISTS session_dual_track_meta (
+    session_id          TEXT PRIMARY KEY,
+    baseline_session_id TEXT,
+    baseline_trs        INTEGER,
+    baseline_flag       TEXT,
+    template_source     TEXT,
+    thresholds_json     TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_engagement_trace (
+    session_id        TEXT NOT NULL,
+    t_idx             INTEGER NOT NULL,
+    engagement_score  REAL,
+    label             TEXT,
+    PRIMARY KEY (session_id, t_idx),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_emotion_trace (
+    session_id      TEXT NOT NULL,
+    t_idx           INTEGER NOT NULL,
+    contentment     REAL NOT NULL,
+    amusement       REAL NOT NULL,
+    surprise        REAL NOT NULL,
+    fear            REAL NOT NULL,
+    anger           REAL NOT NULL,
+    sadness         REAL NOT NULL,
+    neutral         REAL NOT NULL,
+    PRIMARY KEY (session_id, t_idx),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_engagement ON session_engagement_trace(session_id);
+CREATE INDEX IF NOT EXISTS idx_emotion ON session_emotion_trace(session_id);
+"""
+
 
 def ensure_neuro_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(NEURO_SCHEMA)
+
+
+def ensure_dual_track_schema(conn: sqlite3.Connection) -> None:
+    """Create dual-track tables if they don't exist. Safe to call multiple times."""
+    conn.executescript(DUAL_TRACK_SCHEMA)
+    _ensure_emotion_trace_columns(conn)
+
+
+def _ensure_emotion_trace_columns(conn: sqlite3.Connection) -> None:
+    """Add Kragel columns to older wide emotion tables without dropping rows."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(session_emotion_trace)").fetchall()}
+    for col in KRAGEL_EMOTION_COLUMNS:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE session_emotion_trace ADD COLUMN {col} REAL")
+            cols.add(col)
 
 
 def register_norm_bundle(
@@ -184,3 +246,96 @@ def insert_threshold_hits(conn: sqlite3.Connection, hits: list[dict]) -> None:
                 h["insight_text"],
             ),
         )
+
+
+# ---------------------------------------------------------------------------
+# Dual-track insert helpers
+# ---------------------------------------------------------------------------
+
+def upsert_dual_track_meta(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    baseline_session_id: str | None,
+    baseline_trs: int | None,
+    baseline_flag: str | None,
+    template_source: str | None,
+    thresholds_json: str,
+) -> None:
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO session_dual_track_meta (
+            session_id, baseline_session_id, baseline_trs, baseline_flag,
+            template_source, thresholds_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            session_id,
+            baseline_session_id,
+            baseline_trs,
+            baseline_flag,
+            template_source,
+            thresholds_json,
+            datetime.now(timezone.utc).isoformat(),
+        ),
+    )
+
+
+def insert_engagement_trace(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    scores: list,
+    labels: list,
+) -> None:
+    rows = [
+        (session_id, t, float(s) if s is not None else None, lbl)
+        for t, (s, lbl) in enumerate(zip(scores, labels))
+    ]
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO session_engagement_trace (session_id, t_idx, engagement_score, label)
+        VALUES (?, ?, ?, ?)
+        """,
+        rows,
+    )
+
+
+def insert_emotion_trace(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    cosine_scores: list,
+    template_names: list[str],
+) -> None:
+    name_to_idx = {n: i for i, n in enumerate(template_names)}
+
+    table_cols = {
+        row[1] for row in conn.execute("PRAGMA table_info(session_emotion_trace)").fetchall()
+    }
+    emotion_cols = [c for c in KNOWN_EMOTION_COLUMNS if c in table_cols]
+    if not emotion_cols:
+        raise ValueError("session_emotion_trace has no recognised emotion columns")
+
+    def _value_for(column: str, row: list) -> float:
+        if column in name_to_idx:
+            return float(row[name_to_idx[column]])
+        if column == "sad" and "sadness" in name_to_idx:
+            return float(row[name_to_idx["sadness"]])
+        return 0.0
+
+    rows = []
+    for t, row in enumerate(cosine_scores):
+        vals = [_value_for(col, row) for col in emotion_cols]
+        rows.append((session_id, t, *vals))
+
+    col_sql = ", ".join(emotion_cols)
+    placeholders = ", ".join("?" for _ in range(2 + len(emotion_cols)))
+    conn.executemany(
+        f"""
+        INSERT OR REPLACE INTO session_emotion_trace (
+            session_id, t_idx, {col_sql}
+        ) VALUES ({placeholders})
+        """,
+        rows,
+    )

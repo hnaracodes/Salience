@@ -1,0 +1,2 @@
+# Template .npy files are gitignored.
+# Run: python scripts/download_emotion_templates.py
