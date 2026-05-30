@@ -119,16 +119,33 @@ def main() -> None:
         }
 
     sample_times: list[int] = []
+    ms = bundle.get("marketing_scores") or {}
+    ms_by_section = {s.get("section_id"): s for s in (ms.get("sections") or [])}
+    act_ms_by_section = {
+        s.get("section_id"): s for s in ((ms.get("activation_analysis") or {}).get("sections") or [])
+    }
     sections = []
     for sec in bundle.get("section_report") or []:
+        sid = sec.get("section_id")
+        ms_row = ms_by_section.get(sid) or {}
+        act_row = act_ms_by_section.get(sid) or {}
+        act_sec = sec.get("activation") or {}
         sections.append({
-            "section_id": sec.get("section_id"),
+            "section_id": sid,
             "dwell_sec": sec.get("dwell_sec"),
             "flags": sec.get("flags"),
             "sample_t_indices": sec.get("sample_t_indices"),
             "top_elements": sec.get("top_elements"),
             "recommendations": sec.get("recommendations"),
             "heatmap_stats": sec.get("heatmap_stats"),
+            "marketing_score": ms_row.get("score"),
+            "marketing_rank": ms_row.get("rank"),
+            "marketing_label": ms_row.get("label"),
+            "activation_mean_raw": act_sec.get("mean_raw"),
+            "activation_mean_z": act_sec.get("mean_z"),
+            "activation_score": act_row.get("score"),
+            "activation_rank": act_row.get("rank"),
+            "activation_label": act_row.get("label"),
         })
         for t in sec.get("sample_t_indices") or []:
             sample_times.append(int(t))
@@ -172,6 +189,16 @@ def main() -> None:
         "heatmap_provenance": heatmap_provenance,
         "manifest_path": "../session_manifest.json",
         "analysis_bundle_path": "../analysis_bundle.json",
+        "marketing_scores": {
+            "overall_score": ms.get("overall_score"),
+            "display_curve": ms.get("display_curve"),
+            "drop_moments": ms.get("drop_moments"),
+            "focus_windows": ms.get("focus_windows"),
+            "session_metrics": ms.get("session_metrics"),
+            "disclaimer": ms.get("disclaimer"),
+            "activation_analysis": ms.get("activation_analysis"),
+        } if ms else None,
+        "activation_track": bundle.get("activation_track"),
     }
     (out_dir / "viewer_bundle.json").write_text(
         json.dumps(viewer_bundle, indent=2), encoding="utf-8",

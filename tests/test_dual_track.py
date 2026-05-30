@@ -6,16 +6,21 @@ no SQLite, no file I/O required. Run with: pytest tests/test_dual_track.py
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from scout_core.dual_track import (
     TEMPLATE_NAMES,
     apply_session_z_scores,
+    compute_activation_track,
     compute_emotion_track,
     compute_engagement_track,
+    compute_mean_activation,
     dominant_emotion_at_timestep,
     find_grounding_triggers,
+    load_network_indices,
     load_templates,
 )
 
@@ -131,6 +136,55 @@ class TestEngagementTrack:
     def test_baseline_trs_reported_correctly(self, random_preds, baseline_preds, van_idx, dmn_idx):
         result = compute_engagement_track(random_preds, baseline_preds, van_idx, dmn_idx)
         assert result["baseline_trs"] == baseline_preds.shape[0]
+
+
+# ---------------------------------------------------------------------------
+# Network index loading (Schaefer atlas)
+# ---------------------------------------------------------------------------
+
+class TestNetworkIndices:
+    def test_schaefer_vertex_csv_resolves_van_and_dmn(self):
+        csv_path = Path(__file__).resolve().parents[1] / "configs" / "vertex_regions.csv"
+        if not csv_path.is_file():
+            pytest.skip("vertex_regions.csv not present")
+        van_idx, dmn_idx, err = load_network_indices(vertex_csv=csv_path)
+        assert err is None, err
+        assert van_idx is not None and len(van_idx) > 0
+        assert dmn_idx is not None and len(dmn_idx) > 0
+        assert not np.intersect1d(van_idx, dmn_idx).size
+
+
+# ---------------------------------------------------------------------------
+# Track 3 — Activation
+# ---------------------------------------------------------------------------
+
+class TestActivationTrack:
+    def test_mean_activation_shape(self, random_preds):
+        raw = compute_mean_activation(random_preds)
+        assert raw.shape == (N_TIMESTEPS,)
+        assert np.all(raw >= 0)
+
+    def test_baseline_relative_mode(self, random_preds, baseline_preds):
+        result = compute_activation_track(random_preds, baseline_preds)
+        assert result["comparison_mode"] == "baseline_relative"
+        assert result["baseline_flag"] is None
+        assert len(result["raw_scores"]) == N_TIMESTEPS
+        assert len(result["scores"]) == N_TIMESTEPS
+        assert "baseline_z" in result
+
+    def test_no_baseline_uses_session_z(self, random_preds):
+        result = compute_activation_track(random_preds, None)
+        assert result["comparison_mode"] == "session_relative"
+        assert result["baseline_flag"] == "no_baseline_provided"
+        assert np.allclose(result["scores"], result["session_z"], atol=1e-5)
+
+    def test_higher_activation_yields_higher_baseline_z(self, baseline_preds):
+        T = 20
+        preds = np.zeros((T, N_VERTICES), dtype=np.float32)
+        preds[10:] = 5.0
+        result = compute_activation_track(preds, baseline_preds)
+        scores = np.array(result["scores"], dtype=np.float32)
+        assert scores[10:].mean() > scores[:10].mean()
 
 
 # ---------------------------------------------------------------------------

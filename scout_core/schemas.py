@@ -129,6 +129,7 @@ class AnalysisBundle(BaseModel):
         1 — parcellation + threshold_hits only (analyze_session.py).
         2 — adds ``events`` list with neural spike grounding (feature isolation).
         3 — website session: section_report, session_capture, marketing_narrative.
+        4 — adds ``marketing_scores`` (0–100 display curve + session rubric).
     """
 
     schema_version: int = 1

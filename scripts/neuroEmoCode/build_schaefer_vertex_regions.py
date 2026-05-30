@@ -9,7 +9,7 @@ Default: load CBIG FreeSurfer5.3 surface `.annot` files on fsaverage5 (via nibab
 Fallback: volumetric projection only with --allow-volume-projection-fallback.
 
 Usage:
-    python scripts/build_schaefer_vertex_regions.py --n-rois 400 --yeo-networks 7 \\
+    python scripts/neuroEmoCode/build_schaefer_vertex_regions.py --n-rois 400 --yeo-networks 7 \\
         --data-dir scout_data/atlases/cbig_schaefer2018
 """
 
@@ -23,14 +23,14 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import yaml
 
-from scout_core.schaefer_surface_labels import (
+from scout_core.neuroEmoCode.schaefer_surface_labels import (
     DEFAULT_ALIGNMENT_REPORT,
     MAX_FILLED_UNASSIGNED_SURFACE,
     MAX_FILLED_UNASSIGNED_SURFACE_ANNOT,
@@ -574,7 +574,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--vertex-equivalence-report",
         type=Path,
         default=None,
-        help="Pinned vertex equivalence report path. Defaults to scout_data/neuroemo/vertex_equivalence_report.json",
+        help="Pinned vertex equivalence report path. Defaults to scout_data/neuroEmoCode/vertex_equivalence_report.json",
     )
     return parser
 

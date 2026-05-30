@@ -21,7 +21,7 @@ VERIFIED_PROOF_STATUSES = ("mesh_identity_verified", "projection_equivalence_ver
 ALL_PROOF_STATUSES = (*VERIFIED_PROOF_STATUSES, "contract_only")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VERTEX_EQUIVALENCE_REPORT = (
-    PROJECT_ROOT / "scout_data" / "neuroemo" / "vertex_equivalence_report.json"
+    PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "vertex_equivalence_report.json"
 )
 
 

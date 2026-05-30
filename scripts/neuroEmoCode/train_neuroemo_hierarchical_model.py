@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -25,7 +26,11 @@ from typing import Any
 import joblib
 import numpy as np
 
-from scripts.train_neuroemo_emotion_model import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from train_neuroemo_emotion_model import (
     DEFAULT_ATLAS_MANIFEST,
     DEFAULT_TRAIN_NPZ,
     DEFAULT_VERTEX_CSV,
@@ -37,9 +42,7 @@ from scripts.train_neuroemo_emotion_model import (
     _make_estimator,
     _predict_probability_matrix,
 )
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "models"
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR / "neuroemo_hierarchical_emotion_model.joblib"
 DEFAULT_METRICS_PATH = DEFAULT_MODEL_DIR / "neuroemo_hierarchical_emotion_metrics.json"
 DEFAULT_HIERARCHY = "calm=calm;negative=afraid,depressed;positive=delighted,excited"
@@ -336,7 +339,7 @@ def _evaluate_group_cv(data: Any, cfg: HierarchicalConfig, hidx: dict[str, Any])
 
 
 def train_model_from_npz(train_npz: Path, cfg: HierarchicalConfig) -> tuple[dict[str, Any], dict[str, Any]]:
-    from scout_core.roi_features import summarise_roi_feature_spec
+    from scout_core.neuroEmoCode.roi_features import summarise_roi_feature_spec
 
     data = _load_training_data(train_npz, _base_train_config(cfg))
     hierarchy = _parse_hierarchy(cfg.hierarchy)

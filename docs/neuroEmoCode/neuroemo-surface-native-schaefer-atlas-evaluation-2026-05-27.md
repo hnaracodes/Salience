@@ -72,8 +72,9 @@ These numbers confirm the **atlas pipeline** succeeded before training—not cla
 
 | Statistic | Value |
 | --- | --- |
-| `proof_status` | `mesh_identity_verified` |
-| `reference_kind` | `upstream_source_mirror` |
+| `proof_status` | `projection_equivalence_verified` |
+| `projection_comparison` | verified (`max_abs_diff=0.0`, `allclose_atol=1e-05`) |
+| `reference_kind` | `local_tribev2_package` |
 | `mesh` | `fsaverage5` |
 | `vertex_order` | `lh_then_rh_fsaverage5` |
 | `report_sha256` | `25ced97a324a16f4cbf07261e4e613cbb1897ff792d1af9f92a0235bf7c58a8c` |

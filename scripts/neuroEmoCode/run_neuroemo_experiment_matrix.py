@@ -2,7 +2,7 @@
 """Build and optionally run NeuroEmo experiment matrices.
 
 This runner covers phases 2-end of
-`.cursor/plans/neuroemo_remaining_high_leverage_opportunities_2026-05-27.plan.md`.
+`.cursor/plans/neuroEmoCode/neuroemo_remaining_high_leverage_opportunities_2026-05-27.plan.md`.
 It intentionally does not run or mutate the Modal vertex-equivalence proof
 workflow from phase 1.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -21,13 +22,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_TRAIN_NPZ = Path("scout_data/neuroemo/tribev2_surface/neuroemo_tribev2_train.npz")
-DEFAULT_OUTPUT_DIR = Path("scout_data/neuroemo/models/2026-05-27_surface_annot_matrix")
-DEFAULT_TIMING_DIR = Path("scout_data/neuroemo/timing_grid")
-DEFAULT_PREPROCESSED_DIR = Path("scout_data/neuroemo/tribev2_surface_preprocessed")
-DEFAULT_PREPROC_CACHE_DIR = Path("scout_data/neuroemo/preprocessed")
-DEFAULT_PROJECTED_BASELINE_DIR = Path("scout_data/neuroemo/models/2026-05-25_postfix_matrix")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_TRAIN_NPZ = Path("scout_data/neuroEmoCode/tribev2_surface/neuroemo_tribev2_train.npz")
+DEFAULT_OUTPUT_DIR = Path("scout_data/neuroEmoCode/models/2026-05-27_surface_annot_matrix")
+DEFAULT_TIMING_DIR = Path("scout_data/neuroEmoCode/timing_grid")
+DEFAULT_PREPROCESSED_DIR = Path("scout_data/neuroEmoCode/tribev2_surface_preprocessed")
+DEFAULT_PREPROC_CACHE_DIR = Path("scout_data/neuroEmoCode/preprocessed")
+DEFAULT_PROJECTED_BASELINE_DIR = Path("scout_data/neuroEmoCode/models/2026-05-25_postfix_matrix")
 
 
 @dataclass(frozen=True)
@@ -100,7 +101,7 @@ def surface_postfix_specs(output_dir: Path, train_npz: Path) -> list[RunSpec]:
         model_path = _model_path(output_dir, name)
         metrics_path = _metrics_path(output_dir, name)
         cmd = (
-            *_python("scripts/train_neuroemo_emotion_model.py"),
+            *_python("scripts/neuroEmoCode/train_neuroemo_emotion_model.py"),
             "--model-type",
             model_type,
             *_base_train_args(train_npz=train_npz, model_path=model_path, metrics_path=metrics_path),
@@ -125,7 +126,7 @@ def surface_postfix_specs(output_dir: Path, train_npz: Path) -> list[RunSpec]:
             description="Small MLP 5-class surface-native baseline.",
             commands=(
                 (
-                    *_python("scripts/train_neuroemo_mlp_model.py"),
+                    *_python("scripts/neuroEmoCode/train_neuroemo_mlp_model.py"),
                     "--hidden-layers",
                     "64",
                     "--alpha",
@@ -146,7 +147,7 @@ def surface_postfix_specs(output_dir: Path, train_npz: Path) -> list[RunSpec]:
         model_path = _model_path(output_dir, name)
         metrics_path = _metrics_path(output_dir, name)
         cmd = (
-            *_python("scripts/train_neuroemo_specialist_models.py"),
+            *_python("scripts/neuroEmoCode/train_neuroemo_specialist_models.py"),
             "--calibration",
             calibration,
             *_base_train_args(train_npz=train_npz, model_path=model_path, metrics_path=metrics_path),
@@ -171,7 +172,7 @@ def surface_postfix_specs(output_dir: Path, train_npz: Path) -> list[RunSpec]:
             description="Binary valence MLP; calm and neutral excluded, remaining labels merged to positive/negative.",
             commands=(
                 (
-                    *_python("scripts/train_neuroemo_mlp_model.py"),
+                    *_python("scripts/neuroEmoCode/train_neuroemo_mlp_model.py"),
                     "--hidden-layers",
                     "64",
                     "--alpha",
@@ -201,7 +202,7 @@ def timing_grid_specs(output_dir: Path, timing_dir: Path) -> list[RunSpec]:
             prep_dir = timing_dir / f"lag{lag_s:g}s_drop{drop_trs}tr"
             train_npz = prep_dir / "neuroemo_tribev2_train.npz"
             prep_cmd = (
-                *_python("scripts/prepare_neuroemo_tribev2.py"),
+                *_python("scripts/neuroEmoCode/prepare_neuroemo_tribev2.py"),
                 "--skip-download",
                 "--out-dir",
                 _rel(prep_dir),
@@ -215,7 +216,7 @@ def timing_grid_specs(output_dir: Path, timing_dir: Path) -> list[RunSpec]:
                 model_path = _model_path(output_dir, name)
                 metrics_path = _metrics_path(output_dir, name)
                 train_cmd = (
-                    *_python("scripts/train_neuroemo_emotion_model.py"),
+                    *_python("scripts/neuroEmoCode/train_neuroemo_emotion_model.py"),
                     "--model-type",
                     "logistic_saga",
                     *_base_train_args(
@@ -254,7 +255,7 @@ def dynamic_feature_specs(output_dir: Path, train_npz: Path) -> list[RunSpec]:
         model_path = _model_path(output_dir, name)
         metrics_path = _metrics_path(output_dir, name)
         cmd = (
-            *_python("scripts/train_neuroemo_emotion_model.py"),
+            *_python("scripts/neuroEmoCode/train_neuroemo_emotion_model.py"),
             "--model-type",
             "logistic_saga",
             *_base_train_args(
@@ -290,7 +291,7 @@ def preprocessing_roi_ablation_specs(
         model_path = _model_path(output_dir, name)
         metrics_path = _metrics_path(output_dir, name)
         cmd = (
-            *_python("scripts/train_neuroemo_emotion_model.py"),
+            *_python("scripts/neuroEmoCode/train_neuroemo_emotion_model.py"),
             "--model-type",
             "logistic_saga",
             *_base_train_args(
@@ -313,7 +314,7 @@ def preprocessing_roi_ablation_specs(
 
     prep_train_npz = preprocessed_dir / "neuroemo_tribev2_train.npz"
     prep_cmd = (
-        *_python("scripts/prepare_neuroemo_tribev2.py"),
+        *_python("scripts/neuroEmoCode/prepare_neuroemo_tribev2.py"),
         "--skip-download",
         "--preprocess-bold",
         "--out-dir",
@@ -324,7 +325,7 @@ def preprocessing_roi_ablation_specs(
     model_path = _model_path(output_dir, "preprocessed_logistic_saga_5class_10tr")
     metrics_path = _metrics_path(output_dir, "preprocessed_logistic_saga_5class_10tr")
     train_cmd = (
-        *_python("scripts/train_neuroemo_emotion_model.py"),
+        *_python("scripts/neuroEmoCode/train_neuroemo_emotion_model.py"),
         "--model-type",
         "logistic_saga",
         *_base_train_args(train_npz=prep_train_npz, model_path=model_path, metrics_path=metrics_path),
@@ -349,7 +350,7 @@ def structured_decoding_specs(output_dir: Path, train_npz: Path) -> list[RunSpec
         model_path = _model_path(output_dir, name)
         metrics_path = _metrics_path(output_dir, name)
         cmd = (
-            *_python("scripts/train_neuroemo_hierarchical_model.py"),
+            *_python("scripts/neuroEmoCode/train_neuroemo_hierarchical_model.py"),
             "--model-type",
             model_type,
             *_base_train_args(train_npz=train_npz, model_path=model_path, metrics_path=metrics_path),
@@ -396,7 +397,7 @@ def _command_text(command: tuple[str, ...]) -> str:
 
 
 def _prepared_train_npz_from_command(command: tuple[str, ...]) -> Path | None:
-    if "scripts/prepare_neuroemo_tribev2.py" not in command:
+    if "scripts/neuroEmoCode/prepare_neuroemo_tribev2.py" not in command:
         return None
     try:
         out_dir = Path(command[command.index("--out-dir") + 1])
@@ -454,7 +455,16 @@ def write_manifest(specs: list[RunSpec], path: Path, *, executed: bool) -> None:
     print(f"Manifest: {path}")
 
 
+def _subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    root = str(PROJECT_ROOT)
+    existing = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = root if not existing else f"{root}{os.pathsep}{existing}"
+    return env
+
+
 def execute_specs(specs: list[RunSpec], *, skip_existing: bool) -> None:
+    env = _subprocess_env()
     for spec in specs:
         metrics_path = PROJECT_ROOT / spec.metrics_path
         if skip_existing and metrics_path.is_file():
@@ -467,7 +477,7 @@ def execute_specs(specs: list[RunSpec], *, skip_existing: bool) -> None:
                 print(f"  [skip prep] {prepared_npz} already exists")
                 continue
             print(f"  $ {_command_text(command)}")
-            subprocess.run(command, cwd=PROJECT_ROOT, check=True)
+            subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=env)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -487,7 +497,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--manifest-json",
         type=Path,
-        default=Path("scout_data/neuroemo/models/neuroemo_remaining_high_leverage_matrix_manifest.json"),
+        default=Path("scout_data/neuroEmoCode/models/neuroemo_remaining_high_leverage_matrix_manifest.json"),
     )
     parser.add_argument("--execute", action="store_true", help="Run commands instead of only writing the manifest.")
     parser.add_argument("--skip-existing", action="store_true", help="Skip run specs whose metrics JSON already exists.")

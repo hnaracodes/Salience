@@ -83,8 +83,8 @@ def test_select_spikes_non_anger_emotion_triggers():
     assert spikes[1]["triggers"]["emotion_channel"] == "fear"
 
 
-def test_select_spikes_picks_highest_emotion_channel_per_timestep():
-    """When multiple emotion channels fire at the same timestep, the highest wins."""
+def test_select_spikes_all_qualifying_emotion_channels_per_timestep():
+    """When multiple emotion channels fire at the same timestep, emit one spike each."""
     bundle = {
         "grounding_triggers": [
             {"t_idx": 5, "trigger_type": "emotion", "channel": "sadness", "value": 2.1},
@@ -93,11 +93,13 @@ def test_select_spikes_picks_highest_emotion_channel_per_timestep():
         ],
     }
     spikes = _select_spikes(bundle, eng_min=2.0, emotion_z_min=2.0, combine="or", cooldown_trs=0, max_spikes=0)
-    assert len(spikes) == 1
-    assert spikes[0]["triggers"]["emotion_channel"] == "anger"
-    assert spikes[0]["triggers"]["emotion_z"] == pytest.approx(3.0)
-    # anger is winner → backward compat key also present.
-    assert spikes[0]["triggers"]["kragel_anger_z"] == pytest.approx(3.0)
+    assert len(spikes) == 2
+    assert {s["triggers"]["emotion_channel"] for s in spikes} == {"anger", "sadness"}
+    anger = next(s for s in spikes if s["triggers"]["emotion_channel"] == "anger")
+    assert anger["triggers"]["emotion_z"] == pytest.approx(3.0)
+    assert anger["triggers"]["kragel_anger_z"] == pytest.approx(3.0)
+    sadness = next(s for s in spikes if s["triggers"]["emotion_channel"] == "sadness")
+    assert sadness["triggers"]["emotion_z"] == pytest.approx(2.1)
 
 
 def test_select_spikes_requires_both_signals_for_and_mode():
@@ -112,10 +114,14 @@ def test_select_spikes_requires_both_signals_for_and_mode():
 
     spikes = _select_spikes(bundle, eng_min=2.0, emotion_z_min=2.0, combine="and", cooldown_trs=0, max_spikes=0)
 
-    assert len(spikes) == 1
-    assert spikes[0]["t_idx"] == 1
-    assert spikes[0]["triggers"]["engagement_score"] == pytest.approx(2.2)
-    assert spikes[0]["triggers"]["kragel_anger_z"] == pytest.approx(2.4)
+    assert len(spikes) == 2
+    assert all(spike["t_idx"] == 1 for spike in spikes)
+    eng = [s for s in spikes if "engagement_score" in s["triggers"]]
+    anger = [s for s in spikes if s["triggers"].get("emotion_channel") == "anger"]
+    assert len(eng) == 1
+    assert len(anger) == 1
+    assert eng[0]["triggers"]["engagement_score"] == pytest.approx(2.2)
+    assert anger[0]["triggers"]["kragel_anger_z"] == pytest.approx(2.4)
 
 
 def test_select_spikes_applies_cooldown_and_max_spikes():
@@ -251,6 +257,51 @@ def test_run_grounding_step_records_skip_reason_when_heatmap_missing(tmp_path):
     assert len(events) == 1
     assert events[0]["grounding"] is None
     assert events[0]["grounding_skip_reason"] == "heatmap_not_found"
+
+
+def test_run_grounding_step_multi_emotion_same_timestep(tmp_path):
+    """Each qualifying emotion at the same TR gets its own grounded event."""
+    session_dir = tmp_path / "session"
+    heatmaps_dir = session_dir / "heatmaps"
+    heatmaps_dir.mkdir(parents=True)
+
+    heatmap = np.zeros((50, 50), dtype=np.float32)
+    heatmap[5:15, 5:15] = 4.0
+    np.save(heatmaps_dir / "t_3.npy", heatmap)
+
+    manifest = {
+        "dom_snapshots": [
+            {
+                "t_idx": 3,
+                "scrollY": 0,
+                "scrollX": 0,
+                "elements": [
+                    {"dom_id": "#btn", "tag": "BUTTON", "bbox": [4, 4, 12, 12], "is_intersecting_viewport": True},
+                ],
+            }
+        ]
+    }
+    (session_dir / "session_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    bundle = {
+        "grounding_triggers": [
+            {"t_idx": 3, "trigger_type": "emotion", "channel": "sadness", "value": 2.1},
+            {"t_idx": 3, "trigger_type": "emotion", "channel": "fear", "value": 2.5},
+        ],
+    }
+    iso_cfg = {
+        "trigger": {"engagement_score_min": 2.0, "emotion_z_min": 2.0, "combine": "or"},
+        "spike_policy": {"max_spikes_per_session": 20, "cooldown_trs": 0},
+        "heatmaps_dir": "heatmaps",
+    }
+
+    events = _run_grounding_step(session_dir, bundle, iso_cfg)
+
+    assert len(events) == 2
+    channels = {ev["triggers"]["emotion_channel"] for ev in events}
+    assert channels == {"sadness", "fear"}
+    assert all(ev["grounding"]["dom_id"] == "#btn" for ev in events)
+    assert all(ev["grounding_skip_reason"] is None for ev in events)
 
 
 def test_run_grounding_step_records_skip_reason_when_no_snapshot_exists(tmp_path):

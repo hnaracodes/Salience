@@ -12,7 +12,7 @@ from scout_core.parcellation import (
     validate_vertex_table,
 )
 from scout_core.parcellation import EXPECTED_FSAVERAGE5_HEMI_VERTICES
-from scout_core.schaefer_surface_labels import (
+from scout_core.neuroEmoCode.schaefer_surface_labels import (
     remap_to_contiguous_parcel_ids,
     reorder_hemisphere_labels_by_coords,
 )

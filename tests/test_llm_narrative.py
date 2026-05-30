@@ -29,6 +29,21 @@ def test_build_narrative_payload_excludes_dom_elements():
     assert payload["section_report"][0]["section_id"] == "hero"
 
 
+def test_build_narrative_payload_includes_marketing_scores():
+    bundle = {
+        "session_id": "x",
+        "section_report": [{"section_id": "hero", "dwell_sec": 5.0, "flags": [], "recommendations": []}],
+        "marketing_scores": {
+            "overall_score": 72,
+            "session_metrics": [{"key": "opening", "label": "Opening", "score": 80, "summary": "ok"}],
+            "sections": [{"section_id": "hero", "score": 74, "rank": 1, "label": "strongest"}],
+            "display_curve": {"avg_score": 65.0},
+        },
+    }
+    payload = build_narrative_payload(bundle)
+    assert payload["marketing_scores"]["overall_score"] == 72
+
+
 def test_template_narrative():
     bundle = {
         "section_report": [

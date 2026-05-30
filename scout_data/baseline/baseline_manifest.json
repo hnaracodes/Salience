@@ -1,0 +1,10 @@
+{
+  "source_video": "gray background.mp4",
+  "preds_path": "scout_data\\baseline\\preds_baseline.npz",
+  "shape": [
+    41,
+    20484
+  ],
+  "purpose": "dual_track_baseline",
+  "notes": "Gray-background neutral baseline for VAN/DMN and mean activation Z-scores."
+}

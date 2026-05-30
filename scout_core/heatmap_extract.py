@@ -29,13 +29,35 @@ def fps_from_manifest(session_dir: Path, default_fps: float = 1.0) -> float:
     return default_fps
 
 
-def extract_heatmap_modal(frame_path: Path, capture_h: int, capture_w: int) -> np.ndarray:
-    """Call ``TribeInference.extract_frame_attention`` on Modal."""
-    from tribe import TribeInference
+def extract_heatmap_modal(
+    frame_path: Path,
+    capture_h: int,
+    capture_w: int,
+    *,
+    inference: Any | None = None,
+) -> np.ndarray:
+    """Call ``TribeInference.extract_frame_attention`` on Modal.
 
-    inference = TribeInference()
+    When ``inference`` is provided, the caller must already be inside
+    ``modal.enable_output()`` + ``app.run()`` (one context for many frames).
+    """
+    from tribe import TribeInference, app
+
+    import modal
+
     frame_bytes = frame_path.read_bytes()
-    result_bytes = inference.extract_frame_attention.remote(frame_bytes, capture_h, capture_w)
+
+    def _remote_call(inst: Any) -> bytes:
+        return inst.extract_frame_attention.remote(frame_bytes, capture_h, capture_w)
+
+    if inference is not None:
+        result_bytes = _remote_call(inference)
+    else:
+        with modal.enable_output():
+            with app.run():
+                inst = TribeInference()
+                result_bytes = _remote_call(inst)
+
     return np.load(io.BytesIO(result_bytes)).astype(np.float32)
 
 

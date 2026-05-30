@@ -7,14 +7,14 @@ set is small relative to typical deep-learning needs.
 
 Default behavior:
     - Excludes the derived neutral class.
-    - Uses Schaefer ROI features via scripts/train_neuroemo_emotion_model.py.
+    - Uses Schaefer ROI features via scripts/neuroEmoCode/train_neuroemo_emotion_model.py.
     - Aggregates 2 contiguous TRs per sample before ROI reduction.
     - Uses subject-held-out cross-validation.
 
 Usage:
-    python scripts/train_neuroemo_mlp_model.py
-    python scripts/train_neuroemo_mlp_model.py --temporal-window-trs 10
-    python scripts/train_neuroemo_mlp_model.py --hidden-layers 128,64 --alpha 0.01
+    python scripts/neuroEmoCode/train_neuroemo_mlp_model.py
+    python scripts/neuroEmoCode/train_neuroemo_mlp_model.py --temporal-window-trs 10
+    python scripts/neuroEmoCode/train_neuroemo_mlp_model.py --hidden-layers 128,64 --alpha 0.01
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import sys
 import time
 import warnings
 from dataclasses import asdict, dataclass, replace
@@ -31,7 +32,11 @@ from typing import Any
 import joblib
 import numpy as np
 
-from scripts.train_neuroemo_emotion_model import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from train_neuroemo_emotion_model import (
     DEFAULT_ATLAS_MANIFEST,
     DEFAULT_TRAIN_NPZ,
     DEFAULT_VERTEX_CSV,
@@ -44,7 +49,7 @@ from scripts.train_neuroemo_emotion_model import (
     _predict_probability_matrix,
 )
 
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "models"
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR / "neuroemo_mlp_emotion_model.joblib"
 DEFAULT_METRICS_PATH = DEFAULT_MODEL_DIR / "neuroemo_mlp_emotion_metrics.json"
 
@@ -586,7 +591,7 @@ def train_model_from_npz(train_npz: Path, cfg: MlpTrainConfig) -> tuple[dict[str
         "training_metadata": data.metadata,
     }
     if data.roi_spec is not None:
-        from scout_core.roi_features import summarise_roi_feature_spec
+        from scout_core.neuroEmoCode.roi_features import summarise_roi_feature_spec
 
         artifact["roi_reducers"] = list(data.roi_spec.reducers)
         artifact["roi_spec"] = summarise_roi_feature_spec(data.roi_spec, include_vertex_map=True)
@@ -622,7 +627,7 @@ def train_model_from_npz(train_npz: Path, cfg: MlpTrainConfig) -> tuple[dict[str
         ],
     }
     if data.roi_spec is not None:
-        from scout_core.roi_features import summarise_roi_feature_spec
+        from scout_core.neuroEmoCode.roi_features import summarise_roi_feature_spec
 
         metrics["roi_reducers"] = list(data.roi_spec.reducers)
         metrics["roi_spec"] = summarise_roi_feature_spec(data.roi_spec)

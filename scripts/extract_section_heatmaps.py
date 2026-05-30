@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import yaml
@@ -52,17 +53,31 @@ from scout_core.session_align import find_walkthrough_video
 _SECTION_CFG = PROJECT_ROOT / "configs" / "section_analytics.yaml"
 
 
+def _resolve_ffmpeg() -> str | None:
+    """Return ffmpeg executable: system PATH first, then imageio-ffmpeg bundle."""
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        return None
+
+
 def _extract_frame_ffmpeg(video: Path, t_idx: int, fps: float, out_jpg: Path) -> tuple[bool, str]:
     """Extract a single video frame via ffmpeg.
 
     Returns ``(success, reason)`` where ``reason`` is empty on success or
     a short diagnostic string on failure.
     """
-    if shutil.which("ffmpeg") is None:
+    ffmpeg = _resolve_ffmpeg()
+    if ffmpeg is None:
         return False, "ffmpeg_not_installed"
     sec = t_idx / max(fps, 1e-6)
     cmd = [
-        "ffmpeg", "-y", "-ss", str(sec), "-i", str(video),
+        ffmpeg, "-y", "-ss", str(sec), "-i", str(video),
         "-frames:v", "1", "-q:v", "2", str(out_jpg),
     ]
     try:
@@ -98,17 +113,19 @@ def _sample_timesteps_from_bundle(
         for sec in bundle["section_report"]:
             for t in sec.get("sample_t_indices") or []:
                 seen.add(int(t))
+        for tr in bundle.get("grounding_triggers") or []:
+            seen.add(int(tr["t_idx"]))
         return sorted(seen)
     cfg = load_section_config(_SECTION_CFG)
     report = run_section_analytics(
         session_dir, bundle, attach_heatmaps=False,
     )
-    return attach_sample_timesteps(
+    return sorted(set(attach_sample_timesteps(
         report,
         bundle,
         max_per_section=int(cfg.get("max_samples_per_section", 3)),
         max_total=int(cfg.get("max_heatmaps_per_session", 20)),
-    )
+    )) | {int(tr["t_idx"]) for tr in bundle.get("grounding_triggers") or []})
 
 
 def _refresh_section_report(session_dir: Path) -> None:
@@ -180,7 +197,9 @@ def main() -> None:
     n_placeholder_written = 0
     n_reused = 0
 
-    for t in t_list:
+    def _process_timestep(t: int, *, modal_inference: Any | None = None) -> None:
+        nonlocal n_frames_ok, n_frames_fail, n_modal_written, n_placeholder_written, n_reused
+
         out_npy = heatmaps_dir / f"t_{t}.npy"
         jpg = frames_dir / f"t_{t}.jpg"
 
@@ -195,7 +214,7 @@ def main() -> None:
                 n_frames_fail += 1
 
         if args.dry_run:
-            continue
+            return
 
         # Determine if we should overwrite an existing heatmap.
         existing_entry = existing_hm.get(t, {})
@@ -206,14 +225,13 @@ def main() -> None:
         if out_npy.is_file() and not should_overwrite:
             src_label = existing_entry.get("source") or ("placeholder" if is_placeholder else "real")
             print(f"  t={t}: heatmap exists ({src_label}), skip — use --force to overwrite")
-            # Preserve existing entry metadata.
             reuse_entry = dict(existing_entry)
             reuse_entry["t_idx"] = t
             if "heatmap_path" not in reuse_entry:
                 reuse_entry["heatmap_path"] = out_npy.name
             hm_entries.append(reuse_entry)
             n_reused += 1
-            continue
+            return
 
         if args.uniform_heatmap:
             _write_uniform_heatmap(out_npy, h, w)
@@ -225,15 +243,15 @@ def main() -> None:
                 "placeholder": True,
             })
             n_placeholder_written += 1
-            continue
+            return
 
         if not jpg.is_file():
             print(f"  t={t}: no frame — add video or use --uniform-heatmap")
-            continue
+            return
 
         if use_modal:
             try:
-                heatmap = extract_heatmap_modal(jpg, h, w)
+                heatmap = extract_heatmap_modal(jpg, h, w, inference=modal_inference)
                 np.save(out_npy, heatmap)
                 print(f"  t={t}: Modal heatmap → {out_npy.name}")
                 hm_entries.append({
@@ -249,6 +267,19 @@ def main() -> None:
                 print(f"  t={t}: Modal failed ({exc}) — use --uniform-heatmap for offline tests")
         else:
             print(f"  t={t}: frame ready; pass --modal to run extract_frame_attention")
+
+    if use_modal:
+        import modal
+        from tribe import TribeInference, app
+
+        with modal.enable_output():
+            with app.run():
+                inference = TribeInference()
+                for t in t_list:
+                    _process_timestep(t, modal_inference=inference)
+    else:
+        for t in t_list:
+            _process_timestep(t)
 
     # Merge into existing manifest so earlier provenance is not lost.
     if hm_entries and not args.dry_run:

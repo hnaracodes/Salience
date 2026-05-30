@@ -1,15 +1,19 @@
-"""Zero-Shot Dual-Track Engine — engagement Z-score + emotion cosine similarity.
+"""Zero-Shot Dual-Track Engine — engagement, activation, and emotion scoring.
 
-Both tracks operate on raw TRIBE v2 preds[T, 20484] with no trained model.
+All tracks operate on raw TRIBE v2 preds[T, 20484] with no trained model.
 
 Track 1 — Visual Engagement:
-    Z-scores VAN and DMN network means against a plain-text reading baseline, then
+    Z-scores VAN and DMN network means against a gray-background baseline, then
     computes engagement_score = Z(VAN) - Z(DMN) per timestep.
 
 Track 2 — Discrete Emotion:
     Computes cosine similarity between each normalised timestep vector and 7
     pre-downloaded Kragel & LaBar (2015) NeuroVault templates, then session-relative
     Z-scores per emotion channel for grounding triggers.
+
+Track 3 — Mean Vertex Activation (attention proxy):
+    ViralAnalyser-style mean(|preds[t]|) per TR, with baseline-relative Z when
+    preds_baseline is available, otherwise session-relative Z.
 
 See configs/dual_track.yaml for thresholds and template paths.
 See scripts/download_emotion_templates.py to fetch and preprocess templates.
@@ -32,14 +36,31 @@ TEMPLATE_NAMES = ["contentment", "amusement", "surprise", "fear", "anger", "sadn
 # Network index helpers
 # ---------------------------------------------------------------------------
 
+def _network_name_mask(names: np.ndarray, target: str) -> np.ndarray:
+    """Match Schaefer subnetwork names (e.g. Default_PFC) to coarse Yeo-7 keys."""
+    target = target.strip()
+    if not target:
+        return np.zeros(len(names), dtype=bool)
+    as_str = np.asarray(names).astype(str)
+    exact = as_str == target
+    if np.any(exact):
+        return exact
+    # Schaefer CSV stores subnetworks like SalVentAttn_ParOper, Default_PFC.
+    prefix = f"{target}_"
+    return np.char.startswith(as_str, prefix)
+
+
 def load_network_indices(
     vertex_csv: Path | None = None,
-    van_name: str = "VentralAttention",
-    dmn_name: str = "DefaultMode",
+    van_name: str = "SalVentAttn",
+    dmn_name: str = "Default",
 ) -> tuple[np.ndarray | None, np.ndarray | None, str | None]:
     """Return (van_idx, dmn_idx, error_message).
 
-    Returns (None, None, reason) when the CSV is missing or lacks yeo_network_name.
+    Uses configs/vertex_regions.csv (Schaefer 400 @ fsaverage5). Network names may
+    be coarse Yeo-7 keys (SalVentAttn, Default) or exact subnetwork labels.
+
+    Returns (None, None, reason) when the CSV is missing or lacks matching vertices.
     Caller should check the error_message and suppress Track 1 accordingly.
     """
     path = vertex_csv or DEFAULT_VERTEX_CSV
@@ -52,13 +73,14 @@ def load_network_indices(
     except Exception as exc:
         return None, None, f"Failed to load vertex table: {exc}"
 
-    van_mask = table.yeo_network_name == van_name
-    dmn_mask = table.yeo_network_name == dmn_name
+    names = np.asarray(table.yeo_network_name).astype(str)
+    van_mask = _network_name_mask(names, van_name)
+    dmn_mask = _network_name_mask(names, dmn_name)
 
     if not np.any(van_mask):
-        return None, None, f"No vertices found with yeo_network_name='{van_name}'"
+        return None, None, f"No vertices found matching network '{van_name}'"
     if not np.any(dmn_mask):
-        return None, None, f"No vertices found with yeo_network_name='{dmn_name}'"
+        return None, None, f"No vertices found matching network '{dmn_name}'"
 
     return (
         table.vertex_index[van_mask].astype(np.intp),
@@ -179,6 +201,95 @@ def compute_engagement_track(
         "baseline_flag": None,
         "thresholds": {"high": threshold_high, "low": threshold_low},
     }
+
+
+# ---------------------------------------------------------------------------
+# Track 3 — Mean Vertex Activation (attention proxy)
+# ---------------------------------------------------------------------------
+
+def compute_mean_activation(preds: np.ndarray) -> np.ndarray:
+    """ViralAnalyser-style scalar activation per TR: mean(|preds[t]|) across vertices."""
+    preds = np.asarray(preds, dtype=np.float32)
+    return np.mean(np.abs(preds), axis=1).astype(np.float32)
+
+
+def compute_activation_track(
+    preds: np.ndarray,
+    preds_baseline: np.ndarray | None,
+    *,
+    min_baseline_trs: int = 30,
+    threshold_high: float = 1.0,
+    threshold_low: float = -1.0,
+) -> dict[str, Any]:
+    """Compute mean vertex activation with baseline- or session-relative Z scores.
+
+    ``scores`` is the primary comparison metric:
+    - baseline-relative Z when preds_baseline has enough TRs
+    - otherwise session-relative Z (always available via ``session_z``)
+
+    ``raw_scores`` holds unsigned mean(|preds|) for display layers (marketing, viewer).
+    """
+    preds = np.asarray(preds, dtype=np.float32)
+    T = preds.shape[0]
+    raw = compute_mean_activation(preds)
+    mu_session = float(raw.mean())
+    sigma_session = float(raw.std())
+    session_z = ((raw - mu_session) / (sigma_session + 1e-8)).astype(np.float32)
+
+    result: dict[str, Any] = {
+        "raw_scores": raw.tolist(),
+        "session_z": session_z.tolist(),
+        "scores": session_z.tolist(),
+        "labels": [None] * T,
+        "reducer": "mean_abs",
+        "source": "preds",
+        "comparison_mode": "session_relative",
+        "baseline_trs": 0,
+        "baseline_flag": "no_baseline_provided",
+        "thresholds": {"high": threshold_high, "low": threshold_low},
+        "session_stats": {"mu": mu_session, "sigma": sigma_session},
+    }
+
+    if preds_baseline is None:
+        result["labels"] = _activation_labels(session_z, threshold_high, threshold_low)
+        return result
+
+    preds_baseline = np.asarray(preds_baseline, dtype=np.float32)
+    base_raw = compute_mean_activation(preds_baseline)
+    T_base = int(base_raw.shape[0])
+    result["baseline_trs"] = T_base
+
+    if T_base < min_baseline_trs:
+        result["baseline_flag"] = "insufficient_baseline"
+        result["labels"] = _activation_labels(session_z, threshold_high, threshold_low)
+        return result
+
+    mu_base = float(base_raw.mean())
+    sigma_base = float(base_raw.std())
+    baseline_z = ((raw - mu_base) / (sigma_base + 1e-8)).astype(np.float32)
+    result["baseline_z"] = baseline_z.tolist()
+    result["scores"] = baseline_z.tolist()
+    result["comparison_mode"] = "baseline_relative"
+    result["baseline_flag"] = None
+    result["baseline_stats"] = {"mu": mu_base, "sigma": sigma_base}
+    result["labels"] = _activation_labels(baseline_z, threshold_high, threshold_low)
+    return result
+
+
+def _activation_labels(
+    z_scores: np.ndarray,
+    threshold_high: float,
+    threshold_low: float,
+) -> list[str | None]:
+    labels: list[str | None] = []
+    for s in np.asarray(z_scores, dtype=np.float32).tolist():
+        if s > threshold_high:
+            labels.append("high_attention")
+        elif s < threshold_low:
+            labels.append("low_attention")
+        else:
+            labels.append(None)
+    return labels
 
 
 # ---------------------------------------------------------------------------

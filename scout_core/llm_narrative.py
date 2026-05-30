@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
 from scout_core.schemas import MarketingNarrative, MarketingNarrativeSection
@@ -32,6 +33,7 @@ def build_narrative_payload(bundle: dict[str, Any], *, max_chars: int = 8000) ->
             "dwell_sec": sec.get("dwell_sec"),
             "flags": sec.get("flags"),
             "engagement": sec.get("engagement"),
+            "activation": sec.get("activation"),
             "emotion": {
                 "dominant": (sec.get("emotion") or {}).get("dominant"),
                 "mean_z": (sec.get("emotion") or {}).get("mean_z"),
@@ -71,6 +73,57 @@ def build_narrative_payload(bundle: dict[str, Any], *, max_chars: int = 8000) ->
         "grounding_triggers_count": len(triggers),
         "events_summary": events_summary,
     }
+    at = bundle.get("activation_track") or {}
+    if at.get("raw_scores"):
+        payload["activation_track"] = {
+            "comparison_mode": at.get("comparison_mode"),
+            "baseline_flag": at.get("baseline_flag"),
+            "session_summary": {
+                "mean_raw": round(float(np.mean(at["raw_scores"])), 6),
+                "mean_z": round(float(np.mean(at.get("scores") or at["raw_scores"])), 4),
+            },
+        }
+    ms = bundle.get("marketing_scores") or {}
+    if ms:
+        payload["marketing_scores"] = {
+            "overall_score": ms.get("overall_score"),
+            "session_metrics": [
+                {
+                    "key": m.get("key"),
+                    "label": m.get("label"),
+                    "score": m.get("score"),
+                    "summary": m.get("summary"),
+                }
+                for m in (ms.get("session_metrics") or [])
+            ],
+            "drop_moments": ms.get("drop_moments") or [],
+            "focus_windows": ms.get("focus_windows") or [],
+            "sections": [
+                {
+                    "section_id": s.get("section_id"),
+                    "score": s.get("score"),
+                    "rank": s.get("rank"),
+                    "label": s.get("label"),
+                }
+                for s in (ms.get("sections") or [])
+            ],
+            "display_curve_summary": {
+                "avg_score": (ms.get("display_curve") or {}).get("avg_score"),
+                "max_score": (ms.get("display_curve") or {}).get("max_score"),
+                "min_score": (ms.get("display_curve") or {}).get("min_score"),
+            },
+            "activation_analysis": {
+                "avg_score": ((ms.get("activation_analysis") or {}).get("display_curve") or {}).get("avg_score"),
+                "sections": [
+                    {
+                        "section_id": s.get("section_id"),
+                        "score": s.get("score"),
+                        "rank": s.get("rank"),
+                    }
+                    for s in ((ms.get("activation_analysis") or {}).get("sections") or [])
+                ],
+            } if ms.get("activation_analysis") else None,
+        }
     text = json.dumps(payload, indent=2)
     if len(text) > max_chars:
         payload["section_report"] = sections[: max(1, len(sections) // 2)]
@@ -82,15 +135,21 @@ def _template_narrative(bundle: dict[str, Any]) -> MarketingNarrative:
     """Deterministic fallback when no LLM API is configured."""
     sections_out: list[MarketingNarrativeSection] = []
     weak = 0
+    ms = bundle.get("marketing_scores") or {}
+    ms_sections = {s.get("section_id"): s for s in (ms.get("sections") or [])}
     for sec in bundle.get("section_report") or []:
         flags = sec.get("flags") or []
         recs = sec.get("recommendations") or []
         sid = sec.get("section_id", "unknown")
         if flags:
             weak += 1
+        ms_row = ms_sections.get(sid) or {}
+        score_bit = ""
+        if ms_row.get("score") is not None:
+            score_bit = f" Marketing score {ms_row['score']}/100."
         narrative = (
             f"Section '{sid}' showed flags {', '.join(flags) or 'none'} "
-            f"over {sec.get('dwell_sec', 0):.0f}s dwell (model-relative proxies)."
+            f"over {sec.get('dwell_sec', 0):.0f}s dwell (model-relative proxies).{score_bit}"
         )
         sections_out.append(
             MarketingNarrativeSection(
@@ -104,6 +163,11 @@ def _template_narrative(bundle: dict[str, Any]) -> MarketingNarrative:
         f"{weak} had elevated friction or valence flags. "
         "Scores are session-relative neural hypotheses, not eye-tracking or clinical labels."
     )
+    if ms.get("overall_score") is not None:
+        summary = (
+            f"Session marketing score {ms['overall_score']}/100 (session-relative). "
+            + summary
+        )
     return MarketingNarrative(
         executive_summary=summary,
         sections=sections_out,

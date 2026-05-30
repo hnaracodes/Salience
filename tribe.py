@@ -147,7 +147,9 @@ class TribeInference:
                 "facebook/dinov2-large", cache_dir="/cache"
             )
             self._dinov2 = AutoModel.from_pretrained(
-                "facebook/dinov2-large", cache_dir="/cache"
+                "facebook/dinov2-large",
+                cache_dir="/cache",
+                attn_implementation="eager",
             )
             self._dinov2 = self._dinov2.cuda().eval()
 
@@ -355,7 +357,7 @@ def _vertex_equivalence_status_rank(value: str) -> int:
 @app.local_entrypoint()
 def verify_vertex_equivalence(
     bold_path: str,
-    output: str = "scout_data/neuroemo/vertex_equivalence_report.json",
+    output: str = "scout_data/neuroEmoCode/vertex_equivalence_report.json",
     radius: float = 3.0,
     interpolation: str = "linear",
     allclose_atol: float = 1e-5,
@@ -366,7 +368,7 @@ def verify_vertex_equivalence(
     Usage::
 
         modal run tribe.py::verify_vertex_equivalence \\
-            --bold-path scout_data/neuroemo/raw/sub-01/func/sub-01_task-fe_bold.nii.gz
+            --bold-path scout_data/neuroEmoCode/raw/sub-01/func/sub-01_task-fe_bold.nii.gz
     """
     import json
 
@@ -587,6 +589,72 @@ def record_session(session_id: str):
     print(f"SQLite: {DB_PATH}")
     if manifest and manifest.get("alignment", {}).get("preds_validation"):
         print(manifest["alignment"]["preds_validation"].get("message", ""))
+
+
+@app.local_entrypoint()
+def record_baseline(video: str = ""):
+    """Generate shared preds_baseline.npz from the gray-background baseline video.
+
+    Used by dual-track Track 1 (VAN/DMN Z) and Track 3 (mean activation Z) as the
+    neutral viewing baseline. Writes to scout_data/baseline/preds_baseline.npz.
+
+    Usage:
+        modal run tribe.py::record_baseline
+        modal run tribe.py::record_baseline --video "gray background.mp4"
+    """
+    import json
+
+    import numpy as np
+
+    from activation_store import DATA_DIR, PROJECT_ROOT
+
+    video_path = Path(video) if video else PROJECT_ROOT / "gray background.mp4"
+    if not video_path.is_file():
+        raise SystemExit(f"Baseline video not found: {video_path}")
+
+    baseline_dir = DATA_DIR / "baseline"
+    baseline_dir.mkdir(parents=True, exist_ok=True)
+    out_path = baseline_dir / "preds_baseline.npz"
+    meta_path = baseline_dir / "baseline_manifest.json"
+
+    video_data = video_path.read_bytes()
+    predictor = TribeInference()
+    print(f"Predicting baseline from {video_path.name} …")
+    preds_list = predictor.predict_brain.remote(video_data)
+    preds = np.asarray(preds_list, dtype=np.float32)
+    vertex_equivalence = _session_vertex_equivalence_meta()
+
+    rel_video = (
+        str(video_path.relative_to(PROJECT_ROOT))
+        if video_path.is_relative_to(PROJECT_ROOT)
+        else video_path.name
+    )
+    np.savez_compressed(
+        out_path,
+        preds=preds,
+        mesh_name=np.array("fsaverage5"),
+        vertex_order=np.array("lh_then_rh_fsaverage5"),
+        vertex_equivalence_json=np.array(json.dumps(vertex_equivalence, sort_keys=True)),
+        source_video=np.array(rel_video),
+    )
+    meta_path.write_text(
+        json.dumps(
+            {
+                "source_video": rel_video,
+                "preds_path": str(out_path.relative_to(PROJECT_ROOT)),
+                "shape": [int(preds.shape[0]), int(preds.shape[1])],
+                "purpose": "dual_track_baseline",
+                "notes": "Gray-background neutral baseline for VAN/DMN and mean activation Z-scores.",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    print(f"Baseline preds: {out_path}")
+    print(f"preds shape (T×V): {preds.shape[0]} × {preds.shape[1]}")
+    print(f"Manifest: {meta_path}")
+    print("Run dual-track without --baseline-session-id to use this file automatically.")
 
 
 @app.local_entrypoint()
