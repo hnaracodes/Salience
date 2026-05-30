@@ -1,0 +1,38 @@
+# Cinematic walkthrough for tests/fixtures/walkthrough_site (Aurora page).
+# Serve: python -m http.server 8765 --directory tests/fixtures/walkthrough_site
+#
+# Scroll stops align with section landmarks (~viewport heights at 1280×720).
+
+name: aurora_showcase
+initial_url: "http://127.0.0.1:8765/index.html"
+viewport:
+  width: 1280
+  height: 720
+duration_sec: 14
+interval_sec: 1.0
+steps:
+  - action: wait_ms
+    ms: 1200
+  # Hero — particles + shimmer title
+  - action: scroll_to_y
+    y: 750
+  - action: wait_ms
+    ms: 800
+  # Experience — parallax cards
+  - action: scroll_to_y
+    y: 1550
+  - action: wait_ms
+    ms: 800
+  # Gallery — marquee + orbs
+  - action: scroll_to_y
+    y: 2400
+  - action: wait_ms
+    ms: 800
+  # Pricing — featured tier glow
+  - action: scroll_to_y
+    y: 3200
+  - action: wait_ms
+    ms: 800
+  # CTA finale
+  - action: scroll_to_y
+    y: 3900

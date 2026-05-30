@@ -50,11 +50,11 @@ flowchart LR
 | Metric | Condition | Action |
 |--------|-----------|--------|
 | **Engagement Score** | `> 2.0` | Flag timestep `t_spike` |
-| **Kragel Anger** | `> 0.85` | Flag timestep `t_spike` |
+| **Kragel Anger (session-relative Z)** | `> 2.0` | Flag timestep `t_spike` |
 
-Either condition is sufficient to trigger (logical **OR** unless overridden in YAML).
+Either condition is sufficient to trigger (logical **OR** unless overridden in YAML). Emotion triggers use session-relative Z-scores from Track 2, not absolute cosine similarity.
 
-**Source of truth:** [`configs/isolation_thresholds.yaml`](../../configs/isolation_thresholds.yaml) — `engagement_score_min`, `kragel_anger_min`, optional `max_spikes_per_session`, `cooldown_trs`.
+**Source of truth:** [`configs/isolation_thresholds.yaml`](../../configs/isolation_thresholds.yaml) — `engagement_score_min`, `kragel_anger_z_min`, optional `max_spikes_per_session`, `cooldown_trs`.
 
 **Integration hook:** Extend or wrap the post-inference path in [`scripts/analyze_session.py`](../../scripts/analyze_session.py), which today writes [`AnalysisBundle`](../../scout_core/schemas.py) with `threshold_hits` only. After spike detection, optionally invoke Modal for attention extraction and merge grounding into `analysis_bundle.json`.
 
@@ -172,7 +172,7 @@ Extend [`AnalysisBundle`](../../scout_core/schemas.py); bump `schema_version` to
       "t_spike": 42,
       "triggers": {
         "engagement_score": 2.31,
-        "kragel_anger": 0.91
+        "kragel_anger_z": 2.31
       },
       "grounding": {
         "dom_id": "#checkout-btn",
@@ -247,7 +247,7 @@ Required for intersection (recorder: Playwright explorer per architecture plan; 
 
 ## Definition of Done
 
-1. **Trigger:** For a session with `scout_data/sessions/<id>/preds.npz`, an offline job flags at least one `t_spike` when **Engagement Score > 2.0** or **Kragel Anger > 0.85** per [`configs/isolation_thresholds.yaml`](../../configs/isolation_thresholds.yaml).
+1. **Trigger:** For a session with `scout_data/sessions/<id>/preds.npz`, an offline job flags at least one `t_spike` when **Engagement Score > 2.0** or **Kragel Anger session-relative Z > 2.0** per [`configs/isolation_thresholds.yaml`](../../configs/isolation_thresholds.yaml).
 2. **Extract:** Modal `extract_frame_attention` returns a **`(1080, 1920)`** float32 heatmap for that frame on A100 without OOM.
 3. **Intersect:** [`scout_core/dom_intersect.py`](../../scout_core/dom_intersect.py) selects a single winner `dom_id` with a documented `attention_density` score.
 4. **Persist:** `scout_data/sessions/<id>/analysis_bundle.json` includes an `events[]` entry whose `grounding` object matches the contract above.
@@ -255,9 +255,19 @@ Required for intersection (recorder: Playwright explorer per architecture plan; 
 
 ---
 
+## Section-level marketing analytics (implemented)
+
+Tier 1 (CPU, all TRs): [`scout_core/section_analytics.py`](../../scout_core/section_analytics.py) assigns each timestep to a hybrid section (URL + DOM landmarks + [`configs/site_sections.yaml`](../../configs/site_sections.yaml)) and aggregates full-session `emotion_track` / `engagement_track` into `section_report[]`.
+
+Tier 2 (sparse GPU): [`scout_core/section_sampling.py`](../../scout_core/section_sampling.py) picks ≤3 TRs per section; [`scripts/extract_section_heatmaps.py`](../../scripts/extract_section_heatmaps.py) extracts frames / placeholder heatmaps; [`scout_core/dom_intersect.py`](../../scout_core/dom_intersect.py) `score_all_elements` + `rollup_section_elements` fill `top_elements`.
+
+**Website session (orchestrated):** `python scripts/record_website_session.py --script configs/walkthrough_scripts/….yaml` → `modal run tribe.py::record_session` → `extract_section_heatmaps.py --modal --refresh-sections` → `analyze_session.py --website`. See [`docs/runbooks/website-session.md`](../runbooks/website-session.md).
+
+CLI: `python scripts/analyze_session.py --session-id X --norm-id Y --sections` (after `run_dual_track.py`). Repair-only manifest: `python scripts/record_session_manifest.py --session-id X --url …`.
+
 ## Out of scope
 
-- Implementing Python modules, Modal image changes, Playwright recorder, or `viz_web` UI in this document phase.
+- `viz_web` section timeline UI (dashboard).
 - Defining closed-form formulas for Engagement Score and Kragel Anger (owned by Dual-Track / MVPA upstream; thresholds only in YAML).
 - Volumetric (MNI) grounding or eye-tracker fusion.
 

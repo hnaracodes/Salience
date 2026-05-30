@@ -1,0 +1,14 @@
+# Section-level marketing analytics defaults.
+
+tr_duration_sec: 1.0
+# Max heatmap extractions per section (first / peak / last sampling).
+max_samples_per_section: 3
+# Cap total ViT heatmap calls per session.
+max_heatmaps_per_session: 20
+# Minimum element bbox area (px^2) for attention scoring.
+min_element_area: 400
+# Z thresholds for section-level flags (not grounding spikes).
+high_arousal_z: 1.0
+positive_valence_z: 1.0
+# Top DOM elements retained per section after heatmap rollup.
+top_elements_per_section: 5

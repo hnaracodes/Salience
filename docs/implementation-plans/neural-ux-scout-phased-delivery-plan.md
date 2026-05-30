@@ -1,4 +1,4 @@
-# Neural-UX Scout — Phased delivery & checkpoints
+﻿# Neural-UX Scout — Phased delivery & checkpoints
 
 This document breaks [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-architecture-plan.md) into **concrete phases** with **exit criteria** you can verify independently. The overall vision is large (research-grade neuro-modeling + realtime 3D + agentic UX); these phases are deliberately **narrow** so each gate delivers a demo-able artifact before scope expands.
 
@@ -15,7 +15,7 @@ This document breaks [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-ar
 1. **One runnable spine first:** video in → Tribe predict → artifact out → viewer consumes something (even if ugly).
 2. **Contracts before scale:** freeze `session_manifest` / `analysis_bundle` shapes early; version them (`schema_version`).
 3. **Multiplex second:** prove single-subject path on Modal with stable memory, then add `K` clusters with micro-batching.
-4. **Interpretation last-mile:** MVPA probability traces from trained models before LLM prose; never invert that order for analytics truthfulness.
+4. **Interpretation last-mile:** Zero-Shot Dual-Track scores (engagement baseline-relative Z, emotion session-relative Z on cosine templates) before LLM prose; never invert that order for analytics truthfulness.
 5. **Ethics & reporting floors:** define minimum cluster size and suppressed outputs before shipping comparative demographics UI.
 
 ---
@@ -27,8 +27,8 @@ This document breaks [`neural-ux-scout-architecture-plan.md`](neural-ux-scout-ar
 | **R0** | TRIBE research spike | Know where Stage 5 subject conditioning lives; VRAM curve for one forward |
 | **P0** | Baseline capture + inference | Manifest + Modal job reproduces current `tribe.py` parity |
 | **P1** | Multiplex inference | `vertex_ts[K,T,V]` (or chunked) + `analysis_bundle` v0 |
-| **P2A** | MVPA training data | Behavioral proxy labels + frozen TRIBE features produce validated `.pkl` classifiers |
-| **P2** | Parcellation & MVPA inference | Vertex → Yeo-7 surface masking → MVPA probability classifications |
+| **P2A** | Zero-Shot Engine Setup | Templates downloaded + `dual_track.py` implemented + baseline captured → scores for one fixture session |
+| **P2** | Parcellation & Zero-Shot inference | Vertex → Yeo-7 surface masking → engagement Z-score + 7-channel emotion cosine profile |
 | **P3** | Streaming viewer | Browser: video + brain mesh + timeline sync (degraded mode OK) |
 | **P4** | Neural barriers & grounding | Divergence windows ↔ DOM selectors / evidence bundle |
 | **P5** | Data & cluster training | Demographic clustering artifacts + Modal train job v1 |
@@ -101,47 +101,48 @@ Tracks **R0** and **P0–P1** can overlap only after R0 answers “can we inject
 
 ---
 
-## P2A — MVPA training data (behavioral proxy labels)
+## P2A — Zero-Shot Engine Setup
 
-**Goal:** Build the production `.pkl` models before runtime inference depends on them: collect UX recordings, create behavioral proxy labels from Playwright traces, generate frozen TRIBE features, and validate with video-held-out CV.
+**Goal:** Download and preprocess NeuroVault emotion templates, implement `dual_track.py`, capture a 60-second baseline, and verify that engagement and emotion scores are emitted for one fixture session — **no training required**.
 
 **Deliverables**
 
-- Dataset manifest for **N=50 UX screen recordings** with video path, URL/session metadata, and Playwright DOM trace pointer.
-- Behavioral proxy label builder for `$y`, starting with **Rage Clicks** and related DOM proxy events (`rapid repeated clicks`, `failed submit loops`, `backtrack after interaction`) mapped to Frustration/Cognitive Load labels.
-- Frozen TRIBE feature builder for `$X`: `preds[T,V]` → Yeo-7 surface mask → 3-second sliding-window flattened vectors.
-- `train_mvpa_model.py` outputs calibrated `scikit-learn` `.pkl` pipelines (e.g. `LinearSVC` + calibration), `label_map.json`, and LOVO metrics.
+- `scripts/download_emotion_templates.py` — downloads Kragel (2015) collection #503 and PINES (2015) image #10704 from NeuroVault, resamples each to fsaverage5 via `nilearn.surface.vol_to_surf`, L2-normalises, and saves 7 `.npy` files to `configs/emotion_templates/`.
+- `scout_core/dual_track.py` — implements `compute_engagement_track()` (VAN/DMN Z-score) and `compute_emotion_track()` (cosine similarity against templates).
+- `configs/dual_track.yaml` — engagement thresholds, minimum baseline TRs, template paths, grounding trigger thresholds.
+- 60-second plain-text baseline capture documented and reproduced for one fixture session (`preds_baseline.npz`).
+- `tests/test_dual_track.py` — synthetic unit tests for both tracks.
 
 **Checkpoints**
 
-- [ ] **P2A-C1:** Collected **N=50** UX screen recordings with matching Playwright DOM traces and usable TRIBE predictions.
-- [ ] **P2A-C2:** `$y` labels generated via DOM proxy rules, including Rage Clicks, with a spot-check audit log for label quality.
-- [ ] **P2A-C3:** `$X` features generated via frozen TRIBE and 3-second masked sliding windows; feature shapes documented per target mask.
-- [ ] **P2A-C4:** Leave-One-Video-Out CV achieves **macro F1 > 0.75** for the target Frustration/Cognitive Load classifier, or the phase records why the model is not production-ready.
+- [x] **P2A-C1:** All 7 `.npy` templates downloaded, resampled, and verified unit-norm (`|norm - 1| < 1e-5`).
+- [x] **P2A-C2:** `compute_engagement_track()` produces `engagement_score[T]` and threshold labels for one fixture session with a valid baseline.
+- [x] **P2A-C3:** `compute_emotion_track()` produces `emotion_scores[T, 7]` with all values in `[-1, 1]` for the same fixture session.
+- [x] **P2A-C4:** `tests/test_dual_track.py` passes: engagement Z-score arithmetic correct, cosine bounds asserted, insufficient-baseline guardrail fires when `T_base < 30`.
 
-**Exit gate:** `model.pkl` is registered with metadata, LOVO macro F1 > 0.75, and runtime code can load it without retraining.
+**Exit gate:** Engagement score and 7-channel emotion cosine profile written to `analysis_bundle.json` for one session without training any model. ✅ *Code complete — awaiting first live session run with baseline.*
 
 ---
 
-## P2 — Parcellation + MVPA inference (Yeo-7 surface masks, guardrails)
+## P2 — Parcellation + Zero-Shot Dual-Track inference (Yeo-7 surface masks, guardrails)
 
-**Goal:** Turn vertex traces into **Yeo-7 surface-masked MVPA features** and continuous cognitive-state probability traces — **no LLM required** for core scoring.
+**Goal:** Turn vertex traces into **Yeo-7 network-masked features** and continuous zero-shot engagement Z-scores and emotion cosine profiles — **no LLM required** for core scoring.
 
 **Deliverables**
 
 - Vertex → **Yeo-7** mapping artifact (`csv`/`npz`) tied to **fsaverage5** vertex indexing used by Tribe.
-- **`scout_core/mvpa_engine.py`**: applies Yeo-7 `SurfaceMasker`, builds 3-second flattened windows, and loads the pre-trained `.pkl` classifier.
+- **`scout_core/dual_track.py`** validated across 3+ real or fixture sessions; no training step required; scores emitted with model-relative guardrail copy.
 - Removal/deprecation of **`emotion_rules.yaml`** from the production inference path.
-- **`analysis_bundle.json` v2** adds `probability_traces`, `mvpa_probability_classifications`, model metadata, and confidence/calibration fields.
+- **`analysis_bundle.json` v2** adds `engagement_track` (Z-score + labels) and `emotion_track` (7-channel cosine + session-relative `z_scores`); grounding uses Z > 2.0, not absolute cosine thresholds.
 
 **Checkpoints**
 
 - [ ] **P2-C1:** Mapping covers **100%** of mesh vertices or documents masked vertices explicitly.
 - [ ] **P2-C2:** Surface masking reproducible: given fixed inputs, masked vertex order and sliding-window feature vectors are stable across runs.
-- [ ] **P2-C3:** Every emitted MVPA probability classification includes **`confidence`** + **`evidence`** (model id, mask, time range, probability/slope).
-- [ ] **P2-C4:** Copy review: language is **non-diagnostic** (hypothesis framing only).
+- [ ] **P2-C3:** Every emitted score includes **`baseline_flag`**, **`template_source`**, and guardrail copy ("model-relative hypothesis").
+- [ ] **P2-C4:** Copy review: language is **non-diagnostic** (hypothesis framing only); no binary emotion class claims in dashboard copy.
 
-**Exit gate:** System outputs a continuous probability trace for Frustration/Cognitive Load based on SVM weights, not averages.
+**Exit gate:** System outputs continuous engagement Z-score and 7-channel emotion cosine profile per TRIBE TR, grounded to Kragel/PINES templates, not averaging alone.
 
 ---
 
@@ -237,7 +238,7 @@ Apply incrementally; don’t punt all to the end.
 
 1. **R0** (short spike, hard stop if multiplex looks infeasible without fork).
 2. **P0** → **P2A** on offline fixtures **before** perfect Playwright autonomy (use manual captures plus DOM proxy labels).
-3. **P2** once P2A has a registered `.pkl` model.
+3. **P2** once P2A templates, `dual_track.py`, and a baseline fixture are confirmed.
 4. **P1** once R0+P0 stable.
 5. **P3** in parallel with **P2** using mocked `analysis_bundle` JSON.
 6. **P4** once P2+P3 share a timeline contract.
@@ -253,7 +254,7 @@ The checklist at the top of [`neural-ux-scout-architecture-plan.md`](neural-ux-s
 |---------------------|-------|
 | Vendor/pin tribev2; Stage 5 spike; VRAM | **R0**, **P0** |
 | Manifest + `analysis_bundle` schemas | **P0** |
-| Vertex→Yeo7 + MVPA probability classifications | **P2A**, **P2** |
+| Vertex→Yeo7 + Zero-Shot Dual-Track scores | **P2A**, **P2** |
 | Modal `inference_mux` + streaming encoder | **P1**, **P3** |
 | `viz_web` viewer | **P3** |
 | Barrier detector + DOM intersection | **P4** |

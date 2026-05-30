@@ -36,6 +36,7 @@ from typing import Any
 
 import numpy as np
 
+from scout_core.parcellation import CANONICAL_VERTEX_ORDER
 from scout_core.storage_migrations import ensure_neuro_schema
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -321,8 +322,11 @@ def _connect() -> sqlite3.Connection:
 def save_cortical_timeseries(
     preds: np.ndarray,
     *,
+    session_id: str | None = None,
     source_video: str,
     mesh_name: str = "fsaverage5",
+    vertex_order: str = CANONICAL_VERTEX_ORDER,
+    vertex_equivalence: dict[str, Any] | None = None,
     vertex_to_region: dict[int, str] | None = None,
     top_k_peaks: int = 64,
     notes: str | None = None,
@@ -341,42 +345,80 @@ def save_cortical_timeseries(
     denom = max(n_v - 1, 1)
     session_sorted = np.sort(preds.ravel())
 
-    session_id = uuid.uuid4().hex
+    session_id = session_id or uuid.uuid4().hex
     session_dir = SESSIONS_DIR / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
     npz_path = session_dir / "preds.npz"
-    np.savez_compressed(npz_path, preds=preds, mesh_name=np.array(mesh_name))
+    np.savez_compressed(
+        npz_path,
+        preds=preds,
+        mesh_name=np.array(mesh_name),
+        vertex_order=np.array(vertex_order),
+        vertex_equivalence_json=np.array(json.dumps(vertex_equivalence or {}, sort_keys=True)),
+    )
 
     meta = {
         "dtype": str(preds.dtype),
         "shape": [int(n_t), int(n_v)],
         "description": "preds[i,j] = predicted activation at timestep i, fsaverage5 vertex j",
         "interpretation_note": "stimulation_band uses timestep-percentile; location uses vertex_fraction mesh-index proxy unless configs/location_coarse_bands.csv overrides.",
+        "vertex_order": vertex_order,
+        "vertex_equivalence": vertex_equivalence or {},
     }
     if extra_meta:
         meta.update(extra_meta)
 
     conn = _connect()
     try:
-        conn.execute(
-            """
-            INSERT INTO sessions (
-                id, created_at, source_video, mesh_name,
-                n_timesteps, n_vertices, preds_npz_path, meta_json, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                session_id,
-                datetime.now(timezone.utc).isoformat(),
-                source_video,
-                mesh_name,
-                n_t,
-                n_v,
-                str(npz_path.relative_to(PROJECT_ROOT)),
-                json.dumps(meta),
-                notes,
-            ),
-        )
+        existing = conn.execute(
+            "SELECT id FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        rel_path = str(npz_path.relative_to(PROJECT_ROOT))
+        if existing:
+            conn.execute(
+                """
+                UPDATE sessions SET
+                    source_video = ?, mesh_name = ?, n_timesteps = ?, n_vertices = ?,
+                    preds_npz_path = ?, meta_json = ?, notes = ?
+                WHERE id = ?
+                """,
+                (
+                    source_video,
+                    mesh_name,
+                    n_t,
+                    n_v,
+                    rel_path,
+                    json.dumps(meta),
+                    notes,
+                    session_id,
+                ),
+            )
+            conn.execute(
+                "DELETE FROM timestep_summary WHERE session_id = ?", (session_id,)
+            )
+            conn.execute(
+                "DELETE FROM activation_peak WHERE session_id = ?", (session_id,)
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO sessions (
+                    id, created_at, source_video, mesh_name,
+                    n_timesteps, n_vertices, preds_npz_path, meta_json, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    source_video,
+                    mesh_name,
+                    n_t,
+                    n_v,
+                    rel_path,
+                    json.dumps(meta),
+                    notes,
+                ),
+            )
 
         k = min(top_k_peaks, n_v)
         for t in range(n_t):

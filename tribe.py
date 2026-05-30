@@ -29,6 +29,8 @@ tribe_image = (
         # Quote extras so bash does not treat `[plotting]` as a glob.
         'pip install -e "/root/tribev2[plotting]"',
     )
+    .pip_install("nibabel>=5.2")
+    .add_local_python_source("scout_core")
 )
 @app.cls(
     gpu="A100", 
@@ -48,6 +50,43 @@ class TribeInference:
         )
 
     @modal.method()
+    def predict_and_visualize(self, video_bytes: bytes):
+        """Single GPU pass: predict cortical time series and render side-view MP4."""
+        import io
+        import os
+        import subprocess
+        import tempfile
+        import time
+
+        import numpy as np
+
+        if not os.environ.get("DISPLAY"):
+            subprocess.Popen(
+                ["Xvfb", ":99", "-screen", "0", "1280x1024x24", "+extension", "GLX"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.environ["DISPLAY"] = ":99"
+            time.sleep(1.0)
+
+        from tribev2.plotting import PlotBrain
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            video_path = temp_video.name
+
+        df = self.model.get_events_dataframe(video_path=video_path)
+        preds, _ = self.model.predict(events=df)
+
+        plotter = PlotBrain(mesh="fsaverage5")
+        output_path = "/tmp/brain_sim.mp4"
+        plotter.plot_timesteps_mp4(preds, output_path, views="left")
+
+        buf = io.BytesIO()
+        np.savez_compressed(buf, preds=np.asarray(preds, dtype=np.float32))
+        return buf.getvalue(), Path(output_path).read_bytes()
+
+    @modal.method()
     def predict_brain(self, video_bytes: bytes):
         import tempfile
 
@@ -64,6 +103,169 @@ class TribeInference:
         preds, segments = self.model.predict(events=df)
 
         return preds.tolist()
+
+    @modal.method()
+    def extract_frame_attention(
+        self,
+        frame_bytes: bytes,
+        capture_h: int = 1080,
+        capture_w: int = 1920,
+    ) -> bytes:
+        """Run DINOv2 ViT with output_attentions=True on a single frame.
+
+        Loads ``facebook/dinov2-large`` from the persistent volume on first call
+        (lazy, separate from TribeModel).  Subsequent calls reuse the cached
+        instance on the same worker.
+
+        Integration note (R0):
+            This method loads DINOv2 *independently* of TribeModel to guarantee
+            ``output_attentions=True`` works without modifying the predict path.
+            If tribev2 exposes the DINOv2 backbone directly in a future release,
+            ``self._dinov2`` can be wired to ``self.model.visual_encoder`` instead.
+
+        Args:
+            frame_bytes: JPEG- or PNG-encoded bytes of a single video frame.
+            capture_h:   Target heatmap height (Playwright capture height, e.g. 1080).
+            capture_w:   Target heatmap width  (Playwright capture width,  e.g. 1920).
+
+        Returns:
+            Serialised float32 ndarray ``(capture_h, capture_w)`` as numpy .npy
+            bytes (use ``numpy.load(io.BytesIO(result))`` to deserialise).
+            Values are ≥ 0 (raw attention, not normalised to 1).
+        """
+        import io
+
+        import numpy as np
+        import torch
+        from PIL import Image
+        from scipy.ndimage import zoom as ndimage_zoom
+        from transformers import AutoImageProcessor, AutoModel
+
+        # Lazy-load DINOv2 (reuses weights already on the persistent volume).
+        if not hasattr(self, "_dinov2"):
+            self._dinov2_processor = AutoImageProcessor.from_pretrained(
+                "facebook/dinov2-large", cache_dir="/cache"
+            )
+            self._dinov2 = AutoModel.from_pretrained(
+                "facebook/dinov2-large",
+                cache_dir="/cache",
+                attn_implementation="eager",
+            )
+            self._dinov2 = self._dinov2.cuda().eval()
+
+        # Decode and preprocess frame (→ 224×224 tensor).
+        image = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
+        inputs = self._dinov2_processor(images=image, return_tensors="pt")
+        pixel_values = inputs["pixel_values"].cuda()  # [1, 3, 224, 224]
+
+        with torch.no_grad():
+            outputs = self._dinov2(pixel_values, output_attentions=True)
+
+        # Final-block attentions: tuple element shape = (1, num_heads, S, S).
+        last_attn = outputs.attentions[-1]          # [1, num_heads, S, S]
+        attn_np = last_attn[0].cpu().numpy()        # [num_heads, S, S]
+
+        # Derive square patch grid from seq_len (CLS excluded).
+        n_patches = attn_np.shape[-1] - 1
+        grid_size = int(n_patches ** 0.5)
+
+        # Mean-across-heads [CLS] → patch attention; reshape to 2-D grid.
+        cls_attn = attn_np[:, 0, 1:]               # [num_heads, n_patches]
+        patch_grid = cls_attn.mean(axis=0).reshape(grid_size, grid_size).astype(np.float32)
+
+        # Bilinear upscale to Playwright capture resolution.
+        heatmap = ndimage_zoom(
+            patch_grid,
+            (capture_h / grid_size, capture_w / grid_size),
+            order=1,
+        )
+        heatmap = np.clip(heatmap, 0.0, None).astype(np.float32)
+
+        # Serialise as numpy bytes.
+        buf = io.BytesIO()
+        np.save(buf, heatmap)
+        return buf.getvalue()
+
+    @modal.method()
+    def ground_spike_at_t(
+        self,
+        t_spike: int,
+        frame_bytes: bytes,
+        manifest: dict,
+        capture_h: int = 1080,
+        capture_w: int = 1920,
+    ) -> dict:
+        """Decode frame, extract heatmap, run DOM intersection; return grounding payload.
+
+        Combines ``extract_frame_attention`` + DOM attention-density scoring in a
+        single Modal call for callers that do not need to cache heatmaps locally.
+
+        Callers that *do* need cached heatmaps (e.g. ``analyze_session.py --ground``)
+        should call ``extract_frame_attention`` separately and run
+        ``scout_core.dom_intersect`` locally.
+
+        Args:
+            t_spike:    Row index into ``preds[T, 20484]`` (TRIBE TR).
+            frame_bytes: JPEG/PNG bytes of the video frame at ``t_spike``.
+            manifest:   Parsed ``session_manifest.json`` dict with ``dom_snapshots``.
+            capture_h:  Heatmap height (must match Playwright capture resolution).
+            capture_w:  Heatmap width  (must match Playwright capture resolution).
+
+        Returns:
+            Grounding dict ``{dom_id, tag, bbox, attention_density}`` for the winner,
+            or ``{"grounding": None, "reason": "<cause>"}`` if no match found.
+        """
+        import io
+
+        import numpy as np
+
+        # Extract heatmap (reuses lazy-loaded DINOv2 on the same worker).
+        heatmap_bytes = self.extract_frame_attention.local(frame_bytes, capture_h, capture_w)
+        heatmap = np.load(io.BytesIO(heatmap_bytes)).astype(np.float32)
+        img_h, img_w = heatmap.shape
+
+        # Find nearest DOM snapshot by t_idx.
+        snapshots = manifest.get("dom_snapshots", [])
+        if not snapshots:
+            return {"grounding": None, "reason": "no_dom_snapshots_in_manifest"}
+
+        nearest = min(snapshots, key=lambda s: abs(int(s.get("t_idx", 0)) - t_spike))
+        elements = nearest.get("elements", [])
+        if not elements:
+            return {"grounding": None, "reason": "no_elements_in_snapshot"}
+
+        scroll_y = int(nearest.get("scrollY", 0))
+        scroll_x = int(nearest.get("scrollX", 0))
+
+        # Inlined attention-density loop (scout_core not in Modal image).
+        best_density = -1.0
+        winner: dict | None = None
+        for el in elements:
+            if not el.get("is_intersecting_viewport", True):
+                continue
+            bbox = el.get("bbox")
+            if bbox is None or len(bbox) != 4:
+                continue
+            x, y, w, h = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+            vx, vy = x - scroll_x, y - scroll_y
+            x1, y1 = max(0, vx), max(0, vy)
+            x2, y2 = min(img_w, vx + w), min(img_h, vy + h)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            box_area = (x2 - x1) * (y2 - y1)
+            if box_area == 0:
+                continue
+            density = float(heatmap[y1:y2, x1:x2].sum() / box_area)
+            if density > best_density:
+                best_density = density
+                winner = {
+                    "dom_id": el.get("dom_id", ""),
+                    "tag": el.get("tag", ""),
+                    "bbox": [int(b) for b in bbox],
+                    "attention_density": round(density, 6),
+                }
+
+        return winner or {"grounding": None, "reason": "no_eligible_elements"}
 
     @modal.method()
     def visualize_brain(self, video_bytes: bytes):
@@ -100,19 +302,359 @@ class TribeInference:
 
         return Path(output_path).read_bytes()
 
-# Updated Local Entrypoint
+
+@app.function(
+    image=tribe_image,
+    volumes={"/cache": volume},
+    secrets=[modal.Secret.from_name("huggingface-secret")],
+    timeout=1200,
+)
+def verify_vertex_equivalence_modal(
+    bold_nifti_bytes: bytes,
+    *,
+    source_name: str = "modal_input.nii.gz",
+    radius: float = 3.0,
+    interpolation: str = "linear",
+    allclose_atol: float = 1e-5,
+) -> dict:
+    import tempfile
+
+    import nilearn
+    import tribev2
+
+    from scout_core.vertex_equivalence import build_vertex_equivalence_report
+
+    with tempfile.NamedTemporaryFile(suffix=".nii.gz", delete=False) as tmp:
+        tmp.write(bold_nifti_bytes)
+        tmp_path = Path(tmp.name)
+
+    report = build_vertex_equivalence_report(
+        bold_path=tmp_path,
+        mesh="fsaverage5",
+        radius=radius,
+        interpolation=interpolation,
+        allclose_atol=allclose_atol,
+        runtime_provenance={
+            "runtime": "modal",
+            "tribev2_version": getattr(tribev2, "__version__", "unknown"),
+            "nilearn_version": getattr(nilearn, "__version__", "unknown"),
+            "source_name": source_name,
+            "modal_image": "tribe_image",
+        },
+    )
+    return report
+
+
+def _vertex_equivalence_status_rank(value: str) -> int:
+    order = {
+        "contract_only": 0,
+        "mesh_identity_verified": 1,
+        "projection_equivalence_verified": 2,
+    }
+    return order.get(value, -1)
+
+
+@app.local_entrypoint()
+def verify_vertex_equivalence(
+    bold_path: str,
+    output: str = "scout_data/neuroEmoCode/vertex_equivalence_report.json",
+    radius: float = 3.0,
+    interpolation: str = "linear",
+    allclose_atol: float = 1e-5,
+    require_status: str = "projection_equivalence_verified",
+):
+    """Generate vertex-equivalence proof on Modal and write the canonical JSON report.
+
+    Usage::
+
+        modal run tribe.py::verify_vertex_equivalence \\
+            --bold-path scout_data/neuroEmoCode/raw/sub-01/func/sub-01_task-fe_bold.nii.gz
+    """
+    import json
+
+    from scout_core.vertex_equivalence import (
+        canonical_vertex_equivalence_report_path,
+        load_vertex_equivalence_report,
+        validate_vertex_equivalence_summary,
+        vertex_equivalence_reference,
+        write_vertex_equivalence_report,
+    )
+
+    project_root = Path(__file__).resolve().parent
+    bold = Path(bold_path).expanduser()
+    if not bold.is_absolute():
+        bold = project_root / bold
+    if not bold.is_file():
+        raise SystemExit(f"BOLD not found: {bold}")
+
+    out = Path(output).expanduser()
+    if not out.is_absolute():
+        out = project_root / out
+    output_path = canonical_vertex_equivalence_report_path(out)
+
+    size_mb = bold.stat().st_size / 1e6
+    print(f"Uploading BOLD to Modal ({size_mb:.1f} MB): {bold}")
+    report = verify_vertex_equivalence_modal.remote(
+        bold.read_bytes(),
+        source_name=bold.name,
+        radius=radius,
+        interpolation=interpolation,
+        allclose_atol=allclose_atol,
+    )
+    write_vertex_equivalence_report(report, output_path)
+    print(json.dumps(report, indent=2))
+    print(f"Report: {output_path}")
+    print(
+        json.dumps(
+            vertex_equivalence_reference(report, report_path=output_path),
+            indent=2,
+        )
+    )
+    if require_status and _vertex_equivalence_status_rank(report["proof_status"]) < _vertex_equivalence_status_rank(
+        require_status
+    ):
+        raise SystemExit(
+            f"vertex_equivalence proof_status={report['proof_status']!r} did not reach "
+            f"required {require_status!r}"
+        )
+    validate_vertex_equivalence_summary(load_vertex_equivalence_report(output_path), allow_contract_only=True)
+    print(f"OK: proof_status={report['proof_status']!r}")
+
+
+def _default_video_path() -> Path:
+    return Path(__file__).resolve().parent / "mrbeast.mp4"
+
+
+def _session_vertex_equivalence_meta() -> dict:
+    try:
+        from scout_core.vertex_equivalence import (
+            canonical_vertex_equivalence_report_path,
+            load_vertex_equivalence_report,
+            vertex_equivalence_reference,
+        )
+
+        report_path = canonical_vertex_equivalence_report_path()
+        report = load_vertex_equivalence_report(report_path)
+        return vertex_equivalence_reference(report, report_path=report_path)
+    except Exception as exc:  # best-effort provenance; never block persistence
+        return {
+            "mesh": "fsaverage5",
+            "vertex_order": "lh_then_rh_fsaverage5",
+            "proof_status": "contract_only",
+            "reference_kind": "unavailable",
+            "reference_detail": f"Could not compute session vertex equivalence metadata: {exc}",
+        }
+
+
+def _persist_session(video_path: Path, preds_npz_bytes: bytes, video_mp4_bytes: bytes):
+    """Save preds.npz, SQLite summaries, side-view MP4, and interactive viewer bundle."""
+    import io
+    import sys
+
+    import numpy as np
+
+    from activation_store import DB_PATH, DATA_DIR, resolve_vertex_regions, save_cortical_timeseries
+
+    preds = np.load(io.BytesIO(preds_npz_bytes))["preds"]
+    vertex_map = resolve_vertex_regions()
+    vertex_equivalence = _session_vertex_equivalence_meta()
+    session_id = save_cortical_timeseries(
+        preds,
+        source_video=video_path.name,
+        mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
+        vertex_to_region=vertex_map,
+        top_k_peaks=64,
+        notes="TRIBE v2 prediction via modal run tribe.py",
+    )
+
+    session_dir = DATA_DIR / "sessions" / session_id
+    (session_dir / "brain_results.mp4").write_bytes(video_mp4_bytes)
+    Path("brain_results.mp4").write_bytes(video_mp4_bytes)
+
+    scripts_dir = Path(__file__).resolve().parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+
+    try:
+        from export_brain_viewer import export_session_viewer  # noqa: WPS433
+
+        viewer_dir = export_session_viewer(session_id)
+    except ModuleNotFoundError as exc:
+        if exc.name != "nilearn":
+            raise
+        viewer_dir = None
+        print(
+            "3D viewer export skipped: local Python is missing `nilearn`. "
+            "Run `python3 -m pip install -r requirements.txt` to enable it."
+        )
+    return session_id, preds.shape, session_dir, viewer_dir, DB_PATH
+
+
 @app.local_entrypoint()
 def main():
-    video_path = Path(__file__).resolve().parent / "videoplayback.mp4"
+    """Predict, save preds.npz + SQLite, render MP4, and export rotatable 3D viewer data.
+
+    Usage: ``modal run tribe.py``  (same as before, but now persists all artifacts)
+    """
+    video_path = _default_video_path()
     video_data = video_path.read_bytes()
     predictor = TribeInference()
 
-    print(f"🧠 Loading {video_path} — predicting and rendering...")
-    video_out = predictor.visualize_brain.remote(video_data)
+    print(f"Loading {video_path} — predicting, rendering, and saving locally...")
+    preds_npz_bytes, video_mp4_bytes = predictor.predict_and_visualize.remote(video_data)
 
-    output_filename = "brain_results.mp4"
-    Path(output_filename).write_bytes(video_out)
-    print(f"✅ Success! Visualization saved to {output_filename}")
+    session_id, shape, session_dir, viewer_dir, db_path = _persist_session(
+        video_path, preds_npz_bytes, video_mp4_bytes
+    )
+
+    print(f"Session id: {session_id}")
+    print(f"preds shape (T×V): {shape[0]} × {shape[1]}")
+    print(f"Dense matrix: {session_dir / 'preds.npz'}")
+    print(f"SQLite (summaries + top-64 peaks/timestep): {db_path}")
+    print(f"Side-view video: brain_results.mp4 and {session_dir / 'brain_results.mp4'}")
+    if viewer_dir is not None:
+        print(f"3D viewer: open {viewer_dir / 'index.html'} in a browser")
+    print("Inspect numbers: python scripts/inspect_session.py --session-id", session_id)
+
+
+@app.local_entrypoint()
+def record_session(session_id: str):
+    """Predict cortical time series for an existing website session walkthrough video.
+
+    Reads ``scout_data/sessions/<session_id>/walkthrough.mp4`` (or path from
+    ``session_manifest.json``), writes ``preds.npz`` into the same session dir,
+    and registers/updates SQLite.
+
+    Usage: ``modal run tribe.py::record_session --session-id <hex>``
+    """
+    import json
+
+    import numpy as np
+
+    from activation_store import DATA_DIR, DB_PATH, resolve_vertex_regions, save_cortical_timeseries
+    from scout_core.session_align import find_walkthrough_video, load_manifest, validate_session_dir
+
+    if not session_id:
+        raise SystemExit("--session-id is required")
+
+    session_dir = DATA_DIR / "sessions" / session_id
+    if not session_dir.is_dir():
+        raise SystemExit(f"Session directory not found: {session_dir}")
+
+    video_path = find_walkthrough_video(session_dir)
+    if video_path is None:
+        raise SystemExit(
+            f"No walkthrough video in {session_dir}. Run record_website_session.py first."
+        )
+
+    video_data = video_path.read_bytes()
+    predictor = TribeInference()
+    print(f"Predicting from {video_path.name} for session {session_id} …")
+    preds_list = predictor.predict_brain.remote(video_data)
+    preds = np.asarray(preds_list, dtype=np.float32)
+    vertex_equivalence = _session_vertex_equivalence_meta()
+
+    from activation_store import PROJECT_ROOT
+
+    rel_video = (
+        str(video_path.relative_to(PROJECT_ROOT))
+        if video_path.is_relative_to(PROJECT_ROOT)
+        else video_path.name
+    )
+    save_cortical_timeseries(
+        preds,
+        session_id=session_id,
+        source_video=rel_video,
+        mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
+        vertex_to_region=resolve_vertex_regions(),
+        top_k_peaks=64,
+        notes="TRIBE v2 website session via record_session",
+        extra_meta={"capture_type": "website_walkthrough"},
+    )
+
+    manifest = load_manifest(session_dir)
+    if manifest is not None:
+        manifest.setdefault("alignment", {})
+        manifest["alignment"]["preds_validation"] = validate_session_dir(session_dir)
+        (session_dir / "session_manifest.json").write_text(
+            json.dumps(manifest, indent=2),
+            encoding="utf-8",
+        )
+
+    print(f"Session id: {session_id}")
+    print(f"preds shape (T×V): {preds.shape[0]} × {preds.shape[1]}")
+    print(f"Dense preds: {session_dir / 'preds.npz'}")
+    print(f"SQLite: {DB_PATH}")
+    if manifest and manifest.get("alignment", {}).get("preds_validation"):
+        print(manifest["alignment"]["preds_validation"].get("message", ""))
+
+
+@app.local_entrypoint()
+def record_baseline(video: str = ""):
+    """Generate shared preds_baseline.npz from the gray-background baseline video.
+
+    Used by dual-track Track 1 (VAN/DMN Z) and Track 3 (mean activation Z) as the
+    neutral viewing baseline. Writes to scout_data/baseline/preds_baseline.npz.
+
+    Usage:
+        modal run tribe.py::record_baseline
+        modal run tribe.py::record_baseline --video "gray background.mp4"
+    """
+    import json
+
+    import numpy as np
+
+    from activation_store import DATA_DIR, PROJECT_ROOT
+
+    video_path = Path(video) if video else PROJECT_ROOT / "gray background.mp4"
+    if not video_path.is_file():
+        raise SystemExit(f"Baseline video not found: {video_path}")
+
+    baseline_dir = DATA_DIR / "baseline"
+    baseline_dir.mkdir(parents=True, exist_ok=True)
+    out_path = baseline_dir / "preds_baseline.npz"
+    meta_path = baseline_dir / "baseline_manifest.json"
+
+    video_data = video_path.read_bytes()
+    predictor = TribeInference()
+    print(f"Predicting baseline from {video_path.name} …")
+    preds_list = predictor.predict_brain.remote(video_data)
+    preds = np.asarray(preds_list, dtype=np.float32)
+    vertex_equivalence = _session_vertex_equivalence_meta()
+
+    rel_video = (
+        str(video_path.relative_to(PROJECT_ROOT))
+        if video_path.is_relative_to(PROJECT_ROOT)
+        else video_path.name
+    )
+    np.savez_compressed(
+        out_path,
+        preds=preds,
+        mesh_name=np.array("fsaverage5"),
+        vertex_order=np.array("lh_then_rh_fsaverage5"),
+        vertex_equivalence_json=np.array(json.dumps(vertex_equivalence, sort_keys=True)),
+        source_video=np.array(rel_video),
+    )
+    meta_path.write_text(
+        json.dumps(
+            {
+                "source_video": rel_video,
+                "preds_path": str(out_path.relative_to(PROJECT_ROOT)),
+                "shape": [int(preds.shape[0]), int(preds.shape[1])],
+                "purpose": "dual_track_baseline",
+                "notes": "Gray-background neutral baseline for VAN/DMN and mean activation Z-scores.",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    print(f"Baseline preds: {out_path}")
+    print(f"preds shape (T×V): {preds.shape[0]} × {preds.shape[1]}")
+    print(f"Manifest: {meta_path}")
+    print("Run dual-track without --baseline-session-id to use this file automatically.")
 
 
 @app.local_entrypoint()
@@ -128,13 +670,16 @@ def record():
     - stimulation_band: timestep/session percentiles → qualitative stimulation labels.
     - location_coarse_bands.csv optional → remap vertex_fraction [0,1] bins (default seeds are mesh-index proxies only).
 
-    Usage (same venv as main): ``modal run tribe.py::record``
-    """
-    import numpy as np
+    Prefer ``modal run tribe.py`` — same persistence plus MP4 and 3D viewer export.
 
+    Usage: ``modal run tribe.py::record`` (predict only, no MP4 / viewer)
+    """
     from activation_store import DB_PATH, DATA_DIR, resolve_vertex_regions, save_cortical_timeseries
 
-    video_path = Path(__file__).resolve().parent / "videoplayback.mp4"
+    import io
+    import numpy as np
+
+    video_path = _default_video_path()
     video_data = video_path.read_bytes()
     predictor = TribeInference()
 
@@ -143,10 +688,12 @@ def record():
     preds = np.asarray(preds_list, dtype=np.float32)
 
     vertex_map = resolve_vertex_regions()
+    vertex_equivalence = _session_vertex_equivalence_meta()
     session_id = save_cortical_timeseries(
         preds,
         source_video=video_path.name,
         mesh_name="fsaverage5",
+        vertex_equivalence=vertex_equivalence,
         vertex_to_region=vertex_map,
         top_k_peaks=64,
         notes="TRIBE v2 demo prediction; emotion/Yeo semantics require downstream mapping.",
@@ -155,9 +702,9 @@ def record():
     print(f"Session id: {session_id}")
     print(f"Dense preds (T×V): {DATA_DIR / 'sessions' / session_id / 'preds.npz'}")
     print(f"SQLite: {DB_PATH}")
+    print("Tip: use `modal run tribe.py` to also render MP4 and export the 3D viewer.")
     if vertex_map is None:
         print(
             "Tip: add configs/vertex_regions.csv (vertex_index,region_name) "
             "to label brain_sector on peak rows."
         )
-
