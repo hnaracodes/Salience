@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_NEUROEMO_SCRIPTS = PROJECT_ROOT / "scripts" / "neuroEmoCode"
+if str(_NEUROEMO_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_NEUROEMO_SCRIPTS))
 
 from scout_core.parcellation import (
     CANONICAL_VERTEX_ORDER,
@@ -14,7 +20,7 @@ from scout_core.parcellation import (
     validate_manifest_matches_table,
     validate_vertex_table,
 )
-from scripts.train_neuroemo_emotion_model import (
+from train_neuroemo_emotion_model import (
     TEMPORAL_REDUCER_COMPONENTS,
     TrainConfig,
     _load_training_data,
@@ -22,12 +28,10 @@ from scripts.train_neuroemo_emotion_model import (
     _predict_probability_matrix,
     _reduce_temporal_window,
 )
-from scripts.train_neuroemo_hierarchical_model import _hierarchy_index, _parse_hierarchy
-from scripts.run_neuroemo_experiment_matrix import build_arg_parser, build_specs
+from train_neuroemo_hierarchical_model import _hierarchy_index, _parse_hierarchy
+from run_neuroemo_experiment_matrix import build_arg_parser, build_specs
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-POSTFIX_MATRIX_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models" / "2026-05-25_postfix_matrix"
+POSTFIX_MATRIX_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "models" / "2026-05-25_postfix_matrix"
 
 
 def _verified_vertex_equivalence(

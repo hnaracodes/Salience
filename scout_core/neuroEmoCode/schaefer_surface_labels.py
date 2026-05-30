@@ -24,7 +24,7 @@ ALLOWED_VERTEX_ORDER_PROOF_STATUSES = (
 )
 
 DEFAULT_ALIGNMENT_REPORT = (
-    Path(__file__).resolve().parents[1] / "scout_data" / "neuroemo" / "schaefer_annot_alignment_report.json"
+    Path(__file__).resolve().parents[2] / "scout_data" / "neuroEmoCode" / "schaefer_annot_alignment_report.json"
 )
 
 CBIG_FSAVERAGE5_SURF_BASE = (

@@ -16,8 +16,8 @@ from scout_core.vertex_equivalence import (
     write_vertex_equivalence_report,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUTPUT = PROJECT_ROOT / "scout_data" / "neuroemo" / "vertex_equivalence_report.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_OUTPUT = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "vertex_equivalence_report.json"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

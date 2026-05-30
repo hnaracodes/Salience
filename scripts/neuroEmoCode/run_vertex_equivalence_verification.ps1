@@ -1,16 +1,16 @@
 # Run unit tests + Modal vertex-equivalence proof (tribe.py local entrypoint).
-# Logs: scout_data/neuroemo/vertex_equivalence_run.log
-#       scout_data/neuroemo/vertex_equivalence_modal.log  (Modal step only)
+# Logs: scout_data/neuroEmoCode/vertex_equivalence_run.log
+#       scout_data/neuroEmoCode/vertex_equivalence_modal.log  (Modal step only)
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 $env:PYTHONPATH = $Root
 
-$Log = Join-Path $Root "scout_data\neuroemo\vertex_equivalence_run.log"
-$ModalLog = Join-Path $Root "scout_data\neuroemo\vertex_equivalence_modal.log"
+$Log = Join-Path $Root "scout_data\neuroEmoCode\vertex_equivalence_run.log"
+$ModalLog = Join-Path $Root "scout_data\neuroEmoCode\vertex_equivalence_modal.log"
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
 $Modal = Join-Path $Root ".venv\Scripts\modal.exe"
-$BoldRel = "scout_data\neuroemo\raw\sub-01\func\sub-01_task-fe_bold.nii.gz"
+$BoldRel = "scout_data\neuroEmoCode\raw\sub-01\func\sub-01_task-fe_bold.nii.gz"
 $Bold = Join-Path $Root $BoldRel
 
 function Write-Log($msg) {
@@ -37,8 +37,8 @@ Write-Log "Modal log: $ModalLog"
 
 $modalArgs = @(
     "run", "tribe.py::verify_vertex_equivalence",
-    "--bold-path", "scout_data/neuroemo/raw/sub-01/func/sub-01_task-fe_bold.nii.gz",
-    "--output", "scout_data/neuroemo/vertex_equivalence_report.json",
+    "--bold-path", "scout_data/neuroEmoCode/raw/sub-01/func/sub-01_task-fe_bold.nii.gz",
+    "--output", "scout_data/neuroEmoCode/vertex_equivalence_report.json",
     "--require-status", "projection_equivalence_verified"
 )
 
@@ -66,5 +66,5 @@ if ($procExit -ne 0) {
     throw "Modal verifier failed with exit code $procExit"
 }
 
-Write-Log "Done. Report: scout_data/neuroemo/vertex_equivalence_report.json"
+Write-Log "Done. Report: scout_data/neuroEmoCode/vertex_equivalence_report.json"
 exit 0

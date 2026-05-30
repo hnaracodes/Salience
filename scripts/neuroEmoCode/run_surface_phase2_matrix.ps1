@@ -4,7 +4,7 @@ Set-Location $Root
 $env:PYTHONPATH = $Root
 
 $py = Join-Path $Root ".venv\Scripts\python.exe"
-$out = Join-Path $Root "scout_data\neuroemo\models\2026-05-27_surface_annot_matrix_phase2"
+$out = Join-Path $Root "scout_data\neuroEmoCode\models\2026-05-27_surface_annot_matrix_phase2"
 $log = Join-Path $out "matrix_run.log"
 
 New-Item -ItemType Directory -Path $out -Force | Out-Null
@@ -16,15 +16,15 @@ foreach ($m in $models) {
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        & $py scripts/train_neuroemo_emotion_model.py `
-            --train-npz scout_data/neuroemo/tribev2_surface/neuroemo_tribev2_train.npz `
+        & $py scripts/neuroEmoCode/train_neuroemo_emotion_model.py `
+            --train-npz scout_data/neuroEmoCode/tribev2_surface/neuroemo_tribev2_train.npz `
             --model-type $m `
             --temporal-window-trs 10 `
             --temporal-contiguity contiguous `
             --roi-reducers mean,std,mean_abs `
             --exclude-labels neutral `
-            --metrics-json "scout_data/neuroemo/models/2026-05-27_surface_annot_matrix_phase2/${m}_5class_10tr_metrics.json" `
-            --output-model "scout_data/neuroemo/models/2026-05-27_surface_annot_matrix_phase2/${m}_5class_10tr.joblib" 2>&1 `
+            --metrics-json "scout_data/neuroEmoCode/models/2026-05-27_surface_annot_matrix_phase2/${m}_5class_10tr_metrics.json" `
+            --output-model "scout_data/neuroEmoCode/models/2026-05-27_surface_annot_matrix_phase2/${m}_5class_10tr.joblib" 2>&1 `
             | Tee-Object -FilePath $log -Append
     } finally {
         $ErrorActionPreference = $prevEap

@@ -1,25 +1,27 @@
 """Run the Zero-Shot Dual-Track Engine for a saved session.
 
-Loads preds.npz from scout_data/sessions/<id>/, runs engagement Z-score scoring
-(Track 1) and emotion template cosine similarity (Track 2), persists results to
-SQLite, and writes/merges analysis_bundle.json in the session directory.
+Loads preds.npz from scout_data/sessions/<id>/, runs three tracks:
+  Track 1 — VAN/DMN engagement Z vs baseline
+  Track 2 — Kragel emotion template cosine similarity
+  Track 3 — Mean vertex activation (attention proxy)
+Persists results to SQLite and writes/merges analysis_bundle.json.
 
 Usage:
-    # Both tracks (baseline required for Track 1):
-    python scripts/run_dual_track.py --session-id <id> --baseline-session-id <baseline_id>
-
-    # Skip Track 1 (no baseline available), run Track 2 only:
+    # All tracks (auto-loads scout_data/baseline/preds_baseline.npz when present):
     python scripts/run_dual_track.py --session-id <id>
 
-    # Override baseline path directly:
+    # Override baseline session:
+    python scripts/run_dual_track.py --session-id <id> --baseline-session-id <baseline_id>
+
+    # Override baseline path:
     python scripts/run_dual_track.py --session-id <id> --baseline-preds path/to/baseline.npz
 
-    # Use a direct preds path (custom location):
-    python scripts/run_dual_track.py --session-id <id> --preds path/to/preds.npz
+    # Generate baseline first:
+    modal run tribe.py::record_baseline
 
 Prerequisites:
     1. Download emotion templates: python scripts/download_emotion_templates.py
-    2. Provide configs/vertex_regions.csv with yeo_network_name column (for Track 1)
+    2. configs/vertex_regions.csv (Schaefer 400 @ fsaverage5) for Track 1 VAN/DMN
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from activation_store import DATA_DIR, DB_PATH, SESSIONS_DIR
 from scout_core.dual_track import (
     TEMPLATE_NAMES,
+    compute_activation_track,
     compute_emotion_track,
     compute_engagement_track,
     find_grounding_triggers,
@@ -73,8 +76,11 @@ def _load_preds(session_id: str, override_path: Path | None) -> np.ndarray:
 def _load_baseline(
     baseline_session_id: str | None,
     baseline_path: Path | None,
+    *,
+    default_baseline_path: Path | None = None,
+    session_dir: Path | None = None,
 ) -> tuple[np.ndarray | None, str | None]:
-    """Return (preds_baseline, source_session_id)."""
+    """Return (preds_baseline, source_session_id or path label)."""
     if baseline_path is not None:
         if not baseline_path.is_file():
             print(f"WARNING: baseline-preds path not found: {baseline_path}", file=sys.stderr)
@@ -87,6 +93,14 @@ def _load_baseline(
             print(f"WARNING: baseline session preds.npz not found: {p}", file=sys.stderr)
             return None, None
         return np.load(p)["preds"].astype(np.float32), baseline_session_id
+
+    if session_dir is not None:
+        local = session_dir / "preds_baseline.npz"
+        if local.is_file():
+            return np.load(local)["preds"].astype(np.float32), None
+
+    if default_baseline_path is not None and default_baseline_path.is_file():
+        return np.load(default_baseline_path)["preds"].astype(np.float32), None
 
     return None, None
 
@@ -132,6 +146,8 @@ def run(
     """
     cfg = config or _load_config()
     eng_cfg = cfg.get("engagement", {})
+    act_cfg = cfg.get("activation", {})
+    base_cfg = cfg.get("baseline", {})
     emo_cfg = cfg.get("emotion", {})
     out_cfg = cfg.get("output", {})
 
@@ -139,8 +155,15 @@ def run(
     threshold_low = float(eng_cfg.get("threshold_low", -1.5))
     grounding_eng = float(eng_cfg.get("grounding_trigger", 2.0))
     min_base_trs = int(eng_cfg.get("min_baseline_trs", 30))
-    van_name = str(eng_cfg.get("van_network_name", "VentralAttention"))
-    dmn_name = str(eng_cfg.get("dmn_network_name", "DefaultMode"))
+    van_name = str(eng_cfg.get("van_network_name", "SalVentAttn"))
+    dmn_name = str(eng_cfg.get("dmn_network_name", "Default"))
+
+    act_threshold_high = float(act_cfg.get("threshold_high", 1.0))
+    act_threshold_low = float(act_cfg.get("threshold_low", -1.0))
+    act_min_base_trs = int(act_cfg.get("min_baseline_trs", min_base_trs))
+
+    default_baseline_raw = base_cfg.get("preds_path", "scout_data/baseline/preds_baseline.npz")
+    default_baseline_path = PROJECT_ROOT / default_baseline_raw
 
     template_dir_raw = emo_cfg.get("template_dir", "configs/emotion_templates")
     template_dir = PROJECT_ROOT / template_dir_raw
@@ -162,11 +185,17 @@ def run(
     T, V = preds.shape
     print(f"  preds shape: {T} timesteps × {V} vertices")
 
-    preds_baseline, baseline_src = _load_baseline(baseline_session_id, baseline_preds)
+    preds_baseline, baseline_src = _load_baseline(
+        baseline_session_id,
+        baseline_preds,
+        default_baseline_path=default_baseline_path,
+        session_dir=session_dir,
+    )
     if preds_baseline is not None:
-        print(f"  baseline: {preds_baseline.shape[0]} TRs from {'path override' if baseline_preds else baseline_src}")
+        src = "path override" if baseline_preds else (baseline_src or str(default_baseline_path))
+        print(f"  baseline: {preds_baseline.shape[0]} TRs from {src}")
     else:
-        print("  No baseline provided — Track 1 will skip label emission.")
+        print("  No baseline provided — Track 1 labels suppressed; Track 3 uses session-relative Z.")
 
     # -----------------------------------------------------------------------
     # Track 1 — Visual Engagement
@@ -197,6 +226,28 @@ def run(
             engaging = engagement_result["labels"].count("engaging")
             boring = engagement_result["labels"].count("boring")
             print(f"  Labelled: {engaging} engaging, {boring} boring, {T - engaging - boring} unlabelled")
+
+    # -----------------------------------------------------------------------
+    # Track 3 — Mean Vertex Activation
+    # -----------------------------------------------------------------------
+    print("\nTrack 3 — Mean Vertex Activation (attention proxy) …")
+    activation_result = compute_activation_track(
+        preds,
+        preds_baseline,
+        min_baseline_trs=act_min_base_trs,
+        threshold_high=act_threshold_high,
+        threshold_low=act_threshold_low,
+    )
+    act_flag = activation_result.get("baseline_flag")
+    if act_flag:
+        print(f"  baseline_flag: {act_flag}  comparison_mode: {activation_result.get('comparison_mode')}")
+    else:
+        high = activation_result["labels"].count("high_attention")
+        low = activation_result["labels"].count("low_attention")
+        print(
+            f"  comparison_mode: {activation_result.get('comparison_mode')}  "
+            f"labelled: {high} high, {low} low"
+        )
 
     # -----------------------------------------------------------------------
     # Track 2 — Discrete Emotion
@@ -284,9 +335,10 @@ def run(
     bundle_updates = {
         "session_id": session_id,
         "engagement_track": engagement_result,
+        "activation_track": activation_result,
         "emotion_track": emotion_result,
         "grounding_triggers": triggers,
-        "dual_track_schema_version": 2,
+        "dual_track_schema_version": 3,
     }
 
     if merge_existing:
@@ -334,6 +386,12 @@ def main() -> None:
         if valid:
             arr = np.array(valid)
             print(f"  Engagement scores        : min={arr.min():.3f}  max={arr.max():.3f}  mean={arr.mean():.3f}")
+    at = bundle.get("activation_track", {})
+    if at:
+        print(f"  Activation mode          : {at.get('comparison_mode')}  baseline_flag={at.get('baseline_flag')}")
+        act_scores = np.array(at.get("scores") or [], dtype=np.float32)
+        if act_scores.size:
+            print(f"  Activation scores        : min={act_scores.min():.3f}  max={act_scores.max():.3f}  mean={act_scores.mean():.3f}")
     emo = bundle.get("emotion_track")
     if emo:
         print(f"  Emotion templates        : {', '.join(emo.get('template_names', []))}")

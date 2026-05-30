@@ -2,9 +2,9 @@
 """Train a supervised NeuroEmo emotion classifier for TribeV2-style outputs.
 
 Input:
-    scout_data/neuroemo/tribev2_surface/neuroemo_tribev2_train.npz
+    scout_data/neuroEmoCode/tribev2_surface/neuroemo_tribev2_train.npz
 
-The prepared NPZ is produced by scripts/prepare_neuroemo_tribev2.py and contains
+The prepared NPZ is produced by scripts/neuroEmoCode/prepare_neuroemo_tribev2.py and contains
 features shaped like TribeV2 cortical predictions:
 
     X: (N, 20484) or (N, window_trs, 20484)
@@ -16,16 +16,16 @@ This script trains a scikit-learn classifier with subject-held-out cross
 validation, then fits a final model on all samples and writes a joblib artifact.
 
 Local usage:
-    python scripts/train_neuroemo_emotion_model.py
-    python scripts/train_neuroemo_emotion_model.py --model-type logistic_saga --cv-splits 5
+    python scripts/neuroEmoCode/train_neuroemo_emotion_model.py
+    python scripts/neuroEmoCode/train_neuroemo_emotion_model.py --model-type logistic_saga --cv-splits 5
 
 Modal usage for heavier runs:
-    modal run scripts/train_neuroemo_emotion_model.py::train_modal
-    modal run scripts/train_neuroemo_emotion_model.py::train_modal --model-type logistic_saga
+    modal run scripts/neuroEmoCode/train_neuroemo_emotion_model.py::train_modal
+    modal run scripts/neuroEmoCode/train_neuroemo_emotion_model.py::train_modal --model-type logistic_saga
 
 Output:
-    scout_data/neuroemo/models/neuroemo_emotion_model.joblib
-    scout_data/neuroemo/models/neuroemo_emotion_metrics.json
+    scout_data/neuroEmoCode/models/neuroemo_emotion_model.joblib
+    scout_data/neuroEmoCode/models/neuroemo_emotion_metrics.json
 """
 
 from __future__ import annotations
@@ -43,12 +43,12 @@ from typing import Any
 import joblib
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scout_core.parcellation import CANONICAL_VERTEX_ORDER, normalize_vertex_order
-from scout_core.roi_features import (
+from scout_core.neuroEmoCode.roi_features import (
     RoiFeatureSpec,
     load_roi_feature_spec,
     reduce_vertices_to_rois,
@@ -61,8 +61,8 @@ from scout_core.vertex_equivalence import (
     vertex_equivalence_reference,
 )
 
-DEFAULT_TRAIN_NPZ = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface" / "neuroemo_tribev2_train.npz"
-DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "models"
+DEFAULT_TRAIN_NPZ = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "tribev2_surface" / "neuroemo_tribev2_train.npz"
+DEFAULT_MODEL_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "models"
 DEFAULT_MODEL_PATH = DEFAULT_MODEL_DIR / "neuroemo_emotion_model.joblib"
 DEFAULT_METRICS_PATH = DEFAULT_MODEL_DIR / "neuroemo_emotion_metrics.json"
 DEFAULT_VERTEX_CSV = PROJECT_ROOT / "configs" / "vertex_regions.csv"
@@ -444,7 +444,7 @@ def _filter_and_remap_labels(
 def _load_training_data(path: Path, cfg: TrainConfig) -> TrainingData:
     if not path.is_file():
         raise FileNotFoundError(
-            f"Training NPZ not found: {path}. Run scripts/prepare_neuroemo_tribev2.py first."
+            f"Training NPZ not found: {path}. Run scripts/neuroEmoCode/prepare_neuroemo_tribev2.py first."
         )
 
     raw = np.load(path, allow_pickle=False)

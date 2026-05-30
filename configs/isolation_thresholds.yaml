@@ -8,7 +8,7 @@ trigger:
   engagement_score_min: 2.0
   # Session-relative Z minimum for ANY emotion channel to flag a spike (Track 2).
   # This replaces the earlier kragel_anger_z_min which was anger-only.
-  emotion_z_min: 2.0
+  emotion_z_min: 1.0
   # Backward-compat alias (deprecated — use emotion_z_min).
   # kragel_anger_z_min: 2.0
   # Logical operator for combining both conditions: "or" | "and"

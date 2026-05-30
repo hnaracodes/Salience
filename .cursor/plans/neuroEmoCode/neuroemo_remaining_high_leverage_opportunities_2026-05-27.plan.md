@@ -4,10 +4,10 @@ overview: Finish the remaining very-high and high-leverage NeuroEmo model improv
 todos:
   - id: projection-equivalence-proof
     content: Upgrade vertex proof from mesh_identity_verified to projection_equivalence_verified and fix any overclaiming status labels/docs.
-    status: pending
+    status: completed
   - id: full-surface-postfix-matrix
     content: Rerun the full projected-postfix-equivalent model matrix on the surface-native atlas.
-    status: pending
+    status: completed
   - id: timing-grid
     content: Sweep BOLD lag, block-edge transition trimming, and temporal stride under a frozen model/atlas/fold contract.
     status: pending
@@ -76,7 +76,7 @@ Run only the full surface-native postfix matrix with:
 
 Current status:
 
-- `configs/parcellation_manifest.yaml` records `proof_status: mesh_identity_verified`.
+- `configs/parcellation_manifest.yaml` records `proof_status: projection_equivalence_verified` (hash `25ced97a...`).
 - `scripts/run_vertex_equivalence_verification.ps1` is set up to require `projection_equivalence_verified`.
 - The surface-native evaluation doc correctly distinguishes mesh identity from projection agreement, but some status wording around annot-vs-projection agreement can still be misread.
 

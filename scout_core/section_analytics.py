@@ -1,6 +1,7 @@
 """Section-level marketing analytics — assign TRs to UI sections and aggregate neural traces.
 
-Tier 1 (CPU): uses full-session ``emotion_track`` / ``engagement_track`` from dual_track.
+Tier 1 (CPU): uses full-session ``emotion_track``, ``engagement_track``, and
+``activation_track`` (mean |preds| over full brain) from dual_track.
 Section IDs come from a hybrid model: URL + DOM landmarks + optional ``site_sections.yaml``.
 """
 
@@ -272,11 +273,15 @@ def aggregate_section_metrics(
     high_arousal_z: float = 1.0,
     positive_valence_z: float = 1.0,
 ) -> list[dict[str, Any]]:
-    """Aggregate engagement and emotion traces per section (all TRs, not spike-only)."""
+    """Aggregate engagement, activation, and emotion traces per section (all TRs, not spike-only)."""
     engagement = bundle.get("engagement_track") or {}
+    activation = bundle.get("activation_track") or {}
     emotion = bundle.get("emotion_track") or {}
     eng_scores = engagement.get("scores") or []
     eng_labels = engagement.get("labels") or []
+    act_raw = activation.get("raw_scores") or []
+    act_z = activation.get("scores") or []
+    act_labels = activation.get("labels") or []
     template_names = emotion.get("template_names") or []
     z_scores = emotion.get("z_scores") or []
     cosine_scores = emotion.get("cosine_scores") or []
@@ -310,6 +315,31 @@ def aggregate_section_metrics(
         )
         pct_boring = (
             sum(1 for l in labels_slice if l == "boring") / n_labeled if n_labeled else None
+        )
+
+        valid_act_raw = [
+            float(act_raw[t])
+            for t in t_indices
+            if t < len(act_raw)
+        ]
+        valid_act_z = [
+            float(act_z[t])
+            for t in t_indices
+            if t < len(act_z)
+        ]
+        act_labels_slice = [
+            act_labels[t]
+            for t in t_indices
+            if t < len(act_labels)
+        ]
+        n_act_labeled = len(act_labels_slice)
+        pct_high_attention = (
+            sum(1 for l in act_labels_slice if l == "high_attention") / n_act_labeled
+            if n_act_labeled else None
+        )
+        pct_low_attention = (
+            sum(1 for l in act_labels_slice if l == "low_attention") / n_act_labeled
+            if n_act_labeled else None
         )
 
         mean_z: dict[str, float] = {}
@@ -378,6 +408,15 @@ def aggregate_section_metrics(
                 "pct_engaging": round(pct_engaging, 4) if pct_engaging is not None else None,
                 "pct_boring": round(pct_boring, 4) if pct_boring is not None else None,
                 "n_scored": len(valid_eng),
+            },
+            "activation": {
+                "mean_raw": round(float(np.mean(valid_act_raw)), 6) if valid_act_raw else None,
+                "median_raw": round(float(np.median(valid_act_raw)), 6) if valid_act_raw else None,
+                "mean_z": round(float(np.mean(valid_act_z)), 4) if valid_act_z else None,
+                "pct_high_attention": round(pct_high_attention, 4) if pct_high_attention is not None else None,
+                "pct_low_attention": round(pct_low_attention, 4) if pct_low_attention is not None else None,
+                "comparison_mode": activation.get("comparison_mode"),
+                "n_scored": len(valid_act_raw),
             },
             "emotion": {
                 "mean_z": mean_z,

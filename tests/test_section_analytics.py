@@ -64,6 +64,12 @@ def _bundle_t6() -> dict:
             "cosine_scores": [[0.05] * 3] * 6,
             "z_scores": z,
         },
+        "activation_track": {
+            "raw_scores": [0.10, 0.11, 0.12, 0.20, 0.11, 0.09],
+            "scores": [-1.0, -0.5, 0.0, 2.0, -0.5, -1.5],
+            "labels": [None, None, None, "high_attention", None, "low_attention"],
+            "comparison_mode": "baseline_relative",
+        },
     }
 
 
@@ -101,6 +107,17 @@ class TestSectionAggregate:
         report = build_section_report(_bundle_t6(), _manifest_two_sections())
         assert report
         assert "emotion" in report[0]
+        assert "activation" in report[0]
+        assert report[0]["activation"]["mean_raw"] is not None
+
+    def test_activation_high_at_spike_tr(self):
+        assigns = assign_timesteps_to_sections(6, _manifest_two_sections())
+        report = aggregate_section_metrics(_bundle_t6(), assigns)
+        by_id = {r["section_id"]: r for r in report}
+        # t=3 has highest raw activation in fixture
+        for r in report:
+            if 3 in r["t_indices"]:
+                assert r["activation"]["mean_raw"] >= 0.12
 
 
 class TestSectionSampling:

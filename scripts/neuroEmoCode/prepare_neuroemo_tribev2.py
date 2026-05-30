@@ -20,18 +20,18 @@ Important scientific note:
     and run with --skip-download.
 
 Usage:
-    python scripts/prepare_neuroemo_tribev2.py --subjects 1-40
-    python scripts/prepare_neuroemo_tribev2.py --subjects 1,2,3 --bold-lag-s 6
-    python scripts/prepare_neuroemo_tribev2.py --skip-download --raw-dir path/to/bids
+    python scripts/neuroEmoCode/prepare_neuroemo_tribev2.py --subjects 1-40
+    python scripts/neuroEmoCode/prepare_neuroemo_tribev2.py --subjects 1,2,3 --bold-lag-s 6
+    python scripts/neuroEmoCode/prepare_neuroemo_tribev2.py --skip-download --raw-dir path/to/bids
 
 Outputs:
-    scout_data/neuroemo/raw/...
+    scout_data/neuroEmoCode/raw/...
         Downloaded BIDS emotion-task files.
 
-    scout_data/neuroemo/tribev2_surface/subjects/sub-XX_task-fe_fsaverage5.npz
+    scout_data/neuroEmoCode/tribev2_surface/subjects/sub-XX_task-fe_fsaverage5.npz
         Per-subject surface timeseries, labels, and metadata.
 
-    scout_data/neuroemo/tribev2_surface/neuroemo_tribev2_train.npz
+    scout_data/neuroEmoCode/tribev2_surface/neuroemo_tribev2_train.npz
         Combined ML-ready samples:
             X:        (N, 20484) or (N, window_trs, 20484) float32
             y:        (N,) int64
@@ -65,10 +65,10 @@ from scout_core.vertex_equivalence import (
     write_vertex_equivalence_report,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RAW_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "raw"
-DEFAULT_OUT_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "tribev2_surface"
-DEFAULT_PREPROCESSED_DIR = PROJECT_ROOT / "scout_data" / "neuroemo" / "preprocessed"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_RAW_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "raw"
+DEFAULT_OUT_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "tribev2_surface"
+DEFAULT_PREPROCESSED_DIR = PROJECT_ROOT / "scout_data" / "neuroEmoCode" / "preprocessed"
 
 DATASET_ID = "ds005700"
 SNAPSHOT_VERSION = "1.2.0"
@@ -676,7 +676,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--vertex-equivalence-report",
         type=Path,
         default=None,
-        help="Pinned proof artifact path. Defaults to scout_data/neuroemo/vertex_equivalence_report.json",
+        help="Pinned proof artifact path. Defaults to scout_data/neuroEmoCode/vertex_equivalence_report.json",
     )
     parser.add_argument(
         "--recompute-vertex-equivalence",

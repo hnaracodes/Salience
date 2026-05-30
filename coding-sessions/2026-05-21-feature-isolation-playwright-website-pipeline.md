@@ -565,7 +565,7 @@ All unit tests should pass without Playwright network or Modal (except any integ
 | **WebSocket brain streaming** | P3 in phased plan; not implemented |
 | Heatmap ↔ TRIBE internal attention parity | R0 note in `tribe.py`: separate DINOv2 load vs Tribe encoder |
 | Golden site E2E with real Modal | Requires HF secret + ffmpeg + local server for localhost demo |
-| **Track 2 SVM on NeuroEmo** | Planned — see [§17–§18](#17-future-plans--track-2-ml-migration-neuroemo--nilearn--svm); zero-shot templates remain production default until trained model passes CV gates |
+| **Track 2 SVM on NeuroEmo** | **Archived** under `scripts/neuroEmoCode/`, `scout_data/neuroEmoCode/` — see [§17–§18](#17-future-plans--track-2-ml-migration-neuroemo--nilearn--svm); website E2E keeps Kragel zero-shot templates |
 
 ### Suggested reading order for new engineers
 
@@ -578,6 +578,8 @@ All unit tests should pass without Playwright network or Modal (except any integ
 ---
 
 ## 17. Future plans — Track 2 ML migration (NeuroEmo + nilearn + SVM)
+
+> **Archive note (2026-05):** NeuroEmo training scripts, tests, data, and plans live under `*/neuroEmoCode/` directories. They are **not** invoked by `run_website_session.py` or `analyze_session.py --website`. Resume ML work from `scripts/neuroEmoCode/README.md`.
 
 Today **Track 2** is **zero-shot**: L2-normalised Kragel/PINES templates dotted against whole-brain `preds[T, 20484]`, then **session-relative Z-scores** on those cosines. That path is intentional for MVP (no labeled training corpus, fast iteration, Playwright + feature isolation already wired to Z-thresholds).
 

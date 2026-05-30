@@ -151,14 +151,14 @@ Always run tests from the project root with the venv active:
 ```powershell
 .venv\Scripts\activate
 
-# Full suite (excludes neuroemo ML model test which needs GPU)
-python -m pytest tests/ -v --tb=short --ignore=tests/test_neuroemo_model.py
+# Full website-pipeline suite (NeuroEmo ML training tests live under tests/neuroEmoCode/ and are skipped by default)
+python -m pytest tests/ -v --tb=short
 
 # Pipeline-specific tests only
 python -m pytest tests/test_record_website_session.py tests/test_analyze_session_spikes.py tests/test_heatmap_provenance.py tests/test_feature_isolation.py tests/test_dual_track.py tests/test_section_analytics.py -v --tb=short
 ```
 
-Expected: **133 passed** (all tests, ignoring neuroemo_model).
+NeuroEmo supervised training tests: `python -m pytest tests/neuroEmoCode/ -v --tb=short` (see `scripts/neuroEmoCode/README.md`).
 
 ---
 

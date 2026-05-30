@@ -1,5 +1,8 @@
-# Scripted walkthrough for local fixture (tests + dev).
+# Scripted walkthrough for local Aurora fixture (tests + dev).
 # Serve: python -m http.server 8765 --directory tests/fixtures/walkthrough_site
+#
+# Quick 5-TR capture (compatible with older pipeline checks).
+# For full cinematic pass use: configs/walkthrough_scripts/aurora_showcase.yaml
 
 name: localhost_demo
 initial_url: "http://127.0.0.1:8765/index.html"
@@ -9,10 +12,10 @@ viewport:
 duration_sec: 5
 steps:
   - action: wait_ms
-    ms: 500
+    ms: 600
   - action: scroll_to_y
     y: 400
   - action: wait_ms
     ms: 500
   - action: scroll_to_y
-    y: 800
+    y: 900

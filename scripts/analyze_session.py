@@ -67,10 +67,12 @@ _ISO_CONFIG_PATH = ROOT / "configs" / "isolation_thresholds.yaml"
 # Fields written by run_dual_track.py that we must preserve across bundle writes.
 _DUAL_TRACK_PASSTHROUGH_KEYS = (
     "engagement_track",
+    "activation_track",
     "emotion_track",
     "grounding_triggers",
     "dual_track_schema_version",
     "section_report",
+    "marketing_scores",
 )
 
 
@@ -98,14 +100,14 @@ def _select_spikes(
     Track 1 (engagement): any trigger with channel=="engagement" and
     |value| >= eng_min passes.
 
-    Track 2 (emotion): ANY emotion channel (not just anger) with
-    value >= emotion_z_min passes. The highest-scoring channel at each
-    timestep is recorded as ``emotion_channel`` + ``emotion_z`` in the
-    trigger payload.  For backward compatibility, if the winning channel is
-    "anger", ``kragel_anger_z`` is also written.
+    Track 2 (emotion): EVERY emotion channel with value >= emotion_z_min at
+    the same timestep gets its own spike entry (no single-channel winner).
+    Each spike carries ``emotion_channel`` + ``emotion_z``. For backward
+    compatibility, anger spikes also include ``kragel_anger_z``.
 
-    Applies cooldown (minimum gap between consecutive spikes) and optional
-    max_spikes cap. Returns [{t_idx, triggers}].
+    Cooldown applies between timesteps (not between channels at the same TR).
+    Optional max_spikes cap counts individual spike entries across channels.
+    Returns [{t_idx, triggers}].
     """
     raw_triggers = bundle.get("grounding_triggers", [])
     if not raw_triggers:
@@ -125,45 +127,56 @@ def _select_spikes(
     last_t = -cooldown_trs - 1
 
     for t in sorted(by_t.keys()):
+        if max_spikes and len(spikes) >= max_spikes:
+            break
+
         vals = by_t[t]
         eng_val = vals.get("engagement", None)
 
-        # Find best emotion channel across all non-engagement channels.
-        emotion_channels = {k: v for k, v in vals.items() if k != "engagement"}
-        best_channel: str | None = None
-        best_emotion_z: float = 0.0
-        if emotion_channels:
-            best_channel = max(emotion_channels, key=lambda k: emotion_channels[k])
-            best_emotion_z = emotion_channels[best_channel]
+        qualifying_emotions = {
+            ch: float(v)
+            for ch, v in vals.items()
+            if ch != "engagement" and float(v) >= emotion_z_min
+        }
 
-        eng_ok = eng_val is not None and abs(eng_val) >= eng_min
-        emotion_ok = best_channel is not None and best_emotion_z >= emotion_z_min
+        eng_ok = eng_val is not None and abs(float(eng_val)) >= eng_min
+        emotions_ok = len(qualifying_emotions) > 0
 
         if combine == "and":
-            passes = eng_ok and emotion_ok
-        else:
-            passes = eng_ok or emotion_ok
-
-        if not passes:
+            if not (eng_ok and emotions_ok):
+                continue
+        elif not (eng_ok or emotions_ok):
             continue
+
         if t - last_t < cooldown_trs:
             continue
 
-        trigger_payload: dict[str, Any] = {}
-        if eng_val is not None:
-            trigger_payload["engagement_score"] = round(eng_val, 4)
-        if best_channel is not None and best_emotion_z >= emotion_z_min:
-            trigger_payload["emotion_channel"] = best_channel
-            trigger_payload["emotion_z"] = round(best_emotion_z, 4)
-            # Backward compat: keep kragel_anger_z when anger is the winner.
-            if best_channel == "anger":
-                trigger_payload["kragel_anger_z"] = round(best_emotion_z, 4)
+        spikes_at_t: list[dict[str, Any]] = []
 
-        spikes.append({"t_idx": t, "triggers": trigger_payload})
-        last_t = t
+        if eng_ok:
+            spikes_at_t.append({
+                "t_idx": t,
+                "triggers": {"engagement_score": round(float(eng_val), 4)},
+            })
 
-        if max_spikes and len(spikes) >= max_spikes:
-            break
+        for channel in sorted(qualifying_emotions, key=lambda c: -qualifying_emotions[c]):
+            payload: dict[str, Any] = {
+                "emotion_channel": channel,
+                "emotion_z": round(qualifying_emotions[channel], 4),
+            }
+            if channel == "anger":
+                payload["kragel_anger_z"] = payload["emotion_z"]
+            spikes_at_t.append({"t_idx": t, "triggers": payload})
+
+        added_any = False
+        for spike in spikes_at_t:
+            if max_spikes and len(spikes) >= max_spikes:
+                break
+            spikes.append(spike)
+            added_any = True
+
+        if added_any:
+            last_t = t
 
     return spikes
 
@@ -233,71 +246,75 @@ def _run_grounding_step(
     hm_manifest = read_heatmaps_manifest(heatmaps_dir)
 
     events: list[dict[str, Any]] = []
+    # Cache heatmap + DOM winner per t so multi-emotion spikes at one TR reuse work.
+    spatial_cache: dict[int, dict[str, Any]] = {}
+
     for spike in spikes:
         t = spike["t_idx"]
         triggers = spike["triggers"]
+        channel_label = triggers.get("emotion_channel") or "engagement"
 
-        heatmap_path = heatmaps_dir / f"t_{t}.npy"
-        hm_meta = hm_manifest.get(t, {})
-        provenance = HeatmapProvenance(
-            heatmap_path=str(heatmap_path.relative_to(session_dir)) if heatmap_path.is_file() else None,
-            source=hm_meta.get("source") or ("uniform_placeholder" if hm_meta.get("placeholder") else None),
-            placeholder=bool(hm_meta.get("placeholder", False)),
-            frame_path=hm_meta.get("frame_path"),
-            sha256=hm_meta.get("sha256"),
+        if t not in spatial_cache:
+            heatmap_path = heatmaps_dir / f"t_{t}.npy"
+            hm_meta = hm_manifest.get(t, {})
+            provenance = HeatmapProvenance(
+                heatmap_path=str(heatmap_path.relative_to(session_dir)) if heatmap_path.is_file() else None,
+                source=hm_meta.get("source") or ("uniform_placeholder" if hm_meta.get("placeholder") else None),
+                placeholder=bool(hm_meta.get("placeholder", False)),
+                frame_path=hm_meta.get("frame_path"),
+                sha256=hm_meta.get("sha256"),
+            )
+
+            if not heatmap_path.is_file():
+                print(f"  t={t}: heatmap not found at {heatmap_path} — recording ungrounded event(s).")
+                spatial_cache[t] = {
+                    "provenance": provenance,
+                    "grounding": None,
+                    "skip_reason": "heatmap_not_found",
+                }
+            else:
+                heatmap = np.load(heatmap_path).astype(np.float32)
+                snapshot = find_nearest_snapshot(manifest, t)
+                if snapshot is None:
+                    print(f"  t={t}: no DOM snapshot in manifest — recording ungrounded event(s).")
+                    spatial_cache[t] = {
+                        "provenance": provenance,
+                        "grounding": None,
+                        "skip_reason": "no_manifest_snapshot",
+                    }
+                else:
+                    winner = ground_snapshot(heatmap, snapshot)
+                    if winner is None:
+                        print(f"  t={t}: dom_intersect found no eligible element.")
+                        spatial_cache[t] = {
+                            "provenance": provenance,
+                            "grounding": None,
+                            "skip_reason": "no_eligible_dom_element",
+                        }
+                    else:
+                        print(
+                            f"  t={t}: winner -> {winner['dom_id']} ({winner['tag']}) "
+                            f"density={winner['attention_density']:.4f}"
+                        )
+                        spatial_cache[t] = {
+                            "provenance": provenance,
+                            "grounding": GroundingResult(**winner),
+                            "skip_reason": None,
+                        }
+
+        cached = spatial_cache[t]
+        events.append(
+            GroundingEvent(
+                t_spike=t,
+                triggers=triggers,
+                grounding=cached["grounding"],
+                grounding_skip_reason=cached["skip_reason"],
+                heatmap_provenance=cached["provenance"],
+            ).model_dump()
         )
-
-        if not heatmap_path.is_file():
-            print(f"  t={t}: heatmap not found at {heatmap_path} — recording ungrounded event.")
-            events.append(
-                GroundingEvent(
-                    t_spike=t,
-                    triggers=triggers,
-                    grounding=None,
-                    grounding_skip_reason="heatmap_not_found",
-                    heatmap_provenance=provenance,
-                ).model_dump()
-            )
-            continue
-
-        heatmap = np.load(heatmap_path).astype(np.float32)
-
-        snapshot = find_nearest_snapshot(manifest, t)
-        if snapshot is None:
-            print(f"  t={t}: no DOM snapshot in manifest — recording ungrounded event.")
-            events.append(
-                GroundingEvent(
-                    t_spike=t,
-                    triggers=triggers,
-                    grounding=None,
-                    grounding_skip_reason="no_manifest_snapshot",
-                    heatmap_provenance=provenance,
-                ).model_dump()
-            )
-            continue
-
-        winner = ground_snapshot(heatmap, snapshot)
-        if winner is None:
-            print(f"  t={t}: dom_intersect found no eligible element.")
-            events.append(
-                GroundingEvent(
-                    t_spike=t,
-                    triggers=triggers,
-                    grounding=None,
-                    grounding_skip_reason="no_eligible_dom_element",
-                    heatmap_provenance=provenance,
-                ).model_dump()
-            )
-        else:
-            print(f"  t={t}: winner → {winner['dom_id']} ({winner['tag']}) density={winner['attention_density']:.4f}")
-            events.append(
-                GroundingEvent(
-                    t_spike=t,
-                    triggers=triggers,
-                    grounding=GroundingResult(**winner),
-                    heatmap_provenance=provenance,
-                ).model_dump()
-            )
+        if cached["grounding"] is not None:
+            dom_id = cached["grounding"].dom_id
+            print(f"    [{channel_label}] -> {dom_id}")
 
     return events
 
@@ -376,10 +393,27 @@ def main() -> None:
         default=False,
         help="If heatmaps/ is missing, print hint to run extract_section_heatmaps.py --modal",
     )
+    parser.add_argument(
+        "--marketing-scores",
+        action="store_true",
+        default=False,
+        help="Build marketing_scores (0–100 display curve) and write to analysis_bundle.json.",
+    )
+    parser.add_argument(
+        "--no-marketing-scores",
+        action="store_true",
+        default=False,
+        help="Skip marketing_scores even in --website / --sections mode.",
+    )
     args = parser.parse_args()
 
     if args.website:
         args.sections = True
+
+    enable_marketing_scores = (
+        not args.no_marketing_scores
+        and (args.marketing_scores or args.website or args.sections)
+    )
 
     conn = sqlite3.connect(DB_PATH)
     ensure_neuro_schema(conn)
@@ -556,6 +590,21 @@ def main() -> None:
 
     if args.website and bundle_dict.get("section_report") and bundle_dict.get("schema_version", 1) < 3:
         bundle_dict["schema_version"] = 3
+
+    # -----------------------------------------------------------------------
+    # Marketing display scores (0–100 curve + rubric)
+    # -----------------------------------------------------------------------
+    if enable_marketing_scores:
+        print("\nMarketing scores …")
+        from scout_core.marketing_scores import build_marketing_scores
+
+        bundle_dict["marketing_scores"] = build_marketing_scores(session_dir, bundle_dict)
+        bundle_dict["schema_version"] = max(bundle_dict.get("schema_version", 1), 4)
+        ms = bundle_dict["marketing_scores"]
+        print(
+            f"  overall_score={ms.get('overall_score')} "
+            f"display_avg={ms.get('display_curve', {}).get('avg_score')}"
+        )
 
     out_json.write_text(json.dumps(bundle_dict, indent=2), encoding="utf-8")
 
