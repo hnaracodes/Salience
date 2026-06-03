@@ -1,5 +1,5 @@
 engagement:
-  # Z-score thresholds for engagement labels
+  # Z-score thresholds for engagement labels (±1.5 = conservative; use ±1.0 for noisier website demos)
   threshold_high: 1.5
   threshold_low: -1.5
   # Agentic grounding fires when engagement_score exceeds this

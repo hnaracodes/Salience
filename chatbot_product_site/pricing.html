@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — Threadmind</title>
+  <link rel="stylesheet" href="assets/css/tokens.css" />
+  <link rel="stylesheet" href="assets/css/site.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header role="banner">
+    <a href="index.html" class="logo"><span class="logo-mark"></span> Threadmind</a>
+    <nav role="navigation">
+      <a href="features.html">Features</a>
+      <a href="models.html">Models</a>
+      <a href="pricing.html" aria-current="page">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="about.html">About</a>
+      <a href="pricing.html" class="nav-cta" id="nav-subscribe">Subscribe</a>
+    </nav>
+  </header>
+
+  <main class="page-wrap" role="main">
+    <div class="page-hero" id="pricing-hero">
+      <div class="section-inner">
+        <p class="section-label">Pricing</p>
+        <h1>Pay for compute, not clutter</h1>
+        <p class="lead">Every tier includes end-to-end encryption in transit. Upgrade when you need reasoning depth, speed, or team controls.</p>
+      </div>
+    </div>
+
+    <div class="content-block" id="pricing-table">
+      <table class="comparison-table" aria-label="Plan comparison">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>Plus · $20/mo</th>
+            <th>Pro · $40/mo</th>
+            <th>Team · $30/user</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Daily messages</td><td>40</td><td>Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+          <tr><td>Reason model access</td><td>—</td><td>✓</td><td>✓ priority</td><td>✓ + Atlas</td></tr>
+          <tr><td>Context window</td><td>8K</td><td>128K</td><td>128K</td><td>200K</td></tr>
+          <tr><td>Memory retention</td><td>7 days</td><td>Always</td><td>Always</td><td>Shared workspace</td></tr>
+          <tr><td>Web search</td><td>Basic</td><td>Live citations</td><td>Live + PDFs</td><td>Custom connectors</td></tr>
+          <tr><td>Code sandbox</td><td>—</td><td>✓</td><td>✓ + GitHub</td><td>✓ + audit</td></tr>
+          <tr><td>API access</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
+          <tr><td>Train on your data</td><td>Opt-in</td><td>Off</td><td>Off</td><td>Contractual DPA</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="content-block" id="pricing-why">
+      <h2>Where your subscription goes</h2>
+      <div class="feature-grid">
+        <article class="feature-item" id="pricing-infra">
+          <h3>48% — Inference infrastructure</h3>
+          <p>H100 clusters, autoscaling, and geographic routing so responses stay under 2s p95 for Plus users.</p>
+        </article>
+        <article class="feature-item" id="pricing-rd">
+          <h3>31% — Research &amp; safety</h3>
+          <p>Red-teaming, eval harnesses, and fine-tunes shipped weekly without engagement-bait features.</p>
+        </article>
+        <article class="feature-item" id="pricing-support">
+          <h3>21% — Support &amp; platform</h3>
+          <p>Human support for billing, SSO setup, and data export — no outsourced ticket black holes.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="pricing-cta-block">
+      <div class="section-inner" style="text-align: center;">
+        <button type="button" class="btn btn-primary" id="cta-primary">Start 14-day Plus trial</button>
+      </div>
+    </section>
+  </main>
+
+  <footer role="contentinfo">
+    <div class="footer-bottom" style="border: none; text-align: center;">© <span id="year"></span> Threadmind Labs · <a href="index.html">Home</a></div>
+  </footer>
+  <script src="assets/js/site.js"></script>
+</body>
+</html>

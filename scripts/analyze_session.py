@@ -33,11 +33,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from activation_store import DB_PATH, PROJECT_ROOT  # noqa: E402
-from scout_core.aggregate import network_timeseries, parcel_timeseries  # noqa: E402
-from scout_core.constants import network_names_for_ids  # noqa: E402
+from scout_core.aggregate import (  # noqa: E402
+    collapse_subnetwork_ts_to_yeo7,
+    network_timeseries,
+    parcel_timeseries,
+)
+from scout_core.norms import aggregate_subnetwork_norms_to_yeo7, zscore_network, zscore_roi  # noqa: E402
+from scout_core.parcellation import (  # noqa: E402
+    dense_parcel_labels,
+    load_vertex_table,
+    parcel_to_network_map,
+    subnetwork_id_to_coarse_name,
+)
 from scout_core.dom_intersect import find_nearest_snapshot, ground_snapshot  # noqa: E402
-from scout_core.norms import zscore_network, zscore_roi  # noqa: E402
-from scout_core.parcellation import dense_parcel_labels, load_vertex_table, parcel_to_network_map  # noqa: E402
 from scout_core.schemas import (  # noqa: E402
     AnalysisBundle,
     GroundingEvent,
@@ -436,13 +444,20 @@ def main() -> None:
     table = load_vertex_table(args.vertex_csv)
     vp = dense_parcel_labels(table, preds.shape[1])
     pmap = parcel_to_network_map(table)
+    sub_id_to_coarse = subnetwork_id_to_coarse_name(table)
 
     parcel_ts, parcel_ids = parcel_timeseries(preds, vp, reducer=args.reducer)
-    net_ts, net_ids = network_timeseries(parcel_ts, parcel_ids, pmap, reducer=args.reducer)
+    net_ts_sub, sub_ids = network_timeseries(parcel_ts, parcel_ids, pmap, reducer=args.reducer)
+    net_ts, net_ids, names = collapse_subnetwork_ts_to_yeo7(
+        net_ts_sub,
+        sub_ids,
+        sub_id_to_coarse,
+        reducer=args.reducer,
+    )
 
     z_p = zscore_roi(parcel_ts, roi_norms, parcel_ids)
-    z_n = zscore_network(net_ts, net_norms, net_ids)
-    names = network_names_for_ids(net_ids)
+    norms_yeo7 = aggregate_subnetwork_norms_to_yeo7(net_norms, sub_id_to_coarse)
+    z_n = zscore_network(net_ts, norms_yeo7, net_ids)
 
     clear_session_neuro_rows(conn, args.session_id, args.norm_id)
     insert_roi_timeseries_batch(

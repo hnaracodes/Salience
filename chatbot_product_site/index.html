@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Threadmind — AI that thinks with you</title>
+  <link rel="stylesheet" href="assets/css/tokens.css" />
+  <link rel="stylesheet" href="assets/css/site.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+
+  <header role="banner">
+    <a href="index.html" class="logo" id="logo">
+      <span class="logo-mark" aria-hidden="true"></span>
+      Threadmind
+    </a>
+    <nav role="navigation" id="main-nav">
+      <a href="features.html">Features</a>
+      <a href="models.html">Models</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="about.html">About</a>
+      <a href="pricing.html" class="nav-cta" id="nav-subscribe">Subscribe</a>
+    </nav>
+  </header>
+
+  <div class="scroll-rail" aria-hidden="true">
+    <div class="scroll-rail-track"></div>
+    <div class="scroll-ball-host" id="scrollBallHost">
+      <div class="scroll-ball" id="scrollBallInner">
+        <div class="ball-sphere" id="scrollBallSphere" data-phase="intro"></div>
+      </div>
+    </div>
+    <div class="ball-trail" id="scrollBallTrail" style="top: 28px; height: 0;"></div>
+  </div>
+
+  <span class="section-marker is-active" data-section="hero">01 · Intro</span>
+  <span class="section-marker" style="top: 18vh" data-section="why">02 · Why pay</span>
+  <span class="section-marker" style="top: 32vh" data-section="how">03 · Flow</span>
+  <span class="section-marker" style="top: 46vh" data-section="models">04 · Models</span>
+  <span class="section-marker" style="top: 58vh" data-section="pricing">05 · Plans</span>
+  <span class="section-marker" style="top: 70vh" data-section="social">06 · Proof</span>
+  <span class="section-marker" style="top: 82vh" data-section="faq">07 · FAQ</span>
+  <span class="section-marker" style="top: 92vh" data-section="cta">08 · Start</span>
+
+  <main class="page-wrap journey" role="main">
+    <section id="hero" class="section" aria-labelledby="hero-title">
+      <div class="section-inner hero-grid">
+        <div>
+          <p class="section-label">Conversational intelligence</p>
+          <h1 id="hero-title">An AI chatbot that earns your subscription every day</h1>
+          <p class="lead">
+            Threadmind runs frontier reasoning models with persistent memory, live web access,
+            and team workspaces. Free tier gets you started — subscription unlocks the compute
+            that makes answers genuinely useful, not generic.
+          </p>
+          <div class="btn-row">
+            <a href="pricing.html" class="btn btn-primary" id="hero-cta">Start free trial</a>
+            <a href="#why-subscribe" class="btn btn-secondary">Why subscribe?</a>
+          </div>
+        </div>
+        <div class="hero-visual" id="hero-demo">
+          <div class="chat-mock">
+            <div class="chat-bubble user">Draft a product launch email that sounds human, not AI-slop.</div>
+            <div class="chat-bubble ai">I'll lead with a concrete outcome, one proof point, and a single CTA — no purple gradients required.</div>
+            <div class="chat-bubble user">Why does Plus cost $20/month?</div>
+            <div class="chat-bubble ai">You're paying for H100 inference time, 128K context, priority routing, and zero ad-driven data harvesting.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="why-subscribe" class="section" aria-labelledby="why-title">
+      <div class="section-inner">
+        <p class="section-label">The honest economics</p>
+        <h2 id="why-title">Why Threadmind needs a subscription</h2>
+        <p class="lead">
+          Frontier models aren't cheap to run. A single long conversation can consume more GPU
+          seconds than an hour of video streaming. Subscriptions align our incentives with yours:
+          better answers, not more ads.
+        </p>
+        <div class="cost-viz">
+          <article class="cost-card" id="cost-gpu" style="--fill: 82%">
+            <h3>GPU inference</h3>
+            <div class="stat-num">$0.04</div>
+            <p>avg. cost per 1K tokens on our reasoning tier</p>
+            <div class="cost-meter"><div class="cost-meter-fill"></div></div>
+            <p>Subscriptions fund dedicated capacity so your chat never queues behind free users during peak hours.</p>
+          </article>
+          <article class="cost-card" id="cost-research" style="--fill: 65%">
+            <h3>Model research</h3>
+            <div class="stat-num">24/7</div>
+            <p>safety, eval, and fine-tuning pipeline</p>
+            <div class="cost-meter"><div class="cost-meter-fill"></div></div>
+            <p>We ship weekly improvements to reasoning, citation accuracy, and refusal behavior — sustained by recurring revenue.</p>
+          </article>
+          <article class="cost-card" id="cost-trust" style="--fill: 90%">
+            <h3>Privacy &amp; trust</h3>
+            <div class="stat-num">0</div>
+            <p>ads, ever — your data isn't the product</p>
+            <div class="cost-meter"><div class="cost-meter-fill"></div></div>
+            <p>Plus and Pro disable training on your conversations by default. Enterprise adds SSO, audit logs, and data residency.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section" aria-labelledby="how-title">
+      <div class="section-inner">
+        <p class="section-label">Scroll the ball — watch the flow</p>
+        <h2 id="how-title">From question to grounded answer</h2>
+        <div class="steps">
+          <article class="step is-active" id="step-intent">
+            <h3>Parse intent</h3>
+            <p>Threadmind classifies your goal — draft, analyze, code, or research — and picks the right model route.</p>
+          </article>
+          <article class="step" id="step-retrieve">
+            <h3>Retrieve context</h3>
+            <p>Memory, uploaded docs, and optional live web search fill a 128K token window with cited sources.</p>
+          </article>
+          <article class="step" id="step-reason">
+            <h3>Reason deeply</h3>
+            <p>Chain-of-thought runs on subscription tiers with extended thinking time for math, law, and engineering tasks.</p>
+          </article>
+          <article class="step" id="step-deliver">
+            <h3>Deliver &amp; iterate</h3>
+            <p>Edit inline, branch conversations, or export to Notion, Slack, and GitHub — all synced to your workspace.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="models-preview" class="section" aria-labelledby="models-title">
+      <div class="section-inner">
+        <p class="section-label">Model stack</p>
+        <h2 id="models-title">Pick the brain that matches the task</h2>
+        <div class="model-cards">
+          <article class="model-card" id="model-fast">
+            <span class="badge">Free tier</span>
+            <h3>Threadmind Lite</h3>
+            <p>Fast daily chat, summarization, and brainstorming. 8K context, standard queue.</p>
+          </article>
+          <article class="model-card featured" id="model-reason">
+            <span class="badge">Plus · Pro</span>
+            <h3>Threadmind Reason</h3>
+            <p>Extended thinking, 128K context, code execution sandbox, and vision over screenshots.</p>
+          </article>
+          <article class="model-card" id="model-team">
+            <span class="badge">Team</span>
+            <h3>Threadmind Atlas</h3>
+            <p>Shared knowledge bases, admin controls, and API access with dedicated throughput.</p>
+          </article>
+        </div>
+        <p style="margin-top: var(--space-xl);"><a href="models.html">Compare all models →</a></p>
+      </div>
+    </section>
+
+    <section id="pricing-teaser" class="section" aria-labelledby="pricing-title">
+      <div class="section-inner">
+        <p class="section-label">Plans</p>
+        <h2 id="pricing-title">Simple pricing, serious capability</h2>
+        <div class="price-row">
+          <div class="price-tier" id="tier-free">
+            <h3>Free</h3>
+            <div class="price-amt">$0</div>
+            <p>Limited daily messages · Lite model · 7-day memory</p>
+          </div>
+          <div class="price-tier highlight" id="tier-plus">
+            <h3>Plus</h3>
+            <div class="price-amt">$20<span>/mo</span></div>
+            <p>Unlimited chat · Reason model · 128K context · No ads</p>
+          </div>
+          <div class="price-tier" id="tier-pro">
+            <h3>Pro</h3>
+            <div class="price-amt">$40<span>/mo</span></div>
+            <p>Priority GPU · API access · Advanced data controls</p>
+          </div>
+        </div>
+        <div class="btn-row">
+          <a href="pricing.html" class="btn btn-primary" id="pricing-cta">See full comparison</a>
+        </div>
+      </div>
+    </section>
+
+    <section id="testimonials" class="section" aria-labelledby="testimonials-title">
+      <div class="section-inner">
+        <p class="section-label">Teams on Threadmind</p>
+        <h2 id="testimonials-title">Why they upgraded</h2>
+        <blockquote id="quote-design">
+          "We cancelled three SaaS tools after Pro — the model actually remembers our design system tokens across sprints."
+          <footer>— Maya Chen, VP Product, Northline</footer>
+        </blockquote>
+      </div>
+    </section>
+
+    <section id="faq" class="section" aria-labelledby="faq-title">
+      <div class="section-inner">
+        <p class="section-label">FAQ</p>
+        <h2 id="faq-title">Subscription questions</h2>
+        <details id="faq-cancel">
+          <summary>Can I cancel anytime?</summary>
+          <p>Yes. Billing stops at the end of your period; export your conversation history from Settings.</p>
+        </details>
+        <details id="faq-data">
+          <summary>Do you train on my chats?</summary>
+          <p>Free tier: opt-in only. Plus, Pro, and Enterprise: off by default, contractually guaranteed.</p>
+        </details>
+        <details id="faq-student">
+          <summary>Student or nonprofit discount?</summary>
+          <p>50% off Plus with verified .edu email or 501(c)(3) documentation.</p>
+        </details>
+      </div>
+    </section>
+
+    <section id="cta" class="section" aria-labelledby="cta-title">
+      <div class="section-inner">
+        <h2 id="cta-title">Start thinking faster today</h2>
+        <p class="lead" style="margin-inline: auto;">
+          14-day Plus trial — no card required. The rolling ball you've been following?
+          That's roughly how much compute one serious conversation uses. Worth it.
+        </p>
+        <button type="button" class="btn btn-primary" id="cta-primary">Get Threadmind Plus</button>
+      </div>
+    </section>
+  </main>
+
+  <footer role="contentinfo">
+    <div class="footer-grid">
+      <div>
+        <div class="logo"><span class="logo-mark"></span> Threadmind</div>
+        <p style="color: var(--paper-muted); font-size: 0.875rem; max-width: 28ch;">
+          AI chat for people who read the fine print.
+        </p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="features.html">Features</a></li>
+          <li><a href="models.html">Models</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About</a></li>
+          <li><a href="enterprise.html">Enterprise</a></li>
+          <li><a href="about.html#careers">Careers</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="about.html#privacy">Privacy</a></li>
+          <li><a href="about.html#terms">Terms</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">© <span id="year"></span> Threadmind Labs</div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="assets/js/site.js"></script>
+  <script src="assets/js/scroll-ball.js"></script>
+</body>
+</html>
