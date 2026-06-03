@@ -1,0 +1,20 @@
+# Threadmind chatbot product — linear scroll capture for Playwright + TRIBEv2
+# Serve: python -m http.server 8780 --directory chatbot_product_site
+
+name: threadmind_showcase
+initial_url: "http://127.0.0.1:8780/index.html"
+viewport:
+  width: 1280
+  height: 720
+
+scroll_mode: linear
+interval_sec: 1.0
+scroll_px_per_tr: 540
+scroll_settle_ms: 600
+initial_settle_ms: 2000
+
+site_goal: |
+  Threadmind is an AI chatbot product like ChatGPT. The site should convince visitors that
+  a subscription is worth it because frontier models cost real GPU money, privacy matters,
+  and paid tiers unlock reasoning depth, memory, and team features — driving them to start
+  a Plus trial or compare plans.

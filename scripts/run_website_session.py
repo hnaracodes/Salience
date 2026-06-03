@@ -118,6 +118,10 @@ def _stage_narrative(session_id: str, args: argparse.Namespace) -> None:
     ]
     if args.llm_provider:
         cmd.extend(["--provider", args.llm_provider])
+    if args.goal:
+        cmd.extend(["--goal", args.goal])
+    if args.script:
+        cmd.extend(["--script", str(args.script)])
     _run(cmd)
 
 
@@ -137,6 +141,7 @@ def main() -> None:
     parser.add_argument("--website", action="store_true")
     parser.add_argument("--with-heatmaps", action="store_true")
     parser.add_argument("--llm-provider", default=None)
+    parser.add_argument("--goal", default=None, help="Site goal paragraph for narrative stage")
     args = parser.parse_args()
 
     session_id = args.session_id

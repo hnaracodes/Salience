@@ -10,16 +10,16 @@ todos:
     status: completed
   - id: timing-grid
     content: Sweep BOLD lag, block-edge transition trimming, and temporal stride under a frozen model/atlas/fold contract.
-    status: pending
+    status: in_progress
   - id: dynamic-window-features
     content: Add dynamic within-window ROI features and compare them against the current static reducers.
-    status: pending
+    status: completed
   - id: preprocessing-roi-ablation
     content: Run raw-vs-preprocessed and ROI strategy A/Bs after proof and matrix results settle.
-    status: pending
+    status: in_progress
   - id: structured-decoding
     content: Test valence-first or coarse-to-fine decoding plus targeted specialist refiners.
-    status: pending
+    status: completed
 isProject: false
 ---
 

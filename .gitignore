@@ -26,6 +26,28 @@ configs/emotion_templates/*.npy
 
 # Local reference clones (not part of this repo)
 _external/
+eev_src/
+
+# EEV pipeline — local data (regenerate via scripts/eevCode/)
+scout_data/eevCode/videos/
+scout_data/eevCode/csv/
+scout_data/eevCode/intermediates/
+scout_data/eevCode/intermediates_modal/
+scout_data/eevCode/aligned/
+scout_data/eevCode/models/
+scout_data/eevCode/eval/
+scout_data/eevCode/manifests/download_status.json
+scout_data/eevCode/manifests/pilot_download.log
+scout_data/eevCode/manifests/pilot_download.done
+scout_data/eevCode/manifests/download_log.txt
+scout_data/eevCode/manifests/pilot_e2e.log
+scout_data/eevCode/manifests/pilot_modal.log
+scout_data/eevCode/manifests/pilot_align_train.log
+scout_data/eevCode/manifests/pilot_monitor.log
+scout_data/eevCode/manifests/pilot_modal.done
+scout_data/eevCode/manifests/pilot_modal.lock
+scout_data/eevCode/manifests/generate_features.lock
+# Keep tracked: pilot_50.json, trial_1.json, full_split.json
 
 # Editor / OS
 .DS_Store

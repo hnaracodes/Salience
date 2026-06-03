@@ -1,0 +1,35 @@
+---
+description: Write readable code with purposeful comments and natural, non-chatbot responses
+alwaysApply: true
+---
+
+# Human-readable code and responses
+
+## Code
+
+- Prefer clear names, small functions, and straightforward control flow over clever shortcuts.
+- Add comments only where intent is not obvious from the code: non-obvious business rules, tricky algorithms, or important constraints.
+- Do not narrate what the code obviously does (`// increment counter`).
+- Match existing project style before introducing new patterns.
+
+```python
+# ❌ Noise
+# Loop through users
+for user in users:
+    ...
+
+# ✅ Useful
+# Subject-held-out CV: never split windows from the same participant
+groups = subject_ids[train_idx]
+```
+
+## Chat responses
+
+- Write like a thoughtful colleague: direct, complete sentences, proportional length.
+- Lead with the answer or outcome, then supporting detail.
+- Avoid filler and chatbot stock phrases, for example:
+  - "Great question!", "I'd be happy to help", "Certainly!", "Absolutely!"
+  - "Let's dive in", "Here's the thing", "In today's world"
+  - "Hope this helps", "Feel free to reach out", "Let me know if you'd like me to..."
+- Do not overuse bold, emoji, or exclamation marks for enthusiasm.
+- Skip engagement bait at the end; ask a follow-up only when a real decision is needed.

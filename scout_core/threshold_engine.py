@@ -17,17 +17,21 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 
 def _network_column_index(ctx: ThresholdContext, network_name: str) -> int:
-    try:
-        return ctx.network_names.index(network_name)
-    except ValueError:
-        # tolerate alternate naming
-        nid = NETWORK_NAME_TO_ID.get(network_name)
-        if nid is None:
-            raise KeyError(f"Unknown network {network_name!r}; known={ctx.network_names}")
+    target = network_name.strip()
+    if target in ctx.network_names:
+        return ctx.network_names.index(target)
+    # Prefix match for coarse keys against subnetwork-style names (legacy bundles).
+    for idx, name in enumerate(ctx.network_names):
+        if name == target or name.startswith(f"{target}_") or target.startswith(f"{name}_"):
+            return idx
+    nid = NETWORK_NAME_TO_ID.get(target)
+    if nid is not None:
         from scout_core.constants import network_names_for_ids
 
         alt = network_names_for_ids([nid])[0]
-        return ctx.network_names.index(alt)
+        if alt in ctx.network_names:
+            return ctx.network_names.index(alt)
+    raise KeyError(f"Unknown network {network_name!r}; known={ctx.network_names}")
 
 
 def _runs_from_mask(mask: list[bool]) -> list[tuple[int, int]]:

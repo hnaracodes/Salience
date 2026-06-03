@@ -9,6 +9,8 @@ from typing import Any
 import numpy as np
 import yaml
 
+from scout_core.constants import NETWORK_NAME_TO_ID, YEO7_NAMES
+
 
 EXPECTED_FSAVERAGE5_VERTICES = 20484
 EXPECTED_FSAVERAGE5_HEMI_VERTICES = EXPECTED_FSAVERAGE5_VERTICES // 2
@@ -401,3 +403,42 @@ def parcel_to_network_map(table: VertexParcellationTable) -> dict[int, int]:
         if int(pid) not in out and int(yn) > 0:
             out[int(pid)] = int(yn)
     return out
+
+
+def coarse_yeo7_from_subnetwork(name: str) -> str | None:
+    """Map Schaefer subnetwork label to coarse Yeo-7 key (e.g. Default_PFC -> Default)."""
+    label = str(name).strip()
+    if not label:
+        return None
+    if label in NETWORK_NAME_TO_ID:
+        return label
+    for coarse in YEO7_NAMES:
+        if label == coarse or label.startswith(f"{coarse}_"):
+            return coarse
+    return None
+
+
+def subnetwork_id_to_coarse_name(table: VertexParcellationTable) -> dict[int, str]:
+    """Map Schaefer subnetwork id (1..28) -> coarse Yeo-7 name."""
+    out: dict[int, str] = {}
+    for yn_id, yn_name in zip(
+        table.yeo_network_id.tolist(),
+        np.asarray(table.yeo_network_name).astype(str).tolist(),
+        strict=True,
+    ):
+        yn_id = int(yn_id)
+        if yn_id <= 0 or yn_id in out:
+            continue
+        coarse = coarse_yeo7_from_subnetwork(yn_name)
+        if coarse:
+            out[yn_id] = coarse
+    return out
+
+
+def subnetwork_ids_by_coarse_yeo7(table: VertexParcellationTable) -> dict[str, list[int]]:
+    """Group Schaefer subnetwork ids by coarse Yeo-7 name."""
+    grouped: dict[str, list[int]] = {name: [] for name in YEO7_NAMES}
+    id_map = subnetwork_id_to_coarse_name(table)
+    for yn_id, coarse in id_map.items():
+        grouped.setdefault(coarse, []).append(int(yn_id))
+    return {k: sorted(v) for k, v in grouped.items() if v}

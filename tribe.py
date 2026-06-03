@@ -32,12 +32,26 @@ tribe_image = (
     .pip_install("nibabel>=5.2")
     .add_local_python_source("scout_core")
 )
+
+
+def _plot_timesteps_warm(plotter, preds, output_path: str, *, views: str = "left") -> None:
+    """Render brain MP4; prefer warm YlOrRd colormap when tribev2.plotting supports it."""
+    base_kw = {"views": views}
+    for extra in ({"cmap": "YlOrRd"}, {"colormap": "YlOrRd"}, {}):
+        try:
+            plotter.plot_timesteps_mp4(preds, output_path, **base_kw, **extra)
+            return
+        except TypeError:
+            continue
+    plotter.plot_timesteps_mp4(preds, output_path, views=views)
+
+
 @app.cls(
     gpu="A100", 
     image=tribe_image, 
     volumes={"/cache": volume},
     secrets=[modal.Secret.from_name("huggingface-secret")], # Needs HF_TOKEN
-    timeout=1200
+    timeout=3600,  # long EEV YouTube clips can exceed 20 min of GPU encoding
 )
 class TribeInference:
     @modal.enter()
@@ -80,7 +94,7 @@ class TribeInference:
 
         plotter = PlotBrain(mesh="fsaverage5")
         output_path = "/tmp/brain_sim.mp4"
-        plotter.plot_timesteps_mp4(preds, output_path, views="left")
+        _plot_timesteps_warm(plotter, preds, output_path, views="left")
 
         buf = io.BytesIO()
         np.savez_compressed(buf, preds=np.asarray(preds, dtype=np.float32))
@@ -103,6 +117,24 @@ class TribeInference:
         preds, segments = self.model.predict(events=df)
 
         return preds.tolist()
+
+    @modal.method()
+    def predict_brain_npz(self, video_bytes: bytes) -> bytes:
+        """Return compressed NPZ bytes with preds array (avoid list round-trip)."""
+        import io
+        import tempfile
+
+        import numpy as np
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            video_path = temp_video.name
+
+        df = self.model.get_events_dataframe(video_path=video_path)
+        preds, _segments = self.model.predict(events=df)
+        buf = io.BytesIO()
+        np.savez_compressed(buf, preds=np.asarray(preds, dtype=np.float32))
+        return buf.getvalue()
 
     @modal.method()
     def extract_frame_attention(
@@ -298,7 +330,7 @@ class TribeInference:
         # preds shape: (n_timesteps, n_vertices); see tribev2.plotting.base.plot_timesteps_mp4
         plotter = PlotBrain(mesh="fsaverage5")
         output_path = "/tmp/brain_sim.mp4"
-        plotter.plot_timesteps_mp4(preds, output_path, views="left")
+        _plot_timesteps_warm(plotter, preds, output_path, views="left")
 
         return Path(output_path).read_bytes()
 
@@ -519,15 +551,17 @@ def main():
 
 
 @app.local_entrypoint()
-def record_session(session_id: str):
+def record_session(session_id: str, visualize: bool = True):
     """Predict cortical time series for an existing website session walkthrough video.
 
     Reads ``scout_data/sessions/<session_id>/walkthrough.mp4`` (or path from
     ``session_manifest.json``), writes ``preds.npz`` into the same session dir,
+    optionally renders ``brain_results.mp4`` (TRIBE PlotBrain side view),
     and registers/updates SQLite.
 
     Usage: ``modal run tribe.py::record_session --session-id <hex>``
     """
+    import io
     import json
 
     import numpy as np
@@ -551,8 +585,14 @@ def record_session(session_id: str):
     video_data = video_path.read_bytes()
     predictor = TribeInference()
     print(f"Predicting from {video_path.name} for session {session_id} …")
-    preds_list = predictor.predict_brain.remote(video_data)
-    preds = np.asarray(preds_list, dtype=np.float32)
+    if visualize:
+        preds_npz_bytes, video_mp4_bytes = predictor.predict_and_visualize.remote(video_data)
+        preds = np.load(io.BytesIO(preds_npz_bytes))["preds"].astype(np.float32)
+        (session_dir / "brain_results.mp4").write_bytes(video_mp4_bytes)
+        print(f"Brain render: {session_dir / 'brain_results.mp4'}")
+    else:
+        preds_list = predictor.predict_brain.remote(video_data)
+        preds = np.asarray(preds_list, dtype=np.float32)
     vertex_equivalence = _session_vertex_equivalence_meta()
 
     from activation_store import PROJECT_ROOT

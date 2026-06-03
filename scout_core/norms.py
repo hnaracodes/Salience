@@ -45,6 +45,38 @@ def zscore_network(net_ts: np.ndarray, norms_net: pd.DataFrame, network_ids: lis
     return (net_ts.astype(np.float32) - m) / s
 
 
+def aggregate_subnetwork_norms_to_yeo7(
+    norms_net: pd.DataFrame,
+    subnetwork_id_to_coarse: dict[int, str],
+) -> pd.DataFrame:
+    """Collapse 28-subnetwork norm rows to 7 coarse Yeo-7 rows (mean mu/sigma per group)."""
+    from scout_core.constants import NETWORK_NAME_TO_ID
+
+    rows: list[dict[str, float | int]] = []
+    index_map = norms_net.set_index("yeo_network_id")
+    for coarse in (
+        "Vis",
+        "SomMot",
+        "DorsAttn",
+        "SalVentAttn",
+        "Limbic",
+        "Cont",
+        "Default",
+    ):
+        sub_ids = [sid for sid, cname in subnetwork_id_to_coarse.items() if cname == coarse]
+        sub_ids = [int(s) for s in sub_ids if int(s) in index_map.index]
+        if not sub_ids:
+            continue
+        block = index_map.loc[sub_ids]
+        rows.append({
+            "yeo_network_id": int(NETWORK_NAME_TO_ID[coarse]),
+            "mean": float(block["mean"].mean()),
+            "std": float(block["std"].mean()),
+            "n_samples": float(block["n_samples"].mean()) if "n_samples" in block.columns else 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
 def quantile_flags(
     parcel_ts: np.ndarray,
     norms: pd.DataFrame,

@@ -1,0 +1,55 @@
+# EEV research-track configuration (parallel to neuroEmoCode; not used in website E2E).
+
+data_root: scout_data/eevCode
+
+paths:
+  csv_dir: scout_data/eevCode/csv
+  videos_dir: scout_data/eevCode/videos
+  intermediates_dir: scout_data/eevCode/intermediates
+  intermediates_modal_dir: scout_data/eevCode/intermediates_modal
+  aligned_dir: scout_data/eevCode/aligned
+  models_dir: scout_data/eevCode/models
+  manifests_dir: scout_data/eevCode/manifests
+  eval_dir: scout_data/eevCode/eval
+
+eev:
+  csv_files:
+    train: train.csv
+    val: val.csv
+  timestamp_unit: microseconds
+  label_hz: 6
+  target_labels:
+    - confusion
+    - concentration
+    - interest
+    - awe
+    - contentment
+
+features:
+  contract: eev_features_v1
+  network_names:
+    - Vis
+    - SalVentAttn
+    - DorsAttn
+  tr_hz: 1.0
+  coherence_window_trs: 3
+
+alignment:
+  output_hz: 1.0
+  lag_grid_s: [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+
+training:
+  model_name: eev_svr_v1
+  svr:
+    kernel: rbf
+    C: 1.0
+    epsilon: 0.05
+  cv: lovo
+
+pilot:
+  n_videos: 50
+  min_duration_s: 30
+
+download:
+  rate_limit_sleep_s: 1.0
+  ytdlp_format: "best[ext=mp4]/best"
