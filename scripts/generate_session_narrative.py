@@ -4,6 +4,7 @@
 Usage:
     python scripts/generate_session_narrative.py --session-id <id>
     python scripts/generate_session_narrative.py --session-id <id> --provider template
+    python scripts/generate_session_narrative.py --session-id <id> --goal "..." --script configs/walkthrough_scripts/aurora_showcase.yaml
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from activation_store import SESSIONS_DIR
+from scout_core.element_goals import resolve_site_goal
 from scout_core.llm_narrative import generate_marketing_narrative
 from scout_core.schemas import analysis_bundle_path
 
@@ -26,6 +28,8 @@ def main() -> None:
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--provider", default=None, help="Override configs/llm_narrative.yaml provider")
     parser.add_argument("--config", type=Path, default=None)
+    parser.add_argument("--goal", default=None, help="Single paragraph site goal (overrides script)")
+    parser.add_argument("--script", type=Path, default=None, help="Walkthrough YAML with optional site_goal:")
     args = parser.parse_args()
 
     session_dir = SESSIONS_DIR / args.session_id
@@ -37,8 +41,16 @@ def main() -> None:
     if not bundle.get("section_report"):
         raise SystemExit("section_report[] empty — run analyze_session.py --website/--sections first.")
 
+    script_path = args.script
+    if script_path is None:
+        candidate = session_dir / "walkthrough_script.yaml"
+        if candidate.is_file():
+            script_path = candidate
+
+    site_goal = resolve_site_goal(override=args.goal, script_path=script_path)
     narrative = generate_marketing_narrative(
         bundle,
+        site_goal=site_goal,
         config_path=args.config,
         provider=args.provider,
     )
@@ -46,7 +58,10 @@ def main() -> None:
     if bundle.get("schema_version", 1) < 3:
         bundle["schema_version"] = 3
     bundle_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
-    print(f"Wrote marketing_narrative ({narrative.provider}) → {bundle_path}")
+    print(
+        f"Wrote marketing_narrative ({narrative.provider}, "
+        f"{len(narrative.element_insights)} element insights) → {bundle_path}"
+    )
 
 
 if __name__ == "__main__":

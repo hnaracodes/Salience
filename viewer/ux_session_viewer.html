@@ -4,51 +4,1176 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TRIBE UX Session Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e8eaed; }
-    #hud { padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid #2a2f3a; }
-    #main { display: flex; flex-wrap: wrap; height: calc(100vh - 52px); }
-    #stageWrap { position: relative; flex: 1 1 640px; min-width: 320px; background: #000; }
-    #walkVideo, #heatmapCanvas, #bboxCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: contain; }
-    #heatmapCanvas, #bboxCanvas { pointer-events: none; }
-    #sidebar { flex: 0 0 320px; padding: 12px; overflow-y: auto; border-left: 1px solid #2a2f3a; font-size: 13px; }
-    .meta { opacity: 0.85; }
-    select, input[type=range] { max-width: 100%; }
-    .bbox-label { font-size: 11px; fill: #7eb8ff; }
-    #scoreCurve { width: 100%; height: 72px; background: #161922; border-radius: 6px; margin-bottom: 10px; }
-    #activationCurve { width: 100%; height: 72px; background: #161922; border-radius: 6px; margin-bottom: 10px; }
-    .score-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #2a3142; margin-right: 6px; font-size: 12px; }
-    .score-chip.strong { background: #1f4d3a; color: #9ef0c3; }
-    .score-chip.weak { background: #4d2a1f; color: #f0c09e; }
+    :root {
+      --bg-base: #121110;
+      --bg-panel: #1a1816;
+      --bg-elevated: #222019;
+      --border: #2e2a26;
+      --border-strong: #3d3830;
+      --text: #e8e4df;
+      --text-muted: #9a948c;
+      --text-dim: #6b6560;
+      --accent-amber: #e8a040;
+      --accent-amber-hot: #ff6b2b;
+      --accent-cyan: #4ec4cf;
+      --accent-cyan-dim: #3aa8b0;
+      --semantic-warn: #c45c4a;
+      --semantic-ok: #6db88a;
+      --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 12px;
+      --space-lg: 16px;
+      --space-xl: 24px;
+      --radius-sm: 3px;
+      --radius-md: 5px;
+      --radius-lg: 8px;
+      --transition-fast: 120ms ease;
+      --track-bg: #181614;
+      --track-border: #2e2a26;
+      --track-inset: rgba(0, 0, 0, 0.35);
+      --glow-cyan: rgba(78, 196, 207, 0.45);
+      --glow-amber: rgba(232, 160, 64, 0.4);
+      --glow-warn: rgba(196, 92, 74, 0.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.45;
+      background: var(--bg-base);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── HUD ── */
+    #hud {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-md);
+      align-items: start;
+      padding: var(--space-md) var(--space-lg);
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .hud-primary {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .hud-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      align-items: center;
+      justify-content: flex-end;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .brand {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin: 0 0 2px;
+    }
+
+    .session-id {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .hud-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-lg);
+      align-items: flex-end;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+      min-width: 0;
+    }
+
+    .control-group.tr-group { flex: 1 1 280px; }
+
+    label.control-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .tr-readout {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--accent-amber);
+      line-height: 1;
+    }
+
+    .tr-readout span { color: var(--text-dim); font-size: 12px; }
+
+    .slider-wrap {
+      position: relative;
+      padding-bottom: 14px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      margin: 0;
+      accent-color: var(--accent-amber);
+      cursor: pointer;
+      background: transparent;
+    }
+
+    .tr-ticks {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 10px;
+      pointer-events: none;
+    }
+
+    .tr-tick {
+      position: absolute;
+      bottom: 0;
+      width: 2px;
+      height: 6px;
+      transform: translateX(-50%);
+      border-radius: 1px;
+    }
+
+    .tr-tick.heatmap { background: var(--accent-amber); opacity: 0.85; }
+    .tr-tick.sample { background: var(--accent-cyan); opacity: 0.6; height: 4px; }
+    .tr-tick.spike { background: var(--semantic-warn); opacity: 0.75; height: 8px; }
+
+    select {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      background: var(--bg-elevated);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      min-width: 140px;
+      cursor: pointer;
+    }
+
+    select:focus, input[type="range"]:focus-visible {
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: 2px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+    }
+
+    .badge.modal { border-color: var(--accent-amber); color: var(--accent-amber); }
+    .badge.placeholder { border-color: var(--text-dim); color: var(--text-muted); }
+    .badge.unknown { border-color: var(--border-strong); color: var(--text-dim); }
+    .badge.warn {
+      border-color: var(--semantic-warn);
+      color: var(--semantic-warn);
+      background: rgba(196, 92, 74, 0.12);
+    }
+
+    .opacity-control {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    .opacity-control input[type="range"] { width: 88px; }
+
+    /* ── Main layout ── */
+    #main {
+      display: flex;
+      height: calc(100vh - 108px);
+      min-height: 320px;
+    }
+
+    #stageWrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      background: #0a0908;
+      overflow: hidden;
+    }
+
+    /* Layer stack: frame/video → heatmap → bbox */
+    #frameImg,
+    #walkVideo {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center top;
+    }
+
+    #frameImg { z-index: 1; display: none; }
+    #walkVideo { z-index: 0; }
+
+    #heatmapCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #bboxCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: auto;
+    }
+
+    .bbox-group { cursor: pointer; }
+    .bbox-group.selected .bbox-rect {
+      stroke: var(--semantic-ok);
+      stroke-width: 2.5;
+      opacity: 1;
+    }
+
+    .brain-panel-host {
+      width: 100%;
+      height: 220px;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      border: 1px solid var(--track-border);
+      background: #0a0908;
+      margin-bottom: 8px;
+    }
+
+    .brain-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.45;
+      margin: 0 0 10px;
+    }
+
+    .element-correlate {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+    }
+
+    .element-correlate h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .tr-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .tr-chip {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface-elevated);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .tr-chip.active, .tr-chip:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .el-row.clickable { cursor: pointer; }
+    .el-row.selected {
+      outline: 1px solid var(--accent-cyan);
+      border-radius: var(--radius-sm);
+    }
+
+    .bbox-rect {
+      fill: none;
+      stroke: var(--accent-cyan);
+      stroke-width: 1;
+      opacity: 0.65;
+      transition: stroke-width var(--transition-fast), opacity var(--transition-fast);
+    }
+
+    .bbox-rect.highlight {
+      stroke: var(--accent-amber);
+      stroke-width: 2;
+      opacity: 1;
+      filter: drop-shadow(0 0 6px rgba(232, 160, 64, 0.55));
+    }
+
+    .bbox-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      fill: var(--accent-amber);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition-fast);
+    }
+
+    .bbox-group:hover .bbox-label { opacity: 1; }
+    .bbox-group.highlight .bbox-label { opacity: 1; }
+
+    .bbox-rect.reaction-engaging {
+      stroke: var(--semantic-ok);
+      stroke-width: 2;
+      opacity: 1;
+    }
+    .bbox-rect.reaction-friction {
+      stroke: var(--accent-amber);
+      stroke-width: 2;
+      opacity: 1;
+    }
+    .bbox-rect.reaction-boring {
+      stroke: #6b7280;
+      stroke-width: 1;
+      opacity: 0.45;
+    }
+    .bbox-rect.reaction-neutral {
+      stroke: var(--accent-cyan);
+      stroke-width: 1;
+      opacity: 0.55;
+    }
+    .bbox-rect.dimmed {
+      opacity: 0.2;
+      stroke-width: 0.75;
+    }
+    .bbox-group.selected .bbox-label { opacity: 1; fill: var(--semantic-ok); }
+
+    .bbox-legend {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 4;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      background: rgba(10, 9, 8, 0.82);
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      pointer-events: none;
+    }
+    .bbox-legend span::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 4px;
+      border-radius: 2px;
+      vertical-align: middle;
+    }
+    .bbox-legend .leg-engaging::before { background: var(--semantic-ok); }
+    .bbox-legend .leg-friction::before { background: var(--accent-amber); }
+    .bbox-legend .leg-boring::before { background: #6b7280; }
+    .bbox-legend .leg-neutral::before { background: var(--accent-cyan); }
+
+    .frame-caption {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 4;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(10, 9, 8, 0.88);
+      border: 1px solid var(--border-strong);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    #brainVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #0a0908;
+    }
+
+    .insight-job {
+      font-size: 11px;
+      color: var(--accent-cyan);
+      margin: 6px 0;
+    }
+
+    .insight-rec {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 8px 0 0;
+      line-height: 1.5;
+    }
+
+    .stage-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 0;
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      flex: 0 0 340px;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--border);
+      background: var(--bg-panel);
+      overflow: hidden;
+    }
+
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-lg);
+    }
+
+    .panel {
+      margin-bottom: var(--space-xl);
+    }
+
+    .panel:last-child { margin-bottom: 0; }
+
+    .panel-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin: 0 0 var(--space-sm);
+      padding-bottom: var(--space-xs);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-heading {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 var(--space-xs);
+      color: var(--text);
+    }
+
+    .meta-line {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0 0 var(--space-sm);
+    }
+
+    .score-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      margin-right: 6px;
+      margin-bottom: 4px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+    }
+
+    .score-chip.strong { border-color: var(--semantic-ok); color: var(--semantic-ok); }
+    .score-chip.weak { border-color: var(--semantic-warn); color: var(--semantic-warn); }
+
+    .curve-block {
+      margin-bottom: var(--space-md);
+      padding: var(--space-md);
+      background: linear-gradient(165deg, var(--bg-elevated) 0%, var(--bg-panel) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .curve-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin: 0 0 var(--space-sm);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .curve-label span:last-child {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-transform: none;
+      letter-spacing: 0.02em;
+    }
+
+    .curve-svg {
+      width: 100%;
+      height: 72px;
+      background: var(--track-bg);
+      border: 1px solid var(--track-border);
+      border-radius: var(--radius-sm);
+      display: block;
+      box-shadow: inset 0 2px 6px var(--track-inset);
+    }
+
+    .element-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .element-list li {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-xs);
+      padding: var(--space-sm) 0;
+      border-bottom: 1px solid var(--border);
+      align-items: baseline;
+    }
+
+    .element-list li:last-child { border-bottom: none; }
+
+    .el-dom {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-cyan);
+      word-break: break-all;
+    }
+
+    .el-tag {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .el-score {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-amber);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .el-score-label {
+      display: block;
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+    }
+
+    .tips-list {
+      margin: 0;
+      padding-left: 1.1em;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .tips-list li { margin-bottom: var(--space-xs); }
+
+    .grounding-card {
+      padding: var(--space-sm) var(--space-md);
+      margin-bottom: var(--space-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+    }
+
+    .grounding-card .trigger {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .grounding-card .winner {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--accent-amber);
+    }
+
+    .grounding-card .skip {
+      color: var(--text-dim);
+      font-style: italic;
+      font-size: 11px;
+    }
+
+    .source-note {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: var(--space-sm);
+    }
+
+    .empty-note {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    /* ── Sidebar: KPI, metrics, attention ── */
+    .metrics-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-md);
+      padding-bottom: var(--space-sm);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .metrics-panel-header .panel-title {
+      margin: 0;
+      border: none;
+      padding: 0;
+    }
+
+    .metrics-panel-header .metrics-hint {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-sm);
+      margin-bottom: var(--space-lg);
+    }
+
+    .kpi-card {
+      position: relative;
+      padding: var(--space-md) var(--space-sm) var(--space-sm);
+      padding-left: calc(var(--space-sm) + 4px);
+      background: linear-gradient(168deg, #201e1b 0%, var(--bg-elevated) 55%, #161412 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--kpi-accent, var(--accent-amber));
+      border-radius: var(--radius-md) 0 0 var(--radius-md);
+    }
+
+    .kpi-card--session { --kpi-accent: var(--accent-amber); --kpi-glow: var(--glow-amber); }
+    .kpi-card--activation { --kpi-accent: var(--accent-cyan); --kpi-glow: var(--glow-cyan); }
+    .kpi-card--grounded { --kpi-accent: var(--semantic-ok); --kpi-glow: rgba(109, 184, 138, 0.35); }
+
+    .kpi-card .kpi-label {
+      display: block;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .kpi-card .kpi-value-row {
+      display: flex;
+      align-items: baseline;
+      gap: 2px;
+      margin-bottom: var(--space-sm);
+    }
+
+    .kpi-card .kpi-value {
+      font-family: var(--font-mono);
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 1;
+      color: var(--kpi-accent, var(--accent-amber));
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kpi-card .kpi-unit {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .kpi-gauge {
+      height: 4px;
+      background: var(--track-bg);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: inset 0 1px 3px var(--track-inset);
+    }
+
+    .kpi-gauge-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--kpi-accent, var(--accent-amber));
+      box-shadow: 0 0 10px var(--kpi-glow, var(--glow-amber));
+      transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .kpi-card .kpi-sub {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 8px;
+      color: var(--text-dim);
+      margin-top: 6px;
+      letter-spacing: 0.02em;
+      line-height: 1.3;
+    }
+
+    .align-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      margin-bottom: var(--space-md);
+      background: rgba(196, 92, 74, 0.1);
+      border: 1px solid rgba(196, 92, 74, 0.35);
+      border-left: 3px solid var(--semantic-warn);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      line-height: 1.4;
+      color: var(--semantic-warn);
+    }
+
+    .align-banner[hidden] { display: none; }
+
+    .align-banner-icon {
+      flex-shrink: 0;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .sec-metrics-block {
+      margin-bottom: var(--space-md);
+      padding: var(--space-md);
+      background: linear-gradient(168deg, #201e1b 0%, var(--bg-elevated) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .sec-metrics-block-title {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin: 0 0 var(--space-md);
+    }
+
+    .metric-row {
+      margin-bottom: var(--space-md);
+    }
+
+    .metric-row:last-child { margin-bottom: 0; }
+
+    .metric-row-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .metric-row-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    .metric-row-value {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-row-value span {
+      font-size: 9px;
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+
+    .metric-bar {
+      position: relative;
+      height: 10px;
+      background: var(--track-bg);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px var(--track-inset);
+    }
+
+    .metric-bar-ticks {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .metric-bar-ticks span {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      width: 1px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .metric-bar-fill {
+      position: relative;
+      z-index: 2;
+      height: 100%;
+      border-radius: 999px;
+      transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .metric-bar-fill.marketing {
+      background: linear-gradient(90deg, #3a9aa3 0%, var(--accent-cyan) 100%);
+      box-shadow: 0 0 12px var(--glow-cyan);
+    }
+
+    .metric-bar-fill.activation {
+      background: linear-gradient(90deg, #c4842a 0%, var(--accent-amber) 100%);
+      box-shadow: 0 0 12px var(--glow-amber);
+    }
+
+    .metric-bar-fill::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 1px;
+      bottom: 1px;
+      width: 2px;
+      background: rgba(255, 255, 255, 0.55);
+      border-radius: 999px;
+    }
+
+    .sec-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-xs);
+      align-items: center;
+      margin: var(--space-sm) 0;
+    }
+
+    .sec-dwell {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-right: var(--space-sm);
+    }
+
+    .flag-chip {
+      display: inline-flex;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+    }
+
+    .flag-chip.empty {
+      color: var(--text-dim);
+      font-style: italic;
+      text-transform: none;
+    }
+
+    .hm-stat-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      border: 1px solid var(--border-strong);
+    }
+
+    .hm-stat-badge.real {
+      border-color: var(--semantic-ok);
+      color: var(--semantic-ok);
+      background: rgba(109, 184, 138, 0.08);
+    }
+
+    .hm-stat-badge.placeholder {
+      border-color: var(--text-dim);
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+    }
+
+    .element-list li.el-row {
+      display: block;
+      padding: var(--space-sm) 0;
+    }
+
+    .el-row-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--space-xs);
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+
+    .attn-meter {
+      height: 4px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+
+    .attn-meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-cyan-dim), var(--accent-amber));
+      border-radius: 1px;
+      transition: width var(--transition-fast);
+    }
+
+    .element-empty-help {
+      font-size: 11px;
+      color: var(--text-dim);
+      line-height: 1.5;
+      margin: 0 0 var(--space-sm);
+    }
+
+    .element-empty-help strong {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .grounding-card {
+      border-left-width: 3px;
+    }
+
+    .grounding-card.emotion-anger { border-left-color: #d45642; }
+    .grounding-card.emotion-fear { border-left-color: #7a9eb5; }
+    .grounding-card.emotion-sadness { border-left-color: #6a8fc4; }
+    .grounding-card.emotion-surprise { border-left-color: var(--accent-amber); }
+    .grounding-card.emotion-amusement { border-left-color: var(--semantic-ok); }
+    .grounding-card.emotion-neutral { border-left-color: var(--text-dim); }
+    .grounding-card.emotion-unknown { border-left-color: var(--border-strong); }
+
+    .grounding-card .emotion-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+
+    .grounding-card .emotion-channel {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .grounding-card .emotion-z {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--accent-amber);
+      white-space: nowrap;
+    }
+
+    .grounding-card .emotion-z span {
+      font-size: 9px;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-right: 3px;
+    }
+
+    @media (max-width: 900px) {
+      #main { flex-direction: column; height: auto; min-height: calc(100vh - 108px); }
+      #stageWrap { min-height: 50vh; }
+      #sidebar { flex: none; max-height: 45vh; border-left: none; border-top: 1px solid var(--border); }
+      #hud { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+      }
+      .kpi-gauge-fill,
+      .metric-bar-fill {
+        transition: none !important;
+      }
+    }
   </style>
 </head>
 <body>
-  <div id="hud">
-    <label>Timestep <span id="tLabel">0</span>
-      <input type="range" id="tSlider" min="0" max="0" value="0" step="1" />
-    </label>
-    <label>Section <select id="sectionSelect"></select></label>
-    <span class="meta" id="statusMeta">Loading…</span>
-  </div>
+  <header id="hud">
+    <div class="hud-primary">
+      <p class="brand">TRIBE · UX Session Viewer</p>
+      <p class="session-id" id="sessionLabel">Loading…</p>
+      <div class="hud-controls">
+        <div class="control-group tr-group">
+          <label class="control-label" for="tSlider">Timestep (TR)</label>
+          <div class="tr-readout"><span>TR </span><span id="tLabel">0</span></div>
+          <div class="slider-wrap">
+            <input type="range" id="tSlider" min="0" max="0" value="0" step="1" aria-valuetext="TR 0" />
+            <div class="tr-ticks" id="trTicks" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="sectionSelect">Section</label>
+          <select id="sectionSelect" aria-label="Section"></select>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="heatmapOpacity">Heatmap opacity</label>
+          <div class="opacity-control">
+            <input type="range" id="heatmapOpacity" min="0" max="100" value="55" step="1" aria-valuetext="55 percent" />
+            <span class="badge" id="opacityVal">55%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hud-meta">
+      <span class="badge" id="heatmapBadge">heatmap —</span>
+      <span class="badge" id="frameBadge">frame —</span>
+      <span class="badge" id="scrollBadge">scroll —</span>
+      <span class="badge warn" id="alignBadge" hidden>alignment</span>
+      <span id="statusMeta"></span>
+    </div>
+  </header>
+
   <div id="main">
     <div id="stageWrap">
-      <video id="walkVideo" muted playsinline></video>
+      <div class="stage-empty" id="stageEmpty">No capture loaded</div>
+      <video id="walkVideo" muted playsinline preload="metadata"></video>
+      <img id="frameImg" alt="Captured frame at current TR" decoding="async" />
       <canvas id="heatmapCanvas"></canvas>
-      <svg id="bboxCanvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      <svg id="bboxCanvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DOM bounding boxes"></svg>
+      <div class="bbox-legend" id="bboxLegend" aria-hidden="true">
+        <span class="leg-engaging">Engaging</span>
+        <span class="leg-friction">Friction</span>
+        <span class="leg-boring">Low attention</span>
+        <span class="leg-neutral">Neutral</span>
+      </div>
+      <div class="frame-caption" id="frameCaption" hidden></div>
     </div>
-    <div id="sidebar">
-      <div id="overallScore" class="meta"></div>
-      <p class="meta" style="margin:0 0 4px">Engagement + novelty (0–100)</p>
-      <svg id="scoreCurve" viewBox="0 0 300 72" preserveAspectRatio="none"></svg>
-      <p class="meta" style="margin:8px 0 4px">Mean brain activation (0–100)</p>
-      <svg id="activationCurve" viewBox="0 0 300 72" preserveAspectRatio="none"></svg>
-      <h3 id="secTitle">Section</h3>
-      <p id="secMetrics" class="meta"></p>
-      <ul id="secTips"></ul>
-      <h4>Top elements</h4>
-      <ul id="topEl"></ul>
-    </div>
+
+    <aside id="sidebar">
+      <div class="sidebar-scroll">
+        <section class="panel metrics-panel">
+          <div class="metrics-panel-header">
+            <h2 class="panel-title">Session metrics</h2>
+            <span class="metrics-hint">0–100 scale</span>
+          </div>
+          <div id="alignBanner" class="align-banner" hidden>
+            <span class="align-banner-icon" aria-hidden="true">⚠</span>
+            <span id="alignBannerText"></span>
+          </div>
+          <div id="kpiStrip" class="kpi-grid" aria-label="Session KPIs"></div>
+          <div class="curve-block">
+            <p class="curve-label">Engagement <span>VAN−DMN Z (Track 1)</span></p>
+            <svg class="curve-svg" id="scoreCurve" viewBox="0 0 300 72" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+          <div class="curve-block">
+            <p class="curve-label">Activation <span>mean |preds|</span></p>
+            <svg class="curve-svg" id="activationCurve" viewBox="0 0 300 72" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Section</h2>
+          <h3 class="panel-heading" id="secTitle">—</h3>
+          <div id="secDetail"></div>
+          <ul class="tips-list" id="secTips"></ul>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Cortical activation</h2>
+          <p class="source-note">Model-predicted surface activity (TRIBE v2). Not clinical imaging.</p>
+          <div id="brainPanelHost" class="brain-panel-host" aria-label="3D brain surface">
+            <video id="brainVideo" muted playsinline preload="metadata" style="display:none"></video>
+          </div>
+          <p class="brain-meta" id="brainPeakMeta">—</p>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Element attention</h2>
+          <p class="source-note" id="elementSourceNote"></p>
+          <ul class="element-list" id="topEl"></ul>
+          <div id="elementCorrelate" class="element-correlate" hidden></div>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Spike grounding</h2>
+          <div id="groundingPanel"></div>
+        </section>
+      </div>
+    </aside>
   </div>
 
   <script>
@@ -56,18 +1181,141 @@
     const base = params.get("base") || ".";
 
     const walkVideo = document.getElementById("walkVideo");
+    const frameImg = document.getElementById("frameImg");
     const heatmapCanvas = document.getElementById("heatmapCanvas");
     const bboxCanvas = document.getElementById("bboxCanvas");
-    const ctx = heatmapCanvas.getContext("2d");
+    const ctx = heatmapCanvas.getContext("2d", { willReadFrequently: true });
     const tSlider = document.getElementById("tSlider");
     const tLabel = document.getElementById("tLabel");
     const sectionSelect = document.getElementById("sectionSelect");
     const statusMeta = document.getElementById("statusMeta");
+    const heatmapOpacity = document.getElementById("heatmapOpacity");
+    const opacityVal = document.getElementById("opacityVal");
+    const heatmapBadge = document.getElementById("heatmapBadge");
+    const frameBadge = document.getElementById("frameBadge");
+    const scrollBadge = document.getElementById("scrollBadge");
+    const alignBadge = document.getElementById("alignBadge");
+    const trTicks = document.getElementById("trTicks");
+    const stageEmpty = document.getElementById("stageEmpty");
+    const sessionLabel = document.getElementById("sessionLabel");
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     let viewerBundle = {};
     let sessionManifest = { dom_snapshots: [] };
-    let heatmapImg = new Image();
+    let heatmapRawImg = null;
+    let heatmapOffscreen = null;
     let currentT = 0;
+    let heatmapOpacityFactor = 0.55;
+    let activeSectionId = null;
+    let selectedDomId = null;
+    let brainSurface = null;
+    let brainVideo = null;
+    let brainFps = 1;
+
+    function elementInsight(domId) {
+      return (viewerBundle.element_insight_index || {})[domId] || null;
+    }
+
+    function truncateText(s, max = 36) {
+      if (!s) return "";
+      const t = String(s).replace(/\s+/g, " ").trim();
+      if (t.length <= max) return t;
+      return t.slice(0, max - 1) + "…";
+    }
+
+    function bboxLabelFor(el) {
+      const ins = elementInsight(el.dom_id);
+      const role = ins?.role || el.tag || "element";
+      const snippet = truncateText(ins?.text || el.text, 28);
+      return snippet ? `${role}: ${snippet}` : role;
+    }
+
+    function reactionClass(reaction) {
+      const r = (reaction || "neutral").toLowerCase();
+      if (r === "engaging" || r === "friction" || r === "boring" || r === "neutral") {
+        return ` reaction-${r}`;
+      }
+      return " reaction-neutral";
+    }
+
+    function updateFrameCaption(t) {
+      const cap = document.getElementById("frameCaption");
+      const frames = viewerBundle.marketing_narrative?.frame_insights || [];
+      if (!frames.length) {
+        cap.hidden = true;
+        return;
+      }
+      const nearest = frames.reduce((a, b) =>
+        Math.abs(a.t - t) <= Math.abs(b.t - t) ? a : b
+      );
+      cap.textContent = nearest.caption || "";
+      cap.hidden = !nearest.caption;
+    }
+
+    function engagementLabelAt(t) {
+      const labels = viewerBundle.engagement_track?.labels || [];
+      const label = labels[t];
+      if (label === "engaging" || label === "boring") return label;
+      return "neutral";
+    }
+
+    function engagementScoreAt(t) {
+      const scores = viewerBundle.engagement_track?.scores || [];
+      const v = scores[t];
+      return v == null ? null : Number(v);
+    }
+
+    function selectElement(domId, opts = {}) {
+      if (!domId) return;
+      selectedDomId = domId;
+      const index = (viewerBundle.element_tr_index || {})[domId];
+      const jumpT = opts.t ?? index?.salient_trs?.[0]?.t ?? index?.grounded_spikes?.[0];
+      if (jumpT != null && !opts.skipJump) {
+        setTimestep(Number(jumpT));
+        return;
+      }
+      const sec = (viewerBundle.sections || []).find(s => s.section_id === activeSectionId)
+        || (viewerBundle.sections || [])[0];
+      updateSidebar(sec?.section_id || activeSectionId, currentT);
+      renderElementCorrelate(domId);
+      const snap = snapshotForTimestep(currentT);
+      if (snap) {
+        const { elements } = elementsForTimestep(sec, currentT);
+        drawBboxes(snap, elements);
+      }
+    }
+
+    function renderElementCorrelate(domId) {
+      const box = document.getElementById("elementCorrelate");
+      if (!domId) {
+        box.hidden = true;
+        return;
+      }
+      const ins = elementInsight(domId);
+      const index = (viewerBundle.element_tr_index || {})[domId] || {};
+      const salient = index.salient_trs || [];
+      const grounded = index.grounded_spikes || [];
+      const chips = salient.slice(0, 8).map(row => {
+        const active = row.t === currentT ? " active" : "";
+        return `<button type="button" class="tr-chip${active}" data-tr="${row.t}">TR ${row.t} · ${formatDensity(row.density)}</button>`;
+      }).join("");
+      const title = ins?.role || domId;
+      const textLine = ins?.text ? `<p class="brain-meta">"${truncateText(ins.text, 120)}"</p>` : "";
+      box.hidden = false;
+      box.innerHTML = `
+        <h4>${title}</h4>
+        ${textLine}
+        <p class="source-note" style="margin:0">Brain state when this element was most visually salient (model attention). Not a direct UI response measure.</p>
+        ${ins?.plain_summary ? `<p class="insight-rec" style="margin-top:8px">${ins.plain_summary}</p>` : ""}
+        ${ins?.job ? `<p class="insight-job"><strong>Job:</strong> ${ins.job}</p>` : ""}
+        ${ins?.recommendation ? `<p class="insight-rec"><strong>Suggestion:</strong> ${ins.recommendation}</p>` : ""}
+        ${grounded.length ? `<p class="brain-meta">Grounded spikes: ${grounded.map(t => `TR ${t}`).join(", ")}</p>` : ""}
+        ${salient.length ? `<div class="tr-chip-row">${chips}</div>` : "<p class=\"empty-note\">No salient TR samples for this element yet.</p>"}`;
+      box.querySelectorAll(".tr-chip").forEach(btn => {
+        btn.addEventListener("click", () => selectElement(domId, { t: Number(btn.dataset.tr), skipJump: false }));
+      });
+    }
 
     async function loadJson(path) {
       const res = await fetch(`${base}/${path}`);
@@ -75,12 +1323,81 @@
       return res.json();
     }
 
+    function formatDensity(v) {
+      if (v == null || Number.isNaN(Number(v))) return "—";
+      const n = Number(v);
+      if (n === 0) return "0";
+      if (Math.abs(n) < 0.01) return n.toExponential(2);
+      if (Math.abs(n) < 1) return n.toFixed(4);
+      return n.toFixed(3);
+    }
+
+    function elementDensity(el) {
+      if (el.mean_attention_density != null) return el.mean_attention_density;
+      if (el.attention_density != null) return el.attention_density;
+      if (el.score != null) return el.score;
+      return null;
+    }
+
     function nearestSnapshot(t) {
       const snaps = sessionManifest.dom_snapshots || [];
       if (!snaps.length) return null;
+      const exact = snaps.find(s => Number(s.t_idx) === t);
+      if (exact) return exact;
       return snaps.reduce((a, b) =>
         Math.abs((a.t_idx || 0) - t) <= Math.abs((b.t_idx || 0) - t) ? a : b
       );
+    }
+
+    function snapshotForTimestep(t) {
+      return nearestSnapshot(t);
+    }
+
+    function sectionForTimestep(t) {
+      return (viewerBundle.sections || []).find(s =>
+        (s.sample_t_indices || []).includes(t)
+      ) || (viewerBundle.sections || []).find(s => {
+        const samples = s.sample_t_indices || [];
+        if (!samples.length) return false;
+        const lo = Math.min(...samples);
+        const hi = Math.max(...samples);
+        return t >= lo && t <= hi;
+      });
+    }
+
+    function nearestSampleT(section, t) {
+      const samples = section?.sample_t_indices || [];
+      if (!samples.length) return null;
+      return samples.reduce((a, b) =>
+        Math.abs(a - t) <= Math.abs(b - t) ? a : b
+      );
+    }
+
+    function elementsForTimestep(section, t) {
+      if (!section) return { elements: [], source: "none" };
+      const byT = section.element_scores_by_t || {};
+      if (byT[String(t)]?.length) {
+        return { elements: byT[String(t)], source: `TR ${t}` };
+      }
+      const nearest = nearestSampleT(section, t);
+      if (nearest != null && byT[String(nearest)]?.length) {
+        return { elements: byT[String(nearest)], source: `nearest sample TR ${nearest}` };
+      }
+      if ((section.sample_t_indices || []).includes(t) && (section.top_elements || []).length) {
+        return { elements: section.top_elements, source: `section rollup (TR ${t} sampled)` };
+      }
+      if ((section.top_elements || []).length) {
+        const ns = nearestSampleT(section, t);
+        return {
+          elements: section.top_elements,
+          source: ns != null ? `rollup · nearest sample TR ${ns}` : "section rollup",
+        };
+      }
+      return { elements: [], source: "none" };
+    }
+
+    function topDomIds(elements) {
+      return new Set((elements || []).slice(0, 5).map(e => e.dom_id).filter(Boolean));
     }
 
     function resizeCanvases() {
@@ -93,77 +1410,219 @@
       bboxCanvas.setAttribute("height", h);
       bboxCanvas.style.width = w + "px";
       bboxCanvas.style.height = h + "px";
+      drawHeatmap();
+      const snap = nearestSnapshot(currentT);
+      const sec = sectionForTimestep(currentT) ||
+        (viewerBundle.sections || []).find(s => s.section_id === activeSectionId);
+      if (snap) {
+        const { elements } = elementsForTimestep(sec, currentT);
+        drawBboxes(snap, elements);
+      }
     }
 
-    function drawBboxes(snapshot, topElements) {
+    function viewportTransform() {
       const wrap = document.getElementById("stageWrap");
       const cw = wrap.clientWidth;
       const ch = wrap.clientHeight;
       const cap = viewerBundle.capture || { width: 1920, height: 1080 };
-      const scaleX = cw / cap.width;
-      const scaleY = ch / cap.height;
+      const scale = Math.min(cw / cap.width, ch / cap.height);
+      const drawW = cap.width * scale;
+      const drawH = cap.height * scale;
+      const offsetX = (cw - drawW) / 2;
+      const offsetY = (ch - drawH) / 2;
+      return { scale, offsetX, offsetY, cap };
+    }
+
+    function toViewportCoords(x, y, bw, bh, scrollX, scrollY) {
+      const { scale, offsetX, offsetY } = viewportTransform();
+      const vx = offsetX + (x - scrollX) * scale;
+      const vy = offsetY + (y - scrollY) * scale;
+      return [vx, vy, bw * scale, bh * scale];
+    }
+
+    function drawBboxes(snapshot, topElements) {
+      const highlight = topDomIds(topElements);
+      const scoredIds = new Set((topElements || []).map(e => e.dom_id).filter(Boolean));
       const scrollY = snapshot.scrollY || 0;
       const scrollX = snapshot.scrollX || 0;
-      const highlight = new Set((topElements || []).map(e => e.dom_id));
 
       bboxCanvas.innerHTML = "";
       for (const el of snapshot.elements || []) {
         if (!el.is_intersecting_viewport) continue;
-        const [x, y, bw, bh] = el.bbox;
-        const vx = (x - scrollX) * scaleX;
-        const vy = (y - scrollY) * scaleY;
+        const bbox = el.bbox;
+        if (!bbox || bbox.length !== 4) continue;
+
+        const [vx, vy, vw, vh] = toViewportCoords(bbox[0], bbox[1], bbox[2], bbox[3], scrollX, scrollY);
+        const isHi = highlight.has(el.dom_id);
+        const isSel = selectedDomId && el.dom_id === selectedDomId;
+        const ins = elementInsight(el.dom_id);
+        const reaction = ins?.reaction || (isHi ? "engaging" : "neutral");
+        const isScored = scoredIds.has(el.dom_id) || ins;
+        const dimmed = !isScored && !isSel;
+
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.setAttribute("class", "bbox-group" + (isHi ? " highlight" : "") + (isSel ? " selected" : ""));
+        g.dataset.domId = el.dom_id || "";
+
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         rect.setAttribute("x", vx);
         rect.setAttribute("y", vy);
-        rect.setAttribute("width", bw * scaleX);
-        rect.setAttribute("height", bh * scaleY);
-        rect.setAttribute("fill", "none");
-        rect.setAttribute("stroke", highlight.has(el.dom_id) ? "#ff6b6b" : "#7eb8ff");
-        rect.setAttribute("stroke-width", highlight.has(el.dom_id) ? 3 : 1);
-        bboxCanvas.appendChild(rect);
+        rect.setAttribute("width", vw);
+        rect.setAttribute("height", vh);
+        rect.setAttribute(
+          "class",
+          "bbox-rect" + (isHi ? " highlight" : "") + reactionClass(reaction) + (dimmed ? " dimmed" : ""),
+        );
+
+        const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        label.setAttribute("x", vx + 2);
+        label.setAttribute("y", Math.max(vy - 4, 10));
+        label.setAttribute("class", "bbox-label");
+        label.textContent = bboxLabelFor(el);
+
+        g.appendChild(rect);
+        if (isHi || isSel || ins) g.appendChild(label);
+        g.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (el.dom_id) selectElement(el.dom_id);
+        });
+        bboxCanvas.appendChild(g);
       }
     }
 
-    function drawHeatmap() {
-      if (!heatmapImg.src) {
-        ctx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
-        return;
+    function applyColormap(imageData, opacity) {
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const intensity = d[i] / 255;
+        if (intensity < 0.015) {
+          d[i + 3] = 0;
+          continue;
+        }
+        const t = Math.pow(intensity, 0.85);
+        d[i] = Math.round(232 + (255 - 232) * t);
+        d[i + 1] = Math.round(160 + (69 - 160) * t);
+        d[i + 2] = Math.round(64 + (43 - 64) * t);
+        d[i + 3] = Math.round(t * opacity * 255);
       }
+      return imageData;
+    }
+
+    function drawHeatmap() {
       ctx.clearRect(0, 0, heatmapCanvas.width, heatmapCanvas.height);
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(heatmapImg, 0, 0, heatmapCanvas.width, heatmapCanvas.height);
-      ctx.globalAlpha = 1;
+      if (!heatmapRawImg || !heatmapOffscreen) return;
+
+      const wrap = document.getElementById("stageWrap");
+      const cw = heatmapCanvas.width;
+      const ch = heatmapCanvas.height;
+      const cap = viewerBundle.capture || { width: 1920, height: 1080 };
+      const scale = Math.min(cw / cap.width, ch / cap.height);
+      const drawW = cap.width * scale;
+      const drawH = cap.height * scale;
+      const offsetX = (cw - drawW) / 2;
+      const offsetY = (ch - drawH) / 2;
+
+      const octx = heatmapOffscreen.getContext("2d");
+      const w = heatmapOffscreen.width;
+      const h = heatmapOffscreen.height;
+      octx.clearRect(0, 0, w, h);
+      octx.drawImage(heatmapRawImg, 0, 0);
+      const raw = octx.getImageData(0, 0, w, h);
+      const mapped = applyColormap(raw, heatmapOpacityFactor);
+
+      const tmp = document.createElement("canvas");
+      tmp.width = w;
+      tmp.height = h;
+      tmp.getContext("2d").putImageData(mapped, 0, 0);
+      ctx.drawImage(tmp, offsetX, offsetY, drawW, drawH);
+    }
+
+    function renderInstrumentCurve(svgEl, pts, opts) {
+      const w = 300;
+      const h = 72;
+      const pad = { t: 8, r: 6, b: 8, l: 6 };
+      const innerW = w - pad.l - pad.r;
+      const innerH = h - pad.t - pad.b;
+      const stroke = opts.stroke || "#4ec4cf";
+      const fillId = opts.fillId || "curveFill";
+      const fillOpacity = opts.fillOpacity ?? 0.18;
+
+      const valueKey = opts.valueKey || "display_score";
+      const values = pts.map(p => Number(p[valueKey] ?? 0));
+      const minScore = opts.minScore ?? Math.min(0, ...values);
+      const maxScore = opts.maxScore ?? Math.max(100, ...values);
+      const span = maxScore - minScore || 1;
+
+      const xy = pts.map((p, i) => ({
+        x: pad.l + (i / Math.max(pts.length - 1, 1)) * innerW,
+        y: pad.t + innerH - ((Number(p[valueKey] ?? 0) - minScore) / span) * innerH,
+      }));
+
+      const linePts = xy.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+      const areaPts = [
+        `${pad.l},${pad.t + innerH}`,
+        ...xy.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`),
+        `${pad.l + innerW},${pad.t + innerH}`,
+      ].join(" ");
+
+      const gridLines = [0.25, 0.5, 0.75].map(frac => {
+        const y = pad.t + innerH * (1 - frac);
+        return `<line x1="${pad.l}" y1="${y.toFixed(1)}" x2="${pad.l + innerW}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+      }).join("");
+
+      const idx = pts.findIndex(p => p.t_idx === currentT);
+      let marker = "";
+      if (idx >= 0 && xy[idx]) {
+        const p = xy[idx];
+        marker = `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${stroke}" stroke="#121110" stroke-width="1.5"/>`;
+      }
+
+      svgEl.innerHTML = `
+        <defs>
+          <linearGradient id="${fillId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${stroke}" stop-opacity="${fillOpacity}"/>
+            <stop offset="100%" stop-color="${stroke}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <polygon points="${areaPts}" fill="url(#${fillId})"/>
+        <polyline fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${linePts}"/>
+        ${marker}`;
     }
 
     function drawScoreCurve() {
       const svg = document.getElementById("scoreCurve");
+      const engScores = viewerBundle.engagement_track?.scores || [];
+      if (engScores.length) {
+        const pts = engScores.map((v, t_idx) => ({
+          t_idx,
+          z_score: v == null ? 0 : Number(v),
+        }));
+        const vals = pts.map(p => p.z_score);
+        renderInstrumentCurve(svg, pts, {
+          stroke: "#4ec4cf",
+          fillId: "engagementFill",
+          fillOpacity: 0.2,
+          valueKey: "z_score",
+          minScore: Math.min(-2, ...vals, 0),
+          maxScore: Math.max(2, ...vals, 0),
+        });
+        return;
+      }
       const ms = viewerBundle.marketing_scores;
-      if (!ms || !ms.display_curve || !(ms.display_curve.points || []).length) {
+      if (!ms?.display_curve?.points?.length) {
         svg.innerHTML = "";
         return;
       }
-      const pts = ms.display_curve.points;
-      const w = 300;
-      const h = 72;
-      const pad = 4;
-      const coords = pts.map((p, i) => {
-        const x = pad + (i / Math.max(pts.length - 1, 1)) * (w - pad * 2);
-        const y = h - pad - (p.display_score / 100) * (h - pad * 2);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      }).join(" ");
-      const current = pts.find(p => p.t_idx === currentT);
-      let marker = "";
-      if (current) {
-        const x = pad + (current.t_idx / Math.max(pts.length - 1, 1)) * (w - pad * 2);
-        const y = h - pad - (current.display_score / 100) * (h - pad * 2);
-        marker = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#ff6b6b"/>`;
-      }
-      svg.innerHTML = `<polyline fill="none" stroke="#7eb8ff" stroke-width="2" points="${coords}"/>${marker}`;
+      renderInstrumentCurve(svg, ms.display_curve.points, {
+        stroke: "#4ec4cf",
+        fillId: "engagementFill",
+        fillOpacity: 0.2,
+      });
     }
 
     function drawActivationCurve() {
       const svg = document.getElementById("activationCurve");
-      const aa = (viewerBundle.marketing_scores || {}).activation_analysis
+      const aa = viewerBundle.marketing_scores?.activation_analysis
         || (viewerBundle.activation_track ? {
           display_curve: {
             points: (viewerBundle.activation_track.raw_scores || []).map((v, t_idx) => ({
@@ -172,115 +1631,514 @@
             })),
           },
         } : null);
-      const curve = aa && aa.display_curve;
-      if (!curve || !(curve.points || []).length) {
+      const curve = aa?.display_curve;
+      if (!curve?.points?.length) {
         svg.innerHTML = "";
         return;
       }
       const pts = curve.points;
-      const w = 300;
-      const h = 72;
-      const pad = 4;
       const maxScore = Math.max(...pts.map(p => p.display_score || 0), 100);
-      const coords = pts.map((p, i) => {
-        const x = pad + (i / Math.max(pts.length - 1, 1)) * (w - pad * 2);
-        const y = h - pad - ((p.display_score || 0) / maxScore) * (h - pad * 2);
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      }).join(" ");
-      const current = pts.find(p => p.t_idx === currentT);
-      let marker = "";
-      if (current) {
-        const x = pad + (current.t_idx / Math.max(pts.length - 1, 1)) * (w - pad * 2);
-        const y = h - pad - ((current.display_score || 0) / maxScore) * (h - pad * 2);
-        marker = `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#ffd166"/>`;
-      }
-      svg.innerHTML = `<polyline fill="none" stroke="#ffd166" stroke-width="2" points="${coords}"/>${marker}`;
+      renderInstrumentCurve(svg, pts, {
+        stroke: "#e8a040",
+        fillId: "activationFill",
+        fillOpacity: 0.16,
+        maxScore,
+      });
+    }
+
+    const EMOTION_CHANNELS = ["anger", "fear", "sadness", "surprise", "amusement", "neutral"];
+
+    function emotionClass(channel) {
+      const ch = (channel || "").toLowerCase();
+      return EMOTION_CHANNELS.includes(ch) ? `emotion-${ch}` : "emotion-unknown";
+    }
+
+    function countGroundedSpikes() {
+      return (viewerBundle.events || []).filter(ev => ev.grounding?.dom_id).length;
+    }
+
+    function renderKpiStrip() {
+      const strip = document.getElementById("kpiStrip");
+      const ms = viewerBundle.marketing_scores;
+      const sessionScore = ms?.overall_score;
+      const actAvg = ms?.activation_analysis?.display_curve?.avg_score;
+      const grounded = countGroundedSpikes();
+      const totalSpikes = (viewerBundle.events || []).length;
+
+      const fmt = (v) => {
+        if (v == null || Number.isNaN(Number(v))) return "—";
+        return String(Math.round(Number(v)));
+      };
+
+      const pct = (v) => {
+        if (v == null || Number.isNaN(Number(v))) return 0;
+        return Math.min(100, Math.max(0, Number(v)));
+      };
+
+      const groundedPct = totalSpikes > 0 ? (grounded / totalSpikes) * 100 : 0;
+
+      const kpiCard = (variant, label, value, unit, sub, gaugePct) => `
+        <div class="kpi-card kpi-card--${variant}">
+          <span class="kpi-label">${label}</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value">${value}</span>
+            ${unit ? `<span class="kpi-unit">${unit}</span>` : ""}
+          </div>
+          <div class="kpi-gauge" role="presentation" aria-hidden="true">
+            <div class="kpi-gauge-fill" style="width:${gaugePct}%"></div>
+          </div>
+          <span class="kpi-sub">${sub}</span>
+        </div>`;
+
+      strip.innerHTML = [
+        kpiCard("session", "Session", fmt(sessionScore), "/100", "engagement + novelty", pct(sessionScore)),
+        kpiCard("activation", "Activation", fmt(actAvg), "/100", "mean brain signal", pct(actAvg)),
+        kpiCard("grounded", "Grounded", String(grounded), "", `${grounded} of ${totalSpikes} spikes`, groundedPct),
+      ].join("");
     }
 
     function renderOverallScore() {
-      const el = document.getElementById("overallScore");
-      const ms = viewerBundle.marketing_scores;
-      if (!ms || ms.overall_score == null) {
-        el.textContent = "";
-        return;
-      }
-      el.textContent = `Session score ${ms.overall_score}/100 · display avg ${ms.display_curve?.avg_score ?? "—"}`;
-      const aa = ms.activation_analysis;
-      if (aa && aa.session_summary) {
-        el.textContent += ` · activation avg ${aa.display_curve?.avg_score ?? "—"}/100`;
+      renderKpiStrip();
+    }
+
+    function updateAlignmentBanner() {
+      const banner = document.getElementById("alignBanner");
+      const textEl = document.getElementById("alignBannerText");
+      const align = viewerBundle.alignment || {};
+      if (align.ok === false) {
+        banner.hidden = false;
+        textEl.textContent = align.message || "Preds/manifest alignment failed — timestep mapping may be clamped.";
+        banner.title = align.message || "Alignment mismatch";
+      } else {
+        banner.hidden = true;
+        textEl.textContent = "";
       }
     }
 
-    function updateSidebar(sectionId) {
-      const sec = (viewerBundle.sections || []).find(s => s.section_id === sectionId);
-      document.getElementById("secTitle").textContent = sectionId || "—";
-      if (!sec) {
-        document.getElementById("secMetrics").textContent = "";
-        document.getElementById("secTips").innerHTML = "";
-        document.getElementById("topEl").innerHTML = "";
+    function updateHeatmapBadge(t) {
+      const prov = (viewerBundle.heatmap_provenance || {})[String(t)] || {};
+      const source = prov.source || (prov.placeholder ? "uniform_placeholder" : null);
+      heatmapBadge.className = "badge";
+      if (source === "modal") {
+        heatmapBadge.classList.add("modal");
+        heatmapBadge.textContent = "heatmap · modal";
+      } else if (source === "uniform_placeholder" || prov.placeholder) {
+        heatmapBadge.classList.add("placeholder");
+        heatmapBadge.textContent = "heatmap · placeholder";
+      } else if (source) {
+        heatmapBadge.classList.add("unknown");
+        heatmapBadge.textContent = `heatmap · ${source}`;
+      } else {
+        heatmapBadge.classList.add("unknown");
+        heatmapBadge.textContent = (viewerBundle.heatmap_index || {})[String(t)] ? "heatmap · loaded" : "heatmap · none";
+      }
+    }
+
+    function updateFrameBadge(t) {
+      const framePath = (viewerBundle.frame_index || {})[String(t)];
+      frameBadge.className = "badge";
+      if (framePath) {
+        frameBadge.classList.add("modal");
+        frameBadge.textContent = "frame · jpg";
+      } else if (viewerBundle.video) {
+        frameBadge.classList.add("unknown");
+        frameBadge.textContent = "frame · video seek";
+      } else {
+        frameBadge.classList.add("placeholder");
+        frameBadge.textContent = "frame · none";
+      }
+    }
+
+    function updateScrollBadge(t) {
+      const scrollMap = viewerBundle.snapshot_scroll_by_t || {};
+      const scrollY = scrollMap[String(t)];
+      if (scrollY != null) {
+        scrollBadge.textContent = `scrollY ${scrollY}px`;
+        scrollBadge.className = "badge modal";
+      } else {
+        const snap = snapshotForTimestep(t);
+        scrollBadge.textContent = snap ? `scrollY ${snap.scrollY || 0}px` : "scroll —";
+        scrollBadge.className = "badge unknown";
+      }
+    }
+
+    function updateAlignmentBadge() {
+      const align = viewerBundle.alignment || {};
+      if (align.ok === false) {
+        alignBadge.hidden = false;
+        alignBadge.textContent = align.message ? `⚠ ${align.message}` : "⚠ alignment mismatch";
+        alignBadge.title = align.message || "Preds/manifest alignment failed";
+      } else {
+        alignBadge.hidden = true;
+      }
+    }
+
+    function renderTrTicks() {
+      const maxT = parseInt(tSlider.max, 10) || 0;
+      if (maxT <= 0) {
+        trTicks.innerHTML = "";
         return;
       }
-      let scoreHtml = "";
+      const hmSet = new Set(Object.keys(viewerBundle.heatmap_index || {}).map(Number));
+      const sampleSet = new Set(viewerBundle.sample_t_indices || []);
+      const spikeSet = new Set((viewerBundle.events || []).map(e => e.t_spike).filter(x => x != null));
+
+      trTicks.innerHTML = "";
+      const all = new Set([...hmSet, ...sampleSet, ...spikeSet]);
+      for (const t of all) {
+        if (t < 0 || t > maxT) continue;
+        const tick = document.createElement("span");
+        tick.className = "tr-tick";
+        if (spikeSet.has(t)) tick.classList.add("spike");
+        else if (hmSet.has(t)) tick.classList.add("heatmap");
+        else tick.classList.add("sample");
+        tick.style.left = `${(t / maxT) * 100}%`;
+        trTicks.appendChild(tick);
+      }
+    }
+
+    function renderGroundingPanel(t) {
+      const panel = document.getElementById("groundingPanel");
+      const events = (viewerBundle.events || []).filter(e => Number(e.t_spike) === t);
+      if (!events.length) {
+        panel.innerHTML = '<p class="empty-note">No spike grounding at this TR</p>';
+        return;
+      }
+      panel.innerHTML = events.map(ev => {
+        const triggers = ev.triggers || {};
+        const channel = triggers.emotion_channel || null;
+        const emotionZ = triggers.emotion_z;
+        const eCls = emotionClass(channel);
+        const channelLabel = channel
+          ? String(channel).replace(/_/g, " ")
+          : "spike";
+        const zBlock = emotionZ != null
+          ? `<span class="emotion-z"><span>Z</span>${Number(emotionZ).toFixed(2)}</span>`
+          : "";
+        const extraTriggers = Object.entries(triggers)
+          .filter(([k, v]) => v != null && k !== "emotion_channel" && k !== "emotion_z")
+          .slice(0, 3)
+          .map(([k, v]) => `${k}=${typeof v === "number" ? v.toFixed(2) : v}`)
+          .join(" · ");
+        const g = ev.grounding;
+        if (g?.dom_id) {
+          const dens = formatDensity(g.attention_density);
+          return `<div class="grounding-card ${eCls}">
+            <div class="emotion-head">
+              <span class="emotion-channel">${channelLabel}</span>
+              ${zBlock}
+            </div>
+            ${extraTriggers ? `<div class="trigger">${extraTriggers}</div>` : ""}
+            <div class="winner">${g.dom_id} <span style="color:var(--text-dim)">(${g.tag || "?"})</span> · attn ${dens}</div>
+          </div>`;
+        }
+        const reason = ev.grounding_skip_reason || "not grounded";
+        return `<div class="grounding-card ${eCls}">
+            <div class="emotion-head">
+              <span class="emotion-channel">${channelLabel}</span>
+              ${zBlock}
+            </div>
+            ${extraTriggers ? `<div class="trigger">${extraTriggers}</div>` : ""}
+            <div class="skip">${reason}</div>
+          </div>`;
+      }).join("");
+    }
+
+    function metricBarRow(label, value, variant) {
+      const v = value != null && !Number.isNaN(Number(value)) ? Math.min(100, Math.max(0, Number(value))) : null;
+      const pct = v != null ? v : 0;
+      const display = v != null ? Math.round(v) : "—";
+      const ticks = [25, 50, 75].map(t =>
+        `<span style="left:${t}%"></span>`
+      ).join("");
+      return `<div class="metric-row">
+        <div class="metric-row-head">
+          <span class="metric-row-label">${label}</span>
+          <span class="metric-row-value">${display}<span> /100</span></span>
+        </div>
+        <div class="metric-bar" role="presentation">
+          <div class="metric-bar-ticks">${ticks}</div>
+          <div class="metric-bar-fill ${variant}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    }
+
+    function renderSectionDetail(sec) {
+      const detail = document.getElementById("secDetail");
+      if (!sec) {
+        detail.innerHTML = "";
+        return;
+      }
+      let bars = "";
       if (sec.marketing_score != null) {
-        const cls = sec.marketing_label === "strongest" ? "strong" : sec.marketing_label === "weakest" ? "weak" : "";
-        scoreHtml = `<span class="score-chip ${cls}">${sec.marketing_score}/100</span>`;
+        bars += metricBarRow("Marketing score", sec.marketing_score, "marketing");
       }
       if (sec.activation_score != null) {
-        const cls = sec.activation_label === "strongest" ? "strong" : sec.activation_label === "weakest" ? "weak" : "";
-        scoreHtml += `<span class="score-chip ${cls}">act ${sec.activation_score}/100</span>`;
+        bars += metricBarRow("Activation score", sec.activation_score, "activation");
       }
-      document.getElementById("secMetrics").innerHTML =
-        `${scoreHtml} dwell ${sec.dwell_sec ?? "—"}s · flags: ${(sec.flags || []).join(", ") || "none"}`
-        + (sec.activation_mean_raw != null ? ` · mean|preds|=${Number(sec.activation_mean_raw).toFixed(3)}` : "");
+      const flags = sec.flags || [];
+      const flagHtml = flags.length
+        ? flags.map(f => `<span class="flag-chip">${f}</span>`).join("")
+        : '<span class="flag-chip empty">none</span>';
+      const hs = sec.heatmap_stats;
+      let hmBadges = "";
+      if (hs) {
+        hmBadges = `
+          <span class="hm-stat-badge real">${hs.real ?? 0} real</span>
+          <span class="hm-stat-badge placeholder">${hs.placeholder ?? 0} placeholder</span>`;
+      }
+      const actRaw = sec.activation_mean_raw != null
+        ? `<span class="meta-line" style="margin:8px 0 0">mean|preds|=${Number(sec.activation_mean_raw).toFixed(3)}</span>`
+        : "";
+      const barsBlock = bars
+        ? `<div class="sec-metrics-block"><p class="sec-metrics-block-title">Section scores</p>${bars}</div>`
+        : "";
+      detail.innerHTML = `
+        ${barsBlock}
+        <div class="sec-meta-row">
+          <span class="sec-dwell">dwell ${sec.dwell_sec ?? "—"}s</span>
+          ${hmBadges}
+        </div>
+        <div class="sec-meta-row">${flagHtml}</div>
+        ${actRaw}`;
+    }
+
+    function updateSidebar(sectionId, t) {
+      const sec = (viewerBundle.sections || []).find(s => s.section_id === sectionId);
+      document.getElementById("secTitle").textContent = sectionId || "—";
+
+      if (!sec) {
+        renderSectionDetail(null);
+        document.getElementById("secTips").innerHTML = "";
+        document.getElementById("topEl").innerHTML = "";
+        document.getElementById("elementSourceNote").textContent = "";
+        return;
+      }
+
+      renderSectionDetail(sec);
+
       document.getElementById("secTips").innerHTML = (sec.recommendations || [])
-        .map(t => `<li>${t}</li>`).join("");
-      document.getElementById("topEl").innerHTML = (sec.top_elements || [])
-        .map(e => `<li><b>${e.dom_id}</b> (${e.tag}) score=${(e.attention_density || e.score || 0).toFixed?.(3) ?? e.score}</li>`)
-        .join("") || "<li class='meta'>No heatmap credit yet</li>";
+        .map(tip => `<li>${tip}</li>`).join("");
+
+      const { elements, source } = elementsForTimestep(sec, t);
+      document.getElementById("elementSourceNote").textContent =
+        source !== "none" ? `Showing: ${source}` : "";
+
+      const list = document.getElementById("topEl");
+      const emptyHelp = `<p class="element-empty-help"><strong>Mean DINOv2 attention density</strong> per DOM element — typically <strong>0.001–0.1</strong>. Higher values mean more saliency mass on that element at this TR.</p>`;
+
+      if (!elements.length) {
+        list.innerHTML = `${emptyHelp}<li class="empty-note">No heatmap credit yet at this TR</li>`;
+      } else {
+        const densities = elements.map(e => elementDensity(e)).filter(v => v != null && !Number.isNaN(Number(v)));
+        const maxDens = densities.length ? Math.max(...densities.map(Number)) : 1;
+        list.innerHTML = elements.map(e => {
+          const dens = elementDensity(e);
+          const n = e.n_samples;
+          const nLabel = n != null ? `<span class="el-score-label">n=${n}</span>` : "";
+          const pct = dens != null && maxDens > 0
+            ? Math.min(100, (Number(dens) / maxDens) * 100)
+            : 0;
+          const sel = selectedDomId && e.dom_id === selectedDomId ? " selected" : "";
+          return `<li class="el-row clickable${sel}" data-dom-id="${e.dom_id || ""}" tabindex="0" role="button">
+            <div class="el-row-head">
+              <div>
+                <div class="el-dom">${e.dom_id || "—"}</div>
+                <div class="el-tag">${e.tag || ""}</div>
+              </div>
+              <div class="el-score">${formatDensity(dens)}${nLabel}</div>
+            </div>
+            <div class="attn-meter" role="presentation" aria-hidden="true">
+              <div class="attn-meter-fill" style="width:${pct.toFixed(1)}%"></div>
+            </div>
+          </li>`;
+        }).join("");
+        list.querySelectorAll(".el-row.clickable").forEach(row => {
+          const domId = row.dataset.domId;
+          if (!domId) return;
+          const handler = () => selectElement(domId);
+          row.addEventListener("click", handler);
+          row.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") {
+              ev.preventDefault();
+              handler();
+            }
+          });
+        });
+      }
+      if (selectedDomId) renderElementCorrelate(selectedDomId);
+    }
+
+    function showFrameLayer(useFrame) {
+      if (useFrame) {
+        frameImg.style.display = "block";
+        walkVideo.style.visibility = "hidden";
+        stageEmpty.style.display = "none";
+      } else if (viewerBundle.video) {
+        frameImg.style.display = "none";
+        walkVideo.style.visibility = "visible";
+        stageEmpty.style.display = "none";
+      } else {
+        frameImg.style.display = "none";
+        walkVideo.style.visibility = "hidden";
+        stageEmpty.style.display = "flex";
+        stageEmpty.textContent = "No frame or video in bundle";
+      }
+    }
+
+    async function loadHeatmapForT(t) {
+      const hmPath = (viewerBundle.heatmap_index || {})[String(t)];
+      heatmapRawImg = null;
+      heatmapOffscreen = null;
+      if (!hmPath) {
+        drawHeatmap();
+        return;
+      }
+      return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+          heatmapRawImg = img;
+          heatmapOffscreen = document.createElement("canvas");
+          heatmapOffscreen.width = img.naturalWidth;
+          heatmapOffscreen.height = img.naturalHeight;
+          drawHeatmap();
+          resolve();
+        };
+        img.onerror = () => {
+          heatmapRawImg = null;
+          drawHeatmap();
+          resolve();
+        };
+        img.src = `${base}/${hmPath}`;
+      });
+    }
+
+    async function loadFrameForT(t) {
+      const framePath = (viewerBundle.frame_index || {})[String(t)];
+      if (framePath) {
+        return new Promise(resolve => {
+          frameImg.onload = () => {
+            showFrameLayer(true);
+            resolve(true);
+          };
+          frameImg.onerror = () => {
+            showFrameLayer(false);
+            resolve(false);
+          };
+          frameImg.src = `${base}/${framePath}`;
+        });
+      }
+      showFrameLayer(!!viewerBundle.video);
+      if (viewerBundle.video) {
+        const tr = sessionManifest.tr_mapping?.tr_duration_sec
+          || viewerBundle.capture?.tr_duration_sec
+          || 1;
+        try {
+          walkVideo.currentTime = t * tr;
+        } catch (_) { /* seek may fail before metadata */ }
+      }
+      return false;
     }
 
     async function setTimestep(t) {
       currentT = t;
       tLabel.textContent = String(t);
-      const tr = (viewerBundle.capture && sessionManifest.tr_mapping)
-        ? (sessionManifest.tr_mapping.tr_duration_sec || 1)
-        : 1;
-      if (walkVideo.src) {
-        walkVideo.currentTime = t * tr;
+      tSlider.value = String(t);
+      tSlider.setAttribute("aria-valuetext", `TR ${t}`);
+
+      await Promise.all([loadFrameForT(t), loadHeatmapForT(t)]);
+
+      updateHeatmapBadge(t);
+      updateFrameBadge(t);
+      updateScrollBadge(t);
+
+      const snap = snapshotForTimestep(t);
+      let sec = sectionForTimestep(t);
+      if (!sec && activeSectionId) {
+        sec = (viewerBundle.sections || []).find(s => s.section_id === activeSectionId);
       }
-      const key = String(t);
-      const hmPath = (viewerBundle.heatmap_index || {})[key];
-      if (hmPath) {
-        heatmapImg = new Image();
-        heatmapImg.onload = () => { drawHeatmap(); };
-        heatmapImg.src = `${base}/${hmPath}`;
-      } else {
-        heatmapImg = new Image();
-        drawHeatmap();
-      }
-      const snap = nearestSnapshot(t);
-      const sec = (viewerBundle.sections || []).find(s =>
-        (s.sample_t_indices || []).includes(t)
-      );
-      const topEl = sec ? sec.top_elements : [];
-      if (snap) drawBboxes(snap, topEl);
       if (sec) {
-        sectionSelect.value = sec.section_id;
-        updateSidebar(sec.section_id);
+        activeSectionId = sec.section_id;
+        if (sectionSelect.value !== sec.section_id) sectionSelect.value = sec.section_id;
       }
+
+      const { elements } = elementsForTimestep(sec, t);
+      if (snap) drawBboxes(snap, elements);
+      else bboxCanvas.innerHTML = "";
+
+      updateSidebar(activeSectionId || sectionSelect.value, t);
+      renderGroundingPanel(t);
       drawScoreCurve();
       drawActivationCurve();
+      syncBrainPanel(t);
+      updateFrameCaption(t);
+      if (selectedDomId) renderElementCorrelate(selectedDomId);
+    }
+
+    function syncBrainPanel(t) {
+      if (brainVideo) {
+        const brainT = Math.min(t, (viewerBundle.brain_viewer?.n_timesteps || t + 1) - 1);
+        const target = brainT / brainFps;
+        if (Math.abs(brainVideo.currentTime - target) > 0.05) {
+          try {
+            brainVideo.currentTime = target;
+          } catch (_) { /* seek before metadata */ }
+        }
+        document.getElementById("brainPeakMeta").textContent =
+          `TR ${brainT} · cortical activation (TRIBE surface render)`;
+        return;
+      }
+      if (brainSurface) {
+        const brainT = Math.min(t, brainSurface.getNTimesteps() - 1);
+        brainSurface.setTimestep(brainT);
+        const peak = brainSurface.getPeakMeta();
+        document.getElementById("brainPeakMeta").textContent =
+          `TR ${brainT} · peak vertex ${peak.idx} = ${peak.val.toFixed(4)}`;
+      }
+    }
+
+    async function initBrainPanel() {
+      const host = document.getElementById("brainPanelHost");
+      const meta = document.getElementById("brainPeakMeta");
+      const bv = viewerBundle.brain_viewer;
+      if (bv?.mp4) {
+        brainVideo = document.getElementById("brainVideo");
+        brainFps = Number(bv.fps) || 1;
+        brainVideo.style.display = "block";
+        brainVideo.src = `${base}/${bv.mp4}`;
+        brainVideo.addEventListener("loadedmetadata", () => syncBrainPanel(currentT));
+        return;
+      }
+      if (bv && window.initBrainSurfacePanel) {
+        try {
+          brainSurface = await window.initBrainSurfacePanel(host, `${base}/brain`);
+        } catch (err) {
+          meta.textContent = `Brain viewer unavailable: ${err.message}`;
+        }
+        return;
+      }
+      host.innerHTML = '<p class="empty-note" style="padding:12px">No brain surface exported for this session.</p>';
     }
 
     async function init() {
       viewerBundle = await loadJson("viewer_bundle.json");
+      sessionLabel.textContent = viewerBundle.session_id || "unknown session";
+
       try {
-        sessionManifest = await loadJson(viewerBundle.manifest_path || "../session_manifest.json");
-      } catch (e) {
+        sessionManifest = await loadJson(viewerBundle.manifest_path || "session_manifest.json");
+      } catch (_) {
         statusMeta.textContent = "No session_manifest (bboxes disabled)";
       }
-      const nT = Math.max(1, viewerBundle.n_timesteps || 1) - 1;
-      tSlider.max = String(nT);
+
+      const nT = Math.max(1, viewerBundle.n_timesteps || viewerBundle.manifest_n_timesteps || 1) - 1;
+      const analysisT = (viewerBundle.analysis_n_timesteps || viewerBundle.brain_viewer?.n_timesteps || 1) - 1;
+      const hmKeys = Object.keys(viewerBundle.heatmap_index || {}).map(k => parseInt(k, 10));
+      const eventTs = (viewerBundle.events || []).map(e => e.t_spike).filter(x => x != null).map(Number);
+      const sampleTs = (viewerBundle.sample_t_indices || []).map(Number);
+      const frameTs = Object.keys(viewerBundle.frame_index || {}).map(Number);
+      const maxT = Math.max(nT, analysisT, ...hmKeys, ...eventTs, ...sampleTs, ...frameTs, 0);
+
+      tSlider.max = String(maxT);
       const samples = viewerBundle.sample_t_indices || [];
       if (samples.length) tSlider.value = String(samples[0]);
 
@@ -288,38 +2146,68 @@
         walkVideo.src = `${base}/${viewerBundle.video}`;
         walkVideo.addEventListener("loadedmetadata", () => {
           resizeCanvases();
-          setTimestep(parseInt(tSlider.value, 10));
+          if (!(viewerBundle.frame_index || {})[String(currentT)]) {
+            loadFrameForT(currentT);
+          }
         });
-      } else {
-        statusMeta.textContent = "No walkthrough video in bundle";
       }
 
       sectionSelect.innerHTML = (viewerBundle.sections || [])
         .map(s => `<option value="${s.section_id}">${s.section_id}</option>`)
         .join("");
-      sectionSelect.addEventListener("change", () => {
-        const sec = (viewerBundle.sections || []).find(s => s.section_id === sectionSelect.value);
-        if (sec && (sec.sample_t_indices || []).length) {
-          tSlider.value = String(sec.sample_t_indices[0]);
-          setTimestep(sec.sample_t_indices[0]);
-        }
-        updateSidebar(sectionSelect.value);
-      });
-      if (viewerBundle.sections && viewerBundle.sections[0]) {
-        updateSidebar(viewerBundle.sections[0].section_id);
+
+      if (viewerBundle.sections?.[0]) {
+        activeSectionId = viewerBundle.sections[0].section_id;
+        updateSidebar(activeSectionId, parseInt(tSlider.value, 10));
       }
 
+      sectionSelect.addEventListener("change", () => {
+        activeSectionId = sectionSelect.value;
+        const sec = (viewerBundle.sections || []).find(s => s.section_id === activeSectionId);
+        if (sec?.sample_t_indices?.length) {
+          tSlider.value = String(nearestSampleT(sec, currentT) ?? sec.sample_t_indices[0]);
+          setTimestep(parseInt(tSlider.value, 10));
+        } else {
+          updateSidebar(activeSectionId, currentT);
+        }
+      });
+
       tSlider.addEventListener("input", () => setTimestep(parseInt(tSlider.value, 10)));
+
+      heatmapOpacity.addEventListener("input", () => {
+        heatmapOpacityFactor = parseInt(heatmapOpacity.value, 10) / 100;
+        opacityVal.textContent = `${heatmapOpacity.value}%`;
+        heatmapOpacity.setAttribute("aria-valuetext", `${heatmapOpacity.value} percent`);
+        drawHeatmap();
+      });
+
       window.addEventListener("resize", resizeCanvases);
+
+      updateAlignmentBadge();
+      updateAlignmentBanner();
+      renderTrTicks();
+      renderKpiStrip();
       resizeCanvases();
-      statusMeta.textContent = `Session ${viewerBundle.session_id}`;
-      renderOverallScore();
-      drawScoreCurve();
-      drawActivationCurve();
-      setTimestep(parseInt(tSlider.value, 10));
+      statusMeta.textContent = `${maxT + 1} TRs · ${Object.keys(viewerBundle.heatmap_index || {}).length} heatmaps`;
+
+      await setTimestep(parseInt(tSlider.value, 10));
+
+      await initBrainPanel();
     }
 
-    init().catch(err => { statusMeta.textContent = err.message; console.error(err); });
+    init().catch(err => {
+      sessionLabel.textContent = "Load error";
+      statusMeta.textContent = err.message;
+      console.error(err);
+    });
+  </script>
+
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }
+  </script>
+  <script type="module">
+    import { createBrainSurface } from "./brain_surface.js";
+    window.initBrainSurfacePanel = (host, brainBase) => createBrainSurface(host, brainBase);
   </script>
 </body>
 </html>

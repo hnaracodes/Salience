@@ -1,38 +1,24 @@
-# Cinematic walkthrough for tests/fixtures/walkthrough_site (Aurora page).
+# Cinematic Aurora fixture — linear scroll capture (recommended).
 # Serve: python -m http.server 8765 --directory tests/fixtures/walkthrough_site
 #
-# Scroll stops align with section landmarks (~viewport heights at 1280×720).
+# scroll_mode: linear — fixed scroll increment per TR; TR count = f(page height).
+# Each TR saves a Playwright JPEG frame aligned with DOM snapshot + heatmap.
 
 name: aurora_showcase
 initial_url: "http://127.0.0.1:8765/index.html"
 viewport:
   width: 1280
   height: 720
-duration_sec: 14
+
+scroll_mode: linear
 interval_sec: 1.0
-steps:
-  - action: wait_ms
-    ms: 1200
-  # Hero — particles + shimmer title
-  - action: scroll_to_y
-    y: 750
-  - action: wait_ms
-    ms: 800
-  # Experience — parallax cards
-  - action: scroll_to_y
-    y: 1550
-  - action: wait_ms
-    ms: 800
-  # Gallery — marquee + orbs
-  - action: scroll_to_y
-    y: 2400
-  - action: wait_ms
-    ms: 800
-  # Pricing — featured tier glow
-  - action: scroll_to_y
-    y: 3200
-  - action: wait_ms
-    ms: 800
-  # CTA finale
-  - action: scroll_to_y
-    y: 3900
+scroll_px_per_tr: 540          # 75% of viewport height per TR
+scroll_settle_ms: 600          # wait for scroll + reveal animations
+initial_settle_ms: 1800        # wait after first load before TR 0
+
+# duration_sec omitted — computed from page scroll height
+
+site_goal: |
+  Aurora is a cinematic product landing page. It should make visitors feel the product is
+  fast, polished, and trustworthy — building enough excitement and clarity that they
+  click the primary call-to-action to start using it.

@@ -32,10 +32,12 @@ EXTRACT_DOM_JS = """
     const cls = (el.className && typeof el.className === 'string')
       ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
     const dom_id = id || (el.tagName.toLowerCase() + cls) || el.tagName.toLowerCase();
+    const rawText = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
     elements.push({
       dom_id: dom_id.slice(0, 120),
       tag: el.tagName,
       role: el.getAttribute('role') || '',
+      text: rawText.slice(0, 200),
       bbox: [
         Math.round(r.left + scrollX),
         Math.round(r.top + scrollY),
@@ -120,6 +122,130 @@ def build_step_schedule(
     return schedule
 
 
+def plan_linear_scroll_y_targets(
+    scroll_height: int,
+    viewport_height: int,
+    scroll_px_per_tr: int,
+) -> list[int]:
+    """Return monotonic scrollY targets: one per TR, from top to page bottom."""
+    max_scroll = max(0, int(scroll_height) - int(viewport_height))
+    step = scroll_px_per_tr if scroll_px_per_tr > 0 else max(1, int(viewport_height * 0.75))
+    targets = [0]
+    y = 0
+    while y < max_scroll:
+        y = min(y + step, max_scroll)
+        if targets[-1] != y:
+            targets.append(y)
+    return targets
+
+
+PAGE_METRICS_JS = """
+() => ({
+  scrollHeight: Math.max(
+    document.body.scrollHeight,
+    document.documentElement.scrollHeight,
+    document.body.offsetHeight,
+    document.documentElement.offsetHeight
+  ),
+  clientHeight: window.innerHeight,
+})
+"""
+
+
+async def _capture_snapshot(
+    page: Any,
+    session_dir: Path,
+    *,
+    t_idx: int,
+    event_time: float,
+) -> dict[str, Any]:
+    """Screenshot + DOM extract for one TR (aligned frame and manifest row)."""
+    frames_dir = session_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    frame_path = frames_dir / f"t_{t_idx}.jpg"
+    await page.screenshot(path=str(frame_path), type="jpeg", quality=92)
+    payload = await page.evaluate(EXTRACT_DOM_JS)
+    return {
+        "t_idx": t_idx,
+        "pts_sec": round(event_time, 3),
+        "url": page.url,
+        "scrollY": int(payload["scrollY"]),
+        "scrollX": int(payload["scrollX"]),
+        "elements": payload["elements"],
+        "frame_path": f"frames/t_{t_idx}.jpg",
+    }
+
+
+async def _record_linear_scroll_async(
+    *,
+    session_id: str,
+    session_dir: Path,
+    script: dict[str, Any],
+    interval_sec: float,
+    width: int,
+    height: int,
+    initial_url: str,
+    video_dir: Path,
+) -> dict[str, Any]:
+    """Fixed scroll increment per TR; TR count derived from page height."""
+    from playwright.async_api import async_playwright
+
+    scroll_px = int(script.get("scroll_px_per_tr", max(1, int(height * 0.75))))
+    scroll_settle_ms = int(script.get("scroll_settle_ms", 500))
+    initial_settle_ms = int(script.get("initial_settle_ms", 1500))
+
+    snapshots: list[dict[str, Any]] = []
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            viewport={"width": width, "height": height},
+            record_video_dir=str(video_dir),
+            record_video_size={"width": width, "height": height},
+        )
+        page = await context.new_page()
+        await page.goto(initial_url, wait_until="networkidle", timeout=120_000)
+        await asyncio.sleep(initial_settle_ms / 1000.0)
+
+        metrics = await page.evaluate(PAGE_METRICS_JS)
+        scroll_targets = plan_linear_scroll_y_targets(
+            int(metrics["scrollHeight"]),
+            int(metrics["clientHeight"]),
+            scroll_px,
+        )
+
+        for t_idx, target_y in enumerate(scroll_targets):
+            await page.evaluate(f"window.scrollTo(0, {int(target_y)})")
+            await asyncio.sleep(scroll_settle_ms / 1000.0)
+            snapshots.append(await _capture_snapshot(
+                page, session_dir, t_idx=t_idx, event_time=t_idx * interval_sec,
+            ))
+            if t_idx + 1 < len(scroll_targets):
+                await asyncio.sleep(interval_sec)
+
+        await asyncio.sleep(interval_sec)
+
+        await context.close()
+        await browser.close()
+
+    actual_duration = len(snapshots) * interval_sec
+    manifest = build_manifest_v2(
+        session_id=session_id,
+        initial_url=initial_url,
+        dom_snapshots=snapshots,
+        width=width,
+        height=height,
+        interval_sec=interval_sec,
+        duration_sec=actual_duration,
+    )
+    manifest["scroll_plan"] = {
+        "mode": "linear",
+        "scroll_px_per_tr": scroll_px,
+        "scroll_targets": [s["scrollY"] for s in snapshots],
+        "page_scroll_height": int(metrics["scrollHeight"]),
+    }
+    return manifest
+
+
 async def _run_step(page: Any, step: dict[str, Any]) -> None:
     """Execute a single walkthrough step.
 
@@ -147,6 +273,19 @@ async def _run_step(page: Any, step: dict[str, Any]) -> None:
         raise ValueError(f"Unknown walkthrough step action: {action!r}")
 
 
+async def _finalize_video(session_dir: Path, video_dir: Path) -> str:
+    video_rel = "walkthrough.mp4"
+    candidates = sorted(video_dir.glob("*.webm")) + sorted(video_dir.glob("*.mp4"))
+    if candidates:
+        src = candidates[0]
+        dest = session_dir / ("walkthrough.webm" if src.suffix == ".webm" else "walkthrough.mp4")
+        shutil.move(str(src), str(dest))
+        video_rel = dest.name
+    if video_dir.exists():
+        shutil.rmtree(video_dir, ignore_errors=True)
+    return video_rel
+
+
 async def record_website_session_async(
     *,
     session_id: str,
@@ -154,28 +293,56 @@ async def record_website_session_async(
     script: dict[str, Any],
     interval_sec: float = 1.0,
 ) -> dict[str, Any]:
-    """Playwright capture: video + DOM snapshots interleaved with walkthrough steps.
+    """Playwright capture: video + aligned DOM snapshots (+ JPEG frames per TR).
 
-    DOM snapshots are taken during the walkthrough (not after all steps complete)
-    so that ``dom_snapshots[t]`` reflects the actual page state at that video
-    timestamp. The merged timeline fires sample events (every ``interval_sec``)
-    and step events at their scheduled wall-clock offsets, in chronological
-    order. At the same timestamp, samples run before steps so each snapshot
-    captures the page state immediately *before* the action that fires at that
-    moment.
+    ``scroll_mode: linear`` — fixed scroll increment per TR; TR count is derived
+    from measured page height (recommended for heatmap / viewer alignment).
 
-    ``wait_ms`` steps are represented purely as gaps between scheduled events —
-    they are NOT re-executed via ``_run_step`` to avoid double-sleeping.
+    ``scroll_mode: scripted`` (default) — YAML ``steps`` interleaved with TR
+    samples on a fixed ``duration_sec`` timeline.
     """
-    from playwright.async_api import async_playwright
-
     viewport = script.get("viewport") or {}
     width = int(viewport.get("width", 1920))
     height = int(viewport.get("height", 1080))
     initial_url = script["initial_url"]
-    steps: list[dict[str, Any]] = list(script.get("steps") or [])
+    scroll_mode = (script.get("scroll_mode") or "scripted").lower()
 
-    # Compute total capture duration.
+    video_dir = session_dir / "_playwright_video"
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    if scroll_mode == "linear":
+        manifest = await _record_linear_scroll_async(
+            session_id=session_id,
+            session_dir=session_dir,
+            script=script,
+            interval_sec=interval_sec,
+            width=width,
+            height=height,
+            initial_url=initial_url,
+            video_dir=video_dir,
+        )
+        manifest["video"]["path"] = await _finalize_video(session_dir, video_dir)
+        from scout_core.session_align import pad_manifest_snapshots_to_video_duration
+
+        preds_path = session_dir / "preds.npz"
+        target_tr = None
+        if preds_path.is_file():
+            try:
+                import numpy as _np
+
+                target_tr = int(_np.load(preds_path)["preds"].shape[0])
+            except Exception:
+                target_tr = None
+        manifest = pad_manifest_snapshots_to_video_duration(
+            manifest, session_dir, target_tr_count=target_tr,
+        )
+        return manifest
+
+    from playwright.async_api import async_playwright
+
+    steps: list[dict[str, Any]] = list(script.get("steps") or [])
+    initial_settle_ms = int(script.get("initial_settle_ms", 800))
+
     duration_sec = script.get("duration_sec")
     if duration_sec is None:
         step_total_sec = sum(
@@ -187,22 +354,15 @@ async def record_website_session_async(
         if duration_sec <= 0:
             duration_sec = 10.0
 
-    n_timesteps = expected_tr_count(duration_sec, interval_sec)
-
-    # Build step schedule: cumulative offset per step (only wait_ms advances clock).
+    n_timesteps = expected_tr_count(float(duration_sec), interval_sec)
     step_schedule = build_step_schedule(steps)
 
-    # Merged event list: (time_sec, priority, data)
-    # priority=0 for samples (comes first at same time), 1 for steps.
     all_events: list[tuple[float, int, Any]] = []
     for t_idx in range(n_timesteps):
-        all_events.append((t_idx * interval_sec, 0, t_idx))  # sample event
+        all_events.append((t_idx * interval_sec, 0, t_idx))
     for t_offset, step in step_schedule:
-        all_events.append((t_offset, 1, step))  # step event
+        all_events.append((t_offset, 1, step))
     all_events.sort(key=lambda x: (x[0], x[1]))
-
-    video_dir = session_dir / "_playwright_video"
-    video_dir.mkdir(parents=True, exist_ok=True)
 
     snapshots: list[dict[str, Any]] = []
     async with async_playwright() as p:
@@ -213,53 +373,31 @@ async def record_website_session_async(
             record_video_size={"width": width, "height": height},
         )
         page = await context.new_page()
-
-        # Initial navigation is outside the timed capture loop so the clock
-        # starts after the page is fully loaded.
         await page.goto(initial_url, wait_until="networkidle", timeout=120_000)
+        await asyncio.sleep(initial_settle_ms / 1000.0)
 
         current_time = 0.0
         for event_time, kind, data in all_events:
             gap = event_time - current_time
-            if gap > 0.001:  # > 1 ms threshold to avoid redundant micro-sleeps
+            if gap > 0.001:
                 await asyncio.sleep(gap)
                 current_time = event_time
 
             if kind == 0:
-                # DOM sample event
                 t_idx = data
-                payload = await page.evaluate(EXTRACT_DOM_JS)
-                snapshots.append({
-                    "t_idx": t_idx,
-                    "pts_sec": round(event_time, 3),
-                    "url": page.url,
-                    "scrollY": int(payload["scrollY"]),
-                    "scrollX": int(payload["scrollX"]),
-                    "elements": payload["elements"],
-                })
+                snapshots.append(await _capture_snapshot(
+                    page, session_dir, t_idx=t_idx, event_time=event_time,
+                ))
             else:
-                # Step event
                 step = data
                 action = step.get("action") or step.get("type")
-                if action == "wait_ms":
-                    # Duration already encoded as gap to next event; skip execution.
-                    pass
-                else:
+                if action != "wait_ms":
                     await _run_step(page, step)
 
         await context.close()
         await browser.close()
 
-    video_rel = "walkthrough.mp4"
-    candidates = sorted(video_dir.glob("*.webm")) + sorted(video_dir.glob("*.mp4"))
-    if candidates:
-        src = candidates[0]
-        dest = session_dir / ("walkthrough.webm" if src.suffix == ".webm" else "walkthrough.mp4")
-        shutil.move(str(src), str(dest))
-        video_rel = dest.name
-    if video_dir.exists():
-        shutil.rmtree(video_dir, ignore_errors=True)
-
+    video_rel = await _finalize_video(session_dir, video_dir)
     actual_duration = max((s["pts_sec"] for s in snapshots), default=0.0) + interval_sec
     return build_manifest_v2(
         session_id=session_id,
