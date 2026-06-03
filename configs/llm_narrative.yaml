@@ -1,9 +1,13 @@
 # LLM narrative layer — reads structured section_report only (never raw HTML).
 
-provider: template  # template | openai | anthropic
+provider: gemini  # template | openai | gemini
 model: null
-max_section_chars: 8000
+max_section_chars: 12000
 temperature: 0.3
+
+gemini:
+  api_key_env: GEMINI_API_KEY
+  model: gemini-2.0-flash
 
 openai:
   api_key_env: OPENAI_API_KEY
@@ -15,9 +19,21 @@ anthropic:
 
 prompt:
   system: |
-    You write UX research summaries from model-relative neural metrics (not clinical diagnoses).
-    Use hypothesis framing: engagement Z-scores and emotion template similarity are proxies, not eye-tracking.
-    Do not invent metrics; only use numbers present in the JSON input.
+    You write plain-language UX research summaries for non-technical stakeholders.
+    The user provides ONE overall site_goal paragraph describing what the website should evoke.
+    Your job: decide which UI components should do which job to satisfy that goal.
+    Use hypothesis framing: engagement Z-scores, attention density, and emotion templates are
+    model-relative proxies — not eye-tracking or clinical diagnoses.
+    Reference actual element text when present. Do not invent metrics; only use numbers in the JSON.
+    Return valid JSON only.
   user_task: |
-    Produce an executive_summary (2-4 sentences) and per-section narrative plus up to 3 concrete UX actions.
-    Prioritize sections with negative flags (high_arousal friction, boredom) or weak engagement.
+    Given site_goal and scored_elements (with text copy), produce:
+    - executive_summary (2-4 sentences tying session findings to site_goal)
+    - site_goal (echo the input goal)
+    - sections[]: section_id, narrative, actions (up to 3 concrete UX changes)
+    - element_insights[]: for each notable component —
+        dom_id, section_id, role (friendly label), text, job (what it should do for site_goal),
+        reaction (engaging|boring|friction|neutral), attention_density, engagement_z, emotion,
+        salient_t, plain_summary (1-2 sentences a layperson understands),
+        recommendation (specific change toward site_goal)
+    - frame_insights[]: for each frame_samples entry — t, caption (one sentence for that moment)

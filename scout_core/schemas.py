@@ -113,11 +113,38 @@ class MarketingNarrativeSection(BaseModel):
     actions: list[str] = Field(default_factory=list)
 
 
+class ElementInsight(BaseModel):
+    """Plain-language interpretation of one DOM component vs the site goal."""
+
+    dom_id: str
+    section_id: str = ""
+    role: str = ""
+    text: str = ""
+    job: str = ""
+    reaction: str = "neutral"  # engaging | boring | friction | neutral
+    attention_density: float | None = None
+    engagement_z: float | None = None
+    emotion: str | None = None
+    salient_t: int | None = None
+    plain_summary: str = ""
+    recommendation: str = ""
+
+
+class FrameInsight(BaseModel):
+    """One-sentence caption for a sampled TR."""
+
+    t: int
+    caption: str = ""
+
+
 class MarketingNarrative(BaseModel):
     """LLM-generated prose from structured section_report (not from raw HTML)."""
 
     executive_summary: str = ""
+    site_goal: str = ""
     sections: list[MarketingNarrativeSection] = Field(default_factory=list)
+    element_insights: list[ElementInsight] = Field(default_factory=list)
+    frame_insights: list[FrameInsight] = Field(default_factory=list)
     provider: str = "template"
     model: str | None = None
 

@@ -18,6 +18,7 @@ from scout_core.walkthrough import (
     build_step_schedule,
     expected_tr_count,
     load_walkthrough_script,
+    plan_linear_scroll_y_targets,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -149,6 +150,19 @@ def test_build_step_schedule_non_wait_does_not_advance_clock():
 
 def test_build_step_schedule_empty():
     assert build_step_schedule([]) == []
+
+
+def test_plan_linear_scroll_y_targets():
+    # 4000px page, 720px viewport → max scroll 3280; step 540 → 0,540,1080,1620,2160,2700,3280
+    targets = plan_linear_scroll_y_targets(4000, 720, 540)
+    assert targets[0] == 0
+    assert targets[-1] == 3280
+    assert len(targets) == 8
+    assert all(targets[i] <= targets[i + 1] for i in range(len(targets) - 1))
+
+
+def test_plan_linear_scroll_short_page():
+    assert plan_linear_scroll_y_targets(800, 720, 540) == [0, 80]
 
 
 def test_build_step_schedule_preserves_step_identity():

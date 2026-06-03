@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Models — Threadmind</title>
+  <link rel="stylesheet" href="assets/css/tokens.css" />
+  <link rel="stylesheet" href="assets/css/site.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header role="banner">
+    <a href="index.html" class="logo"><span class="logo-mark"></span> Threadmind</a>
+    <nav role="navigation">
+      <a href="features.html">Features</a>
+      <a href="models.html" aria-current="page">Models</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="enterprise.html">Enterprise</a>
+      <a href="about.html">About</a>
+      <a href="pricing.html" class="nav-cta">Subscribe</a>
+    </nav>
+  </header>
+
+  <main class="page-wrap" role="main">
+    <div class="page-hero" id="models-hero">
+      <div class="section-inner">
+        <p class="section-label">Model catalog</p>
+        <h1>Three models, one subscription ladder</h1>
+        <p class="lead">We route automatically — but power users can pin a model per project.</p>
+      </div>
+    </div>
+
+    <div class="content-block">
+      <div class="model-cards" style="grid-template-columns: 1fr;">
+        <article class="model-card" id="model-lite-detail">
+          <span class="badge">Free</span>
+          <h2>Threadmind Lite</h2>
+          <p>7B-class distilled model for quick turns. Great for email polish, meeting notes, and lightweight Q&amp;A. Latency target: &lt;800ms.</p>
+          <ul>
+            <li>8K context · 40 msgs/day</li>
+            <li>No extended thinking</li>
+          </ul>
+        </article>
+        <article class="model-card featured" id="model-reason-detail">
+          <span class="badge">Plus · Pro</span>
+          <h2>Threadmind Reason</h2>
+          <p>Mixture-of-experts architecture with visible chain-of-thought on request. Beats Lite on MMLU, HumanEval, and long-document QA.</p>
+          <ul>
+            <li>128K context · unlimited messages</li>
+            <li>Vision + code sandbox</li>
+            <li>Requires subscription — covers ~$18/mo avg. GPU per active user</li>
+          </ul>
+        </article>
+        <article class="model-card" id="model-atlas-detail">
+          <span class="badge">Team · Enterprise</span>
+          <h2>Threadmind Atlas</h2>
+          <p>RAG-native model with connector-aware retrieval. Indexes your Confluence, Drive, and ticket history with permission boundaries.</p>
+          <ul>
+            <li>200K context · dedicated throughput</li>
+            <li>Custom fine-tunes available</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+
+    <section class="content-block" id="models-benchmark">
+      <h2>Why subscription unlocks Reason</h2>
+      <p>Lite runs on shared batch inference. Reason reserves GPU slices per subscriber — without that, queue times spike to 30s+ at peak. Your $20/mo directly maps to reserved H100 seconds.</p>
+      <a href="pricing.html" class="btn btn-primary">Upgrade to Reason</a>
+    </section>
+  </main>
+
+  <footer role="contentinfo">
+    <div class="footer-bottom" style="border: none; text-align: center;">© <span id="year"></span> Threadmind Labs</div>
+  </footer>
+  <script src="assets/js/site.js"></script>
+</body>
+</html>

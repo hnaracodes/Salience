@@ -134,6 +134,8 @@ def score_all_elements(
         scored.append({
             "dom_id": el.get("dom_id", ""),
             "tag": el.get("tag", ""),
+            "role": el.get("role", ""),
+            "text": el.get("text", ""),
             "bbox": [int(b) for b in bbox],
             "attention_density": round(float(density), 6),
         })
@@ -206,9 +208,13 @@ def rollup_section_elements(
                 accum[key] = {
                     "dom_id": dom_id,
                     "tag": row.get("tag", ""),
+                    "role": row.get("role", ""),
+                    "text": row.get("text", ""),
                     "bbox": row.get("bbox", []),
                     "densities": [],
                 }
+            if row.get("text") and not accum[key].get("text"):
+                accum[key]["text"] = row.get("text", "")
             accum[key]["densities"].append(float(row["attention_density"]))
 
     rolled: list[dict[str, Any]] = []
@@ -217,6 +223,8 @@ def rollup_section_elements(
         rolled.append({
             "dom_id": entry["dom_id"],
             "tag": entry["tag"],
+            "role": entry.get("role", ""),
+            "text": entry.get("text", ""),
             "bbox": entry["bbox"],
             "mean_attention_density": round(float(sum(d) / len(d)), 6),
             "n_samples": len(d),

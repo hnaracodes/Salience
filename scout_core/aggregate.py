@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from scout_core.constants import NETWORK_NAME_TO_ID, YEO7_NAMES
+
 
 def parcel_timeseries(
     preds: np.ndarray,
@@ -85,3 +87,44 @@ def network_timeseries(
             raise ValueError(f"Unknown reducer {reducer!r}")
 
     return out, net_ids_sorted
+
+
+def collapse_subnetwork_ts_to_yeo7(
+    net_ts: np.ndarray,
+    subnetwork_ids: list[int],
+    subnetwork_id_to_coarse: dict[int, str],
+    *,
+    reducer: str = "mean",
+) -> tuple[np.ndarray, list[int], list[str]]:
+    """Pool Schaefer subnetwork columns into canonical Yeo-7 network time series."""
+    if net_ts.ndim != 2:
+        raise ValueError(f"net_ts must be 2D, got {net_ts.shape}")
+    if not subnetwork_ids:
+        return np.zeros((net_ts.shape[0], 0), dtype=np.float32), [], []
+
+    sub_to_col = {int(nid): j for j, nid in enumerate(subnetwork_ids)}
+    yeo7_ids = sorted(NETWORK_NAME_TO_ID[name] for name in YEO7_NAMES)
+    yeo7_names = list(YEO7_NAMES)
+    T = net_ts.shape[0]
+    out = np.zeros((T, len(yeo7_ids)), dtype=np.float32)
+
+    for j, yeo_id in enumerate(yeo7_ids):
+        coarse = YEO7_NAMES[yeo_id - 1]
+        cols = [
+            sub_to_col[int(sid)]
+            for sid, cname in subnetwork_id_to_coarse.items()
+            if cname == coarse and int(sid) in sub_to_col
+        ]
+        if not cols:
+            continue
+        blk = net_ts[:, cols]
+        if reducer == "mean":
+            out[:, j] = blk.mean(axis=1)
+        elif reducer == "mean_abs":
+            out[:, j] = np.abs(blk).mean(axis=1)
+        elif reducer == "median":
+            out[:, j] = np.median(blk, axis=1).astype(np.float32)
+        else:
+            raise ValueError(f"Unknown reducer {reducer!r}")
+
+    return out, yeo7_ids, yeo7_names
