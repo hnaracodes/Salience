@@ -1,6 +1,6 @@
 # Website session runbook
 
-End-to-end flow: **scripted Playwright capture** (MP4 + DOM manifest) → **TRIBEv2 preds** → **dual-track** → **sparse ViT heatmaps** → **section_report** → **UX viewer** → **LLM narrative**.
+End-to-end flow: **scripted Playwright capture** (MP4 + DOM manifest) → **TRIBEv2 preds** → **dual-track** → **CPU visual saliency** (optional Modal ViT) → **section_report** → **UX viewer** → **LLM narrative**.
 
 Video remains the stimulus path to TRIBEv2; Playwright provides alignment and DOM credit only.
 
@@ -79,18 +79,24 @@ python scripts/run_dual_track.py --session-id <session_id> --baseline-preds path
 
 Atlas: `configs/vertex_regions.csv` (Schaefer 400 @ fsaverage5, verified CBIG .annot alignment).
 
-## 4. Sparse ViT heatmaps
+## 4. Website saliency / heatmaps
 
-Offline placeholder:
+Default CPU visual saliency (no Modal):
 
 ```bash
-python scripts/extract_section_heatmaps.py --session-id <session_id> --uniform-heatmap --refresh-sections
+python scripts/extract_section_heatmaps.py --session-id <session_id> --saliency --refresh-sections
 ```
 
-Production (Modal DINOv2):
+Optional Modal DINOv2 attention:
 
 ```bash
 python scripts/extract_section_heatmaps.py --session-id <session_id> --modal --refresh-sections
+```
+
+Offline placeholder for tests only:
+
+```bash
+python scripts/extract_section_heatmaps.py --session-id <session_id> --uniform-heatmap --refresh-sections
 ```
 
 ## 5. Analyze + section report + marketing scores
@@ -123,8 +129,7 @@ Set `OPENAI_API_KEY` and `provider: openai` in `configs/llm_narrative.yaml` for 
 python scripts/run_website_session.py --stage all \
   --script configs/walkthrough_scripts/localhost_demo.yaml \
   --norm-id <norm_id> \
-  --baseline-session-id <baseline_id> \
-  --uniform-heatmap
+  --baseline-session-id <baseline_id>
 ```
 
 ## Alignment checklist

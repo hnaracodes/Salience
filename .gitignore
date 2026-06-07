@@ -5,14 +5,28 @@ __pycache__/
 .env
 .env.*
 !.env.example
-# Local demo videos (regenerate or place locally; not versioned)
+
+# Local demo / stimulus videos (regenerate or place locally; never commit)
 *.mp4
+*.webm
+*.mkv
+*.m4a
+
 # Local runtime / DB (regenerate from Modal + analyze_session)
 *.sqlite
+
+# Large neuroimaging / ML artifacts (download or generate locally)
+*.nii.gz
+*.joblib
+
+# Session and baseline outputs (Modal + Playwright)
 scout_data/sessions/
 scout_data/baseline/
-scout_data/neuroEmoCode
-scout_data/neuroemo
+scout_data/**/*.npz
+scout_data/**/*.npy
+scout_data/**/heatmaps/
+scout_data/neuroEmoCode/
+scout_data/neuroemo/
 scout_data/atlases/
 scout_data/*.log
 debug-*.log
@@ -47,7 +61,9 @@ scout_data/eevCode/manifests/pilot_monitor.log
 scout_data/eevCode/manifests/pilot_modal.done
 scout_data/eevCode/manifests/pilot_modal.lock
 scout_data/eevCode/manifests/generate_features.lock
-# Keep tracked: pilot_50.json, trial_1.json, full_split.json
+scout_data/eevCode/manifests/*.log
+scout_data/eevCode/manifests/*.err.log
+# Keep tracked: pilot_50.json, trial_1.json, full_split.json (small ID lists only)
 
 # Editor / OS
 .DS_Store

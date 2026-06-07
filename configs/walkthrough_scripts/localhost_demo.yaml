@@ -13,6 +13,10 @@ duration_sec: 5
 steps:
   - action: wait_ms
     ms: 600
+  - action: hover
+    selector: "#cta-hero"
+  - action: click
+    selector: "#cta-hero"
   - action: scroll_to_y
     y: 400
   - action: wait_ms

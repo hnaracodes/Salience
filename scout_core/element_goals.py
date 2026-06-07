@@ -44,6 +44,100 @@ def classify_role(
     return "component"
 
 
+CTA_TERMS = (
+    "get started",
+    "start",
+    "try",
+    "sign up",
+    "signup",
+    "book",
+    "demo",
+    "buy",
+    "pricing",
+    "contact",
+    "learn more",
+    "subscribe",
+    "download",
+)
+
+
+def _bbox_area_score(bbox: list[int] | tuple[int, int, int, int] | None) -> float:
+    if not bbox or len(bbox) != 4:
+        return 0.0
+    area = max(int(bbox[2]), 0) * max(int(bbox[3]), 0)
+    if area <= 0:
+        return 0.0
+    # A 220x56 CTA should score high without letting giant panels dominate.
+    return min(1.0, area / 12_000.0) ** 0.35
+
+
+def _fold_score(bbox: list[int] | tuple[int, int, int, int] | None, *, viewport_h: int = 1080) -> float:
+    if not bbox or len(bbox) != 4:
+        return 0.5
+    y = max(float(bbox[1]), 0.0)
+    center_y = y + max(float(bbox[3]), 0.0) / 2.0
+    return max(0.0, min(1.0, 1.0 - (center_y / max(float(viewport_h) * 1.6, 1.0))))
+
+
+def _style_contrast_score(element: dict[str, Any]) -> float:
+    style = element.get("style") or {}
+    if not isinstance(style, dict):
+        return 0.5
+    fg = str(style.get("color") or "")
+    bg = str(style.get("background_color") or style.get("backgroundColor") or "")
+    if fg and bg and fg != bg:
+        return 0.72
+    return 0.5
+
+
+def clickability_score(
+    element: dict[str, Any],
+    *,
+    viewport_h: int = 1080,
+) -> float:
+    """Heuristic 0-100 score for how likely an element is intended to be clicked.
+
+    This is an affordance score, not observed behavior. Real click data can
+    replace or blend with it later via the Clarity CSV adapter.
+    """
+    dom_id = str(element.get("dom_id") or "")
+    tag = str(element.get("tag") or "")
+    role = str(element.get("role") or "")
+    text = str(element.get("text") or "")
+    display_role = classify_role(dom_id, tag, role, text)
+    tag_u = tag.upper()
+    role_l = role.lower()
+    text_l = text.lower()
+    dom_l = dom_id.lower()
+
+    role_score = {
+        "CTA": 1.0,
+        "link": 0.74,
+        "form": 0.70,
+        "nav": 0.50,
+        "image": 0.24,
+        "headline": 0.18,
+        "hero": 0.16,
+        "body": 0.08,
+        "component": 0.18,
+    }.get(display_role, 0.18)
+    if tag_u in ("BUTTON", "A", "INPUT", "TEXTAREA", "SELECT") or role_l in ("button", "link", "textbox"):
+        role_score = max(role_score, 0.78)
+    if any(term in text_l or term in dom_l for term in CTA_TERMS):
+        role_score = max(role_score, 0.86)
+
+    size_score = _bbox_area_score(element.get("bbox"))
+    fold = _fold_score(element.get("bbox"), viewport_h=viewport_h)
+    contrast = _style_contrast_score(element)
+    score = 100.0 * (
+        0.48 * role_score
+        + 0.20 * size_score
+        + 0.18 * fold
+        + 0.14 * contrast
+    )
+    return round(max(0.0, min(100.0, score)), 2)
+
+
 def resolve_site_goal(
     *,
     override: str | None = None,
@@ -92,6 +186,10 @@ def collect_scored_elements(bundle: dict[str, Any]) -> list[dict[str, Any]]:
                     el.get("text", ""),
                 ),
                 "attention_density": density,
+                "attention_score": el.get("attention_score"),
+                "clickability": el.get("clickability"),
+                "combined_score": el.get("combined_score"),
+                "engagement_attributed": el.get("engagement_attributed"),
                 "section_flags": flags,
                 "dominant_emotion": emotion.get("dominant"),
                 "emotion_mean_z": emotion.get("mean_z"),

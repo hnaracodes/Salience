@@ -38,9 +38,10 @@ def test_filter_elements_to_section():
 
 def test_rollup_mean_density():
     samples = [
-        (0, [{"dom_id": "#a", "tag": "BTN", "bbox": [0, 0, 10, 10], "attention_density": 0.2}]),
-        (1, [{"dom_id": "#a", "tag": "BTN", "bbox": [0, 0, 10, 10], "attention_density": 0.4}]),
+        (0, [{"dom_id": "#a", "tag": "BTN", "bbox": [0, 0, 10, 10], "attention_density": 0.2, "heatmap_source": "visual_saliency"}]),
+        (1, [{"dom_id": "#a", "tag": "BTN", "bbox": [0, 0, 10, 10], "attention_density": 0.4, "heatmap_source": "visual_saliency"}]),
     ]
     top = rollup_section_elements(samples, top_k=5)
     assert top[0]["dom_id"] == "#a"
     assert top[0]["mean_attention_density"] == pytest.approx(0.3, abs=0.01)
+    assert top[0]["heatmap_source"] == "visual_saliency"

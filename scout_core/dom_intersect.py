@@ -212,10 +212,13 @@ def rollup_section_elements(
                     "text": row.get("text", ""),
                     "bbox": row.get("bbox", []),
                     "densities": [],
+                    "sources": [],
                 }
             if row.get("text") and not accum[key].get("text"):
                 accum[key]["text"] = row.get("text", "")
             accum[key]["densities"].append(float(row["attention_density"]))
+            if row.get("heatmap_source"):
+                accum[key]["sources"].append(str(row["heatmap_source"]))
 
     rolled: list[dict[str, Any]] = []
     for entry in accum.values():
@@ -228,6 +231,10 @@ def rollup_section_elements(
             "bbox": entry["bbox"],
             "mean_attention_density": round(float(sum(d) / len(d)), 6),
             "n_samples": len(d),
+            "heatmap_source": (
+                max(set(entry.get("sources") or []), key=(entry.get("sources") or [""]).count)
+                if entry.get("sources") else None
+            ),
         })
     rolled.sort(key=lambda x: x["mean_attention_density"], reverse=True)
     return rolled[:top_k]
