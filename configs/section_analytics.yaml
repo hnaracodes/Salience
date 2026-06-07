@@ -12,3 +12,8 @@ high_arousal_z: 1.0
 positive_valence_z: 1.0
 # Top DOM elements retained per section after heatmap rollup.
 top_elements_per_section: 5
+
+# Combine spatial saliency with temporal TRIBE signals for element-level UX attribution.
+attribution:
+  attention_weight: 0.68
+  click_weight: 0.32

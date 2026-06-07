@@ -19,8 +19,8 @@ Log "E2E start session=$SessionId"
 Log "Step 1/4: dual_track (engagement + activation + emotion)"
 & $Py scripts/run_dual_track.py --session-id $SessionId 2>&1 | Tee-Object -FilePath $Log -Append
 
-Log "Step 2/4: uniform heatmaps + section refresh"
-& $Py scripts/extract_section_heatmaps.py --session-id $SessionId --uniform-heatmap --refresh-sections 2>&1 | Tee-Object -FilePath $Log -Append
+Log "Step 2/4: visual-saliency heatmaps + section refresh"
+& $Py scripts/extract_section_heatmaps.py --session-id $SessionId --saliency --refresh-sections 2>&1 | Tee-Object -FilePath $Log -Append
 
 Log "Step 3/4: analyze + website sections + marketing scores + grounding"
 & $Py scripts/analyze_session.py --session-id $SessionId --norm-id synthetic_bootstrap_v1 --website --ground --with-heatmaps 2>&1 | Tee-Object -FilePath $Log -Append

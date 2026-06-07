@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import yaml
 
+from scout_core.attention_attribution import enrich_sections_with_attribution
 from scout_core.dom_intersect import (
     filter_elements_to_section,
     find_nearest_snapshot,
@@ -120,6 +121,7 @@ def run_section_analytics(
     max_total = int(cfg.get("max_heatmaps_per_session", 20))
     min_area = int(cfg.get("min_element_area", 400))
     top_k = int(cfg.get("top_elements_per_section", 5))
+    attribution_cfg = cfg.get("attribution") or {}
 
     manifest: dict[str, Any] = {}
     manifest_path = session_dir / "session_manifest.json"
@@ -147,6 +149,15 @@ def run_section_analytics(
             min_element_area=min_area,
             top_k=top_k,
         )
+
+    capture = manifest.get("capture") or {}
+    enrich_sections_with_attribution(
+        report,
+        bundle,
+        attention_weight=float(attribution_cfg.get("attention_weight", 0.68)),
+        click_weight=float(attribution_cfg.get("click_weight", 0.32)),
+        viewport_h=int(capture.get("height", 1080)),
+    )
 
     apply_recommendations(report)
     return report

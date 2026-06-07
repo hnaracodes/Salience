@@ -6,6 +6,7 @@ Decodes video frames at sampled ``t_idx`` values and writes
 
 Usage:
     python scripts/extract_section_heatmaps.py --session-id <id>
+    python scripts/extract_section_heatmaps.py --session-id <id> --saliency
     python scripts/extract_section_heatmaps.py --session-id <id> --uniform-heatmap
     python scripts/extract_section_heatmaps.py --session-id <id> --modal
     python scripts/extract_section_heatmaps.py --session-id <id> --modal --force
@@ -46,9 +47,11 @@ from scout_core.heatmap_extract import (
     read_heatmaps_manifest,
     write_heatmaps_manifest,
 )
+from scout_core.dom_intersect import find_nearest_snapshot
 from scout_core.section_pipeline import load_section_config, run_section_analytics
 from scout_core.section_sampling import attach_sample_timesteps
 from scout_core.session_align import find_walkthrough_video
+from scout_core.visual_saliency import build_saliency_heatmap
 
 _SECTION_CFG = PROJECT_ROOT / "configs" / "section_analytics.yaml"
 
@@ -139,12 +142,20 @@ def _refresh_section_report(session_dir: Path) -> None:
     print(f"Refreshed section_report ({len(report)} sections) in {bundle_path.name}")
 
 
+def _load_manifest(session_dir: Path) -> dict[str, Any]:
+    manifest_path = session_dir / "session_manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--timesteps", default=None, help="Comma-separated t_idx list (override sampling)")
     parser.add_argument("--fps", type=float, default=None, help="Override FPS (default from manifest tr_mapping)")
     parser.add_argument("--uniform-heatmap", action="store_true", help="Write placeholder heatmaps (no GPU)")
+    parser.add_argument("--saliency", action="store_true", help="Write deterministic DOM/visual saliency heatmaps (no GPU)")
     parser.add_argument("--modal", action="store_true", help="Run Modal extract_frame_attention (default if not uniform)")
     parser.add_argument("--force", action="store_true", help="Overwrite all existing heatmaps regardless of source")
     parser.add_argument("--dry-run", action="store_true", help="Extract frames only; do not write heatmaps")
@@ -178,7 +189,17 @@ def main() -> None:
         w = args.capture_width
     fps = args.fps if args.fps is not None else fps_from_manifest(session_dir)
 
-    use_modal = args.modal and not args.uniform_heatmap and not args.dry_run
+    if args.uniform_heatmap and args.saliency:
+        raise SystemExit("Choose only one of --uniform-heatmap or --saliency.")
+    if args.uniform_heatmap and args.modal:
+        raise SystemExit("Choose only one of --uniform-heatmap or --modal.")
+    if args.saliency and args.modal:
+        raise SystemExit("Choose only one of --saliency or --modal.")
+
+    # Default to CPU saliency so website grounding has a meaningful spatial map
+    # without requiring Modal. --uniform-heatmap remains for explicit fixtures.
+    use_saliency = args.saliency or (not args.modal and not args.uniform_heatmap and not args.dry_run)
+    use_modal = args.modal and not args.uniform_heatmap and not args.saliency and not args.dry_run
 
     heatmaps_dir = session_dir / "heatmaps"
     heatmaps_dir.mkdir(parents=True, exist_ok=True)
@@ -189,16 +210,18 @@ def main() -> None:
 
     # Load existing heatmap manifest for provenance-aware overwrite decisions.
     existing_hm = read_heatmaps_manifest(heatmaps_dir)
+    manifest = _load_manifest(session_dir)
 
     hm_entries: list[dict] = []
     n_frames_ok = 0
     n_frames_fail = 0
     n_modal_written = 0
+    n_saliency_written = 0
     n_placeholder_written = 0
     n_reused = 0
 
     def _process_timestep(t: int, *, modal_inference: Any | None = None) -> None:
-        nonlocal n_frames_ok, n_frames_fail, n_modal_written, n_placeholder_written, n_reused
+        nonlocal n_frames_ok, n_frames_fail, n_modal_written, n_saliency_written, n_placeholder_written, n_reused
 
         out_npy = heatmaps_dir / f"t_{t}.npy"
         jpg = frames_dir / f"t_{t}.jpg"
@@ -220,7 +243,12 @@ def main() -> None:
         existing_entry = existing_hm.get(t, {})
         is_placeholder = bool(existing_entry.get("placeholder", False)) or \
                          existing_entry.get("source") == "uniform_placeholder"
-        should_overwrite = args.force or (use_modal and is_placeholder)
+        is_orphan_existing = out_npy.is_file() and not existing_entry
+        should_overwrite = (
+            args.force
+            or ((use_modal or use_saliency) and is_placeholder)
+            or (args.saliency and is_orphan_existing)
+        )
 
         if out_npy.is_file() and not should_overwrite:
             src_label = existing_entry.get("source") or ("placeholder" if is_placeholder else "real")
@@ -247,6 +275,29 @@ def main() -> None:
 
         if not jpg.is_file():
             print(f"  t={t}: no frame — add video or use --uniform-heatmap")
+            return
+
+        if use_saliency:
+            snapshot = find_nearest_snapshot(manifest, int(t))
+            if snapshot is None:
+                print(f"  t={t}: no DOM snapshot — cannot build saliency heatmap")
+                return
+            try:
+                heatmap, scored = build_saliency_heatmap(jpg, snapshot, capture_h=h, capture_w=w)
+                np.save(out_npy, heatmap)
+                print(f"  t={t}: saliency heatmap → {out_npy.name} ({len(scored)} elements)")
+                hm_entries.append({
+                    "t_idx": t,
+                    "frame_path": str(jpg.relative_to(session_dir)),
+                    "heatmap_path": out_npy.name,
+                    "source": "visual_saliency",
+                    "placeholder": False,
+                    "sha256": file_sha256(out_npy),
+                    "n_elements_scored": len(scored),
+                })
+                n_saliency_written += 1
+            except Exception as exc:
+                print(f"  t={t}: saliency failed ({exc})")
             return
 
         if use_modal:
@@ -285,14 +336,14 @@ def main() -> None:
     if hm_entries and not args.dry_run:
         write_heatmaps_manifest(heatmaps_dir, hm_entries, merge=True)
 
-    if args.refresh_sections or (use_modal and n_modal_written > 0):
+    if args.refresh_sections or (use_modal and n_modal_written > 0) or (use_saliency and n_saliency_written > 0):
         _refresh_section_report(session_dir)
 
     # Summary
     print(f"\nSampled {len(t_list)} timestep(s). Heatmaps dir: {heatmaps_dir}")
     if not args.dry_run:
         print(
-            f"  modal={n_modal_written}  placeholder_written={n_placeholder_written}"
+            f"  modal={n_modal_written}  saliency={n_saliency_written}  placeholder_written={n_placeholder_written}"
             f"  reused={n_reused}  frames_ok={n_frames_ok}  frames_fail={n_frames_fail}"
         )
     if use_modal and n_modal_written == 0 and not args.dry_run:

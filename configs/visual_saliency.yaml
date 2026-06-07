@@ -1,0 +1,33 @@
+# Deterministic website visual-saliency heuristic.
+# These scores are not eye-tracking or neural measurements. They provide an
+# always-on spatial prior for grounding TRIBE time-series signals to DOM nodes.
+
+weights:
+  area: 0.24
+  position: 0.22
+  contrast: 0.22
+  color: 0.14
+  element_type: 0.12
+  isolation: 0.06
+
+type_weights:
+  BUTTON: 1.0
+  A: 0.86
+  IMG: 0.84
+  VIDEO: 0.84
+  H1: 0.92
+  H2: 0.80
+  H3: 0.68
+  INPUT: 0.74
+  TEXTAREA: 0.70
+  SELECT: 0.70
+  FORM: 0.62
+  NAV: 0.42
+  P: 0.36
+  LI: 0.34
+  SECTION: 0.28
+  MAIN: 0.22
+
+min_element_area: 64
+edge_margin_px: 24
+opacity: 0.86

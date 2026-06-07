@@ -1,0 +1,29 @@
+---
+description: Use the Ledger Protocol to build context from signed session folders and log substantial future work
+alwaysApply: true
+---
+
+# Ledger Protocol
+
+Use `sessions/` as the durable project memory for substantial work.
+
+Before planning or implementing non-trivial changes:
+
+1. Read `sessions/INDEX.md`.
+2. Read the most relevant `sessions/<SESSION_ID>/session.md` files.
+3. Read `ledger.md` and category files for related sessions when they may affect the task.
+4. Search `sessions/**/issues/*.md` and `sessions/**/bugs/*.md` for `status: open` or `status: in_progress`.
+
+Create a new session folder only for substantial work: code edits, bug fixes, feature implementation, durable pipeline findings, or architecture decisions. Do not create one for trivial Q&A unless the user asks.
+
+For new logged work:
+
+- Create `sessions/CS-YYYYMMDD-<SHORT-SLUG>/` from `sessions/_TEMPLATE/`.
+- Keep `session.md` frontmatter queryable.
+- Keep `ledger.md` updated with exact files touched, why they changed, effects, commands, and validation.
+- Log individual features, bugs, issues, and sprints as markdown files under their category folders.
+- On completion, set the session status, update `sessions/INDEX.md`, and sign with `signature: <model>@<session-id>`.
+
+To "talk to" prior sessions, read their `session.md`, `ledger.md`, open issues/bugs, and any migrated `report.md`, then cite the session IDs that informed the work.
+
+Full contract: `sessions/PROTOCOL.md`.

@@ -22,9 +22,10 @@ EXTRACT_DOM_JS = """
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const nodes = Array.from(document.querySelectorAll(
-    'header, nav, main, footer, section, article, aside, button, a, h1, h2, h3, [role]'
+    'header, nav, main, footer, section, article, aside, button, a, h1, h2, h3, h4, p, li, img, video, form, input, textarea, select, [role], [data-cta], [data-section]'
   ));
   const elements = [];
+  const visibility = window.__tribeVisibility || {};
   for (const el of nodes) {
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;
@@ -33,10 +34,17 @@ EXTRACT_DOM_JS = """
       ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
     const dom_id = id || (el.tagName.toLowerCase() + cls) || el.tagName.toLowerCase();
     const rawText = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
+    const style = getComputedStyle(el);
+    const vis = visibility[dom_id] || {};
+    const visibleW = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+    const visibleH = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+    const viewportArea = Math.max(1, r.width * r.height);
     elements.push({
       dom_id: dom_id.slice(0, 120),
       tag: el.tagName,
       role: el.getAttribute('role') || '',
+      aria_label: el.getAttribute('aria-label') || '',
+      href: el.getAttribute('href') || '',
       text: rawText.slice(0, 200),
       bbox: [
         Math.round(r.left + scrollX),
@@ -44,11 +52,76 @@ EXTRACT_DOM_JS = """
         Math.round(r.width),
         Math.round(r.height),
       ],
-      z_index: parseInt(getComputedStyle(el).zIndex, 10) || 0,
+      style: {
+        color: style.color,
+        background_color: style.backgroundColor,
+        font_size: style.fontSize,
+        font_weight: style.fontWeight,
+        opacity: style.opacity,
+        cursor: style.cursor,
+      },
+      is_image: el.tagName === 'IMG' || el.tagName === 'VIDEO' || Boolean(style.backgroundImage && style.backgroundImage !== 'none'),
+      visibility_ratio: Math.max(0, Math.min(1, (visibleW * visibleH) / viewportArea)),
+      visibility_ms: Math.round(vis.ms || 0),
+      z_index: parseInt(style.zIndex, 10) || 0,
       is_intersecting_viewport: r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw,
     });
   }
   return { scrollY, scrollX, viewport_width: vw, viewport_height: vh, elements };
+}
+"""
+
+
+VISIBILITY_TRACKER_JS = """
+() => {
+  window.__tribeVisibility = window.__tribeVisibility || {};
+  const domId = (el) => {
+    const id = el.id ? '#' + el.id : '';
+    const cls = (el.className && typeof el.className === 'string')
+      ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+    return (id || (el.tagName.toLowerCase() + cls) || el.tagName.toLowerCase()).slice(0, 120);
+  };
+  const tick = () => performance.now();
+  if (!window.__tribeVisibilityObserver) {
+    window.__tribeVisibilityObserver = new IntersectionObserver((entries) => {
+      const now = tick();
+      for (const entry of entries) {
+        const key = domId(entry.target);
+        const row = window.__tribeVisibility[key] || { ms: 0, visible: false, last: now, ratio: 0 };
+        if (row.visible) row.ms += Math.max(0, now - row.last) * Math.max(row.ratio, 0);
+        row.visible = entry.isIntersecting;
+        row.last = now;
+        row.ratio = entry.intersectionRatio || 0;
+        window.__tribeVisibility[key] = row;
+      }
+    }, { threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] });
+  }
+  document.querySelectorAll('header, nav, main, footer, section, article, aside, button, a, h1, h2, h3, h4, p, li, img, video, form, input, textarea, select, [role], [data-cta], [data-section]').forEach(el => {
+    if (!el.__tribeObserved) {
+      el.__tribeObserved = true;
+      window.__tribeVisibilityObserver.observe(el);
+    }
+  });
+  return true;
+}
+"""
+
+
+RESOLVE_ELEMENT_JS = """
+(selector) => {
+  const el = document.querySelector(selector);
+  if (!el) return null;
+  const id = el.id ? '#' + el.id : '';
+  const cls = (el.className && typeof el.className === 'string')
+    ? '.' + el.className.trim().split(/\\s+/).slice(0, 2).join('.') : '';
+  const r = el.getBoundingClientRect();
+  return {
+    dom_id: (id || (el.tagName.toLowerCase() + cls) || el.tagName.toLowerCase()).slice(0, 120),
+    tag: el.tagName,
+    role: el.getAttribute('role') || '',
+    text: (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+    bbox: [Math.round(r.left + window.scrollX), Math.round(r.top + window.scrollY), Math.round(r.width), Math.round(r.height)],
+  };
 }
 """
 
@@ -77,6 +150,7 @@ def build_manifest_v2(
     video_path: str = "walkthrough.mp4",
     duration_sec: float | None = None,
     walkthrough_script: str | None = "walkthrough_script.yaml",
+    interaction_events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build session_manifest.json schema v2 payload."""
     tr_duration = float(interval_sec)
@@ -100,6 +174,7 @@ def build_manifest_v2(
             "tr_duration_sec": tr_duration,
         },
         "walkthrough_script": walkthrough_script,
+        "interaction_events": interaction_events or [],
         "dom_snapshots": dom_snapshots,
     }
 
@@ -160,6 +235,7 @@ async def _capture_snapshot(
     event_time: float,
 ) -> dict[str, Any]:
     """Screenshot + DOM extract for one TR (aligned frame and manifest row)."""
+    await page.evaluate(VISIBILITY_TRACKER_JS)
     frames_dir = session_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     frame_path = frames_dir / f"t_{t_idx}.jpg"
@@ -195,6 +271,8 @@ async def _record_linear_scroll_async(
     initial_settle_ms = int(script.get("initial_settle_ms", 1500))
 
     snapshots: list[dict[str, Any]] = []
+    interaction_events: list[dict[str, Any]] = []
+    interaction_events: list[dict[str, Any]] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -246,7 +324,13 @@ async def _record_linear_scroll_async(
     return manifest
 
 
-async def _run_step(page: Any, step: dict[str, Any]) -> None:
+async def _resolve_selector(page: Any, selector: str | None) -> dict[str, Any] | None:
+    if not selector:
+        return None
+    return await page.evaluate(RESOLVE_ELEMENT_JS, selector)
+
+
+async def _run_step(page: Any, step: dict[str, Any]) -> dict[str, Any] | None:
     """Execute a single walkthrough step.
 
     Note: ``wait_ms`` steps are NOT called through this function when using
@@ -257,13 +341,20 @@ async def _run_step(page: Any, step: dict[str, Any]) -> None:
     if action == "goto":
         url = step["url"]
         await page.goto(url, wait_until=step.get("wait_until", "networkidle"), timeout=120_000)
+        await page.evaluate(VISIBILITY_TRACKER_JS)
     elif action == "wait_ms":
         await asyncio.sleep(step["ms"] / 1000.0)
     elif action == "scroll_to_y":
         y = int(step["y"])
         await page.evaluate(f"window.scrollTo(0, {y})")
     elif action == "click":
+        target = await _resolve_selector(page, step.get("selector"))
         await page.click(step["selector"], timeout=step.get("timeout_ms", 30_000))
+        return {"action": "click", "selector": step.get("selector"), "target": target}
+    elif action == "hover":
+        target = await _resolve_selector(page, step.get("selector"))
+        await page.hover(step["selector"], timeout=step.get("timeout_ms", 30_000))
+        return {"action": "hover", "selector": step.get("selector"), "target": target}
     elif action == "wait_for_selector":
         await page.wait_for_selector(
             step["selector"],
@@ -271,6 +362,7 @@ async def _run_step(page: Any, step: dict[str, Any]) -> None:
         )
     else:
         raise ValueError(f"Unknown walkthrough step action: {action!r}")
+    return None
 
 
 async def _finalize_video(session_dir: Path, video_dir: Path) -> str:
@@ -392,7 +484,13 @@ async def record_website_session_async(
                 step = data
                 action = step.get("action") or step.get("type")
                 if action != "wait_ms":
-                    await _run_step(page, step)
+                    marker = await _run_step(page, step)
+                    if marker is not None:
+                        marker.update({
+                            "pts_sec": round(float(event_time), 3),
+                            "t_idx": int(round(float(event_time) / max(interval_sec, 1e-6))),
+                        })
+                        interaction_events.append(marker)
 
         await context.close()
         await browser.close()
@@ -408,4 +506,5 @@ async def record_website_session_async(
         interval_sec=interval_sec,
         duration_sec=actual_duration,
         video_path=video_rel,
+        interaction_events=interaction_events,
     )

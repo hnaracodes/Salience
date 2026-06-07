@@ -189,6 +189,25 @@ def _element_scores_by_t(
             int(snap.get("scrollY", 0)),
             int(snap.get("scrollX", 0)),
         )
+        rollup_by_id = {
+            el.get("dom_id"): el
+            for el in (sec.get("top_elements") or [])
+            if el.get("dom_id")
+        }
+        for row in scored:
+            rollup = rollup_by_id.get(row.get("dom_id"))
+            if not rollup:
+                continue
+            for key in (
+                "attention_score",
+                "clickability",
+                "combined_score",
+                "engagement_attributed",
+                "activation_attributed",
+                "attribution_flags",
+            ):
+                if key in rollup:
+                    row[key] = rollup[key]
         by_t[str(t)] = scored[:top_k]
     return by_t
 
@@ -328,6 +347,7 @@ def main() -> None:
             "activation_score": act_row.get("score"),
             "activation_rank": act_row.get("rank"),
             "activation_label": act_row.get("label"),
+            "element_attribution": sec.get("element_attribution"),
         })
         for t in sec.get("sample_t_indices") or []:
             sample_times.append(int(t))
@@ -406,6 +426,7 @@ def main() -> None:
         "activation_track": bundle.get("activation_track"),
         "marketing_narrative": marketing_narrative,
         "element_insight_index": element_insight_index,
+        "interaction_events": manifest.get("interaction_events") or [],
     }
     (out_dir / "viewer_bundle.json").write_text(
         json.dumps(viewer_bundle, indent=2), encoding="utf-8",

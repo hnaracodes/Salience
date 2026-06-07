@@ -143,8 +143,6 @@ class TestSectionRecommendations:
 
 class TestSectionHeatmapEnrich:
     def test_rollup_top_elements(self, tmp_path):
-        from scout_core.dom_intersect import score_all_elements
-
         manifest = _manifest_two_sections()
         heatmaps_dir = tmp_path / "heatmaps"
         heatmaps_dir.mkdir()
@@ -157,3 +155,20 @@ class TestSectionHeatmapEnrich:
 
         enrich_section_report_with_attention(tmp_path, manifest, report, min_element_area=1, top_k=3)
         assert report[0]["top_elements"]
+
+    def test_run_section_analytics_adds_element_attribution(self, tmp_path):
+        session_dir = tmp_path
+        manifest = _manifest_two_sections()
+        (session_dir / "session_manifest.json").write_text(
+            __import__("json").dumps(manifest),
+            encoding="utf-8",
+        )
+        heatmaps_dir = session_dir / "heatmaps"
+        heatmaps_dir.mkdir()
+        h = np.ones((800, 1000), dtype=np.float32)
+        h[80:170, 80:220] = 4.0
+        np.save(heatmaps_dir / "t_0.npy", h)
+        report = run_section_analytics(session_dir, _bundle_t6(), attach_heatmaps=True)
+        with_elements = [sec for sec in report if sec.get("top_elements")]
+        assert with_elements
+        assert "combined_score" in with_elements[0]["top_elements"][0]
