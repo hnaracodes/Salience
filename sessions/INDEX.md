@@ -12,6 +12,11 @@ This is the unified registry for Ledger Protocol sessions. Future agents should 
 | `CS-20260602-EEV-PIPELINE-PILOT` | 2026-06-02 | completed | eev | `historical-cursor-agent@CS-20260602-EEV-PIPELINE-PILOT` | [sessions/CS-20260602-EEV-PIPELINE-PILOT](./CS-20260602-EEV-PIPELINE-PILOT/session.md) | EEV research track, FeatureContract v1, Multi-Output SVR plan, Modal pilot failures |
 | `CS-20260607-LEDGER-PROTOCOL` | 2026-06-07 | completed | infra | `gpt-5.5@CS-20260607-LEDGER-PROTOCOL` | [sessions/CS-20260607-LEDGER-PROTOCOL](./CS-20260607-LEDGER-PROTOCOL/session.md) | Ledger Protocol bring-up |
 | `CS-20260607-USABLE-UX-INSIGHTS` | 2026-06-07 | completed | website | `gpt-5.5@CS-20260607-USABLE-UX-INSIGHTS` | [sessions/CS-20260607-USABLE-UX-INSIGHTS](./CS-20260607-USABLE-UX-INSIGHTS/session.md) | CPU saliency, heatmap mode, clickability, brain-saliency attribution, capture/viewer upgrades |
+| `CS-20260610-USABLE-UX-FOLLOWUPS` | 2026-06-10 | completed | website | `composer-2.5@CS-20260610-USABLE-UX-FOLLOWUPS` | [sessions/CS-20260610-USABLE-UX-FOLLOWUPS](./CS-20260610-USABLE-UX-FOLLOWUPS/session.md) | Interaction-event tests, per-TR attribution, Clarity CSV wiring |
+| `CS-20260610-PLAYWRIGHT-EXPLORATION` | 2026-06-10 | in_progress | website | `composer-2.5@CS-20260610-PLAYWRIGHT-EXPLORATION` | [sessions/CS-20260610-PLAYWRIGHT-EXPLORATION](./CS-20260610-PLAYWRIGHT-EXPLORATION/session.md) | Explore scroll mode, bounded autonomous site scouring |
+| `CS-20260611-PRODUCT-CLAIMS` | 2026-06-11 | completed | website | `composer-2.5@CS-20260611-PRODUCT-CLAIMS` | [sessions/CS-20260611-PRODUCT-CLAIMS](./CS-20260611-PRODUCT-CLAIMS/session.md) | Calibrated attention, cross-session norms, explore mode, conversion model |
+| `CS-20260611-TEXT-ENGAGEMENT-SCORING` | 2026-06-11 | in_progress | website | `composer-2.5@CS-20260611-TEXT-ENGAGEMENT-SCORING` | [sessions/CS-20260611-TEXT-ENGAGEMENT-SCORING](./CS-20260611-TEXT-ENGAGEMENT-SCORING/session.md) | Text/copy engagement scoring gap; fuse copy signals with neural ratings |
+| `CS-20260612-PUSH-HARDENING` | 2026-06-12 | completed | website | `composer-2.5@CS-20260612-PUSH-HARDENING` | [sessions/CS-20260612-PUSH-HARDENING](./CS-20260612-PUSH-HARDENING/session.md) | Pre-push audit; viewer XSS hardening; marketing provenance fix |
 
 ## Archived NeuroEmo Sessions
 

@@ -1,0 +1,23 @@
+# Bounded autonomous exploration on Threadmind fixture.
+# Serve: python -m http.server 8780 --directory chatbot_product_site
+
+name: explore_threadmind
+initial_url: "http://127.0.0.1:8780/index.html"
+viewport:
+  width: 1280
+  height: 720
+
+scroll_mode: explore
+interval_sec: 1.0
+
+site_goal: |
+  Threadmind is an AI chatbot product site. Exploration should surface hero value prop,
+  pricing, how-it-works, and primary subscribe CTAs.
+
+explore:
+  max_tr: 56
+  max_clicks: 20
+  max_pages: 8
+  guidance: heuristic
+  scroll_to_bottom_before_clicks: true
+  prioritize_unvisited_nav: true

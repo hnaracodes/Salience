@@ -9,7 +9,13 @@ from typing import Any
 import numpy as np
 import yaml
 
-from scout_core.attention_attribution import enrich_sections_with_attribution
+from scout_core.attention_attribution import (
+    clarity_host_warning,
+    enrich_sections_with_attribution,
+    enrich_sections_with_clarity,
+    load_clarity_rows,
+    resolve_clarity_csv,
+)
 from scout_core.dom_intersect import (
     filter_elements_to_section,
     find_nearest_snapshot,
@@ -111,6 +117,8 @@ def run_section_analytics(
     site_sections_path: Path | None = None,
     section_cfg_path: Path | None = None,
     attach_heatmaps: bool = True,
+    clarity_csv: Path | None = None,
+    pipeline_extras: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build full ``section_report`` with optional heatmap enrichment and recommendations."""
     cfg = load_section_config(section_cfg_path)
@@ -121,7 +129,15 @@ def run_section_analytics(
     max_total = int(cfg.get("max_heatmaps_per_session", 20))
     min_area = int(cfg.get("min_element_area", 400))
     top_k = int(cfg.get("top_elements_per_section", 5))
-    attribution_cfg = cfg.get("attribution") or {}
+    attribution_cfg = dict(cfg.get("attribution") or {})
+    calibrated_path = PROJECT_ROOT / "configs" / "attribution_calibrated.yaml"
+    if calibrated_path.is_file():
+        with calibrated_path.open(encoding="utf-8") as f:
+            calibrated = yaml.safe_load(f) or {}
+        for key in ("attention_weight", "click_weight", "engagement_activation_blend"):
+            if key in calibrated:
+                attribution_cfg[key] = calibrated[key]
+    clarity_cfg = cfg.get("clarity") or {}
 
     manifest: dict[str, Any] = {}
     manifest_path = session_dir / "session_manifest.json"
@@ -157,7 +173,38 @@ def run_section_analytics(
         attention_weight=float(attribution_cfg.get("attention_weight", 0.68)),
         click_weight=float(attribution_cfg.get("click_weight", 0.32)),
         viewport_h=int(capture.get("height", 1080)),
+        mode=str(attribution_cfg.get("mode", "per_tr_sum")),
+        session_dir=session_dir,
+        manifest=manifest,
+        min_element_area=min_area,
+        engagement_blend=float(attribution_cfg.get("engagement_activation_blend", 0.72)),
+        max_tr_per_section=int(attribution_cfg.get("max_tr_per_section", 30)),
+        top_k=top_k,
     )
+
+    clarity_path = resolve_clarity_csv(session_dir, clarity_csv)
+    if clarity_csv is not None and clarity_path is None:
+        import sys
+
+        print(
+            f"WARNING: --clarity-csv not found: {clarity_csv}",
+            file=sys.stderr,
+        )
+    if clarity_path is not None:
+        clarity_rows = load_clarity_rows(clarity_path)
+        clarity_meta = enrich_sections_with_clarity(
+            report,
+            clarity_rows,
+            blend_weight=float(clarity_cfg.get("blend_weight", 0.5)),
+            attention_weight=float(attribution_cfg.get("attention_weight", 0.68)),
+            click_weight=float(attribution_cfg.get("click_weight", 0.32)),
+        )
+        clarity_meta["path"] = str(clarity_path)
+        warn = clarity_host_warning(manifest, clarity_rows)
+        if warn:
+            clarity_meta["host_warning"] = warn
+        if pipeline_extras is not None:
+            pipeline_extras["clarity_attribution"] = clarity_meta
 
     apply_recommendations(report)
     return report

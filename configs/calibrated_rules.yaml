@@ -1,5 +1,5 @@
 schema_version: 1
-norm_ref: default_naturalistic_v1
+norm_ref: naturalistic_v1
 signals:
   primary: network_z
   secondary: network_quantile_excess

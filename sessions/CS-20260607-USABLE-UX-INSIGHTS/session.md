@@ -6,7 +6,8 @@ model: gpt-5.5
 signature: gpt-5.5@CS-20260607-USABLE-UX-INSIGHTS
 status: completed
 track: website
-related: []
+related:
+  - CS-20260610-USABLE-UX-FOLLOWUPS
 files_touched:
   - coding-sessions/2026-06-07-usable-ux-insights-upgrade.md
 ---

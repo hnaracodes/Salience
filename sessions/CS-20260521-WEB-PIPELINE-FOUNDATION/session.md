@@ -6,7 +6,8 @@ model: historical-cursor-agent
 signature: historical-cursor-agent@CS-20260521-WEB-PIPELINE-FOUNDATION
 status: completed
 track: website
-related: []
+related:
+  - CS-20260610-PLAYWRIGHT-EXPLORATION
 files_touched:
   - coding-sessions/2026-05-21-feature-isolation-playwright-website-pipeline.md
 ---

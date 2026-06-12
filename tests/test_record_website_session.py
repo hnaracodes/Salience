@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -14,9 +15,11 @@ from scout_core.session_align import (
     validate_preds_manifest_alignment,
 )
 from scout_core.walkthrough import (
+    _run_step,
     build_manifest_v2,
     build_step_schedule,
     expected_tr_count,
+    interaction_t_idx,
     load_walkthrough_script,
     plan_linear_scroll_y_targets,
 )
@@ -213,3 +216,70 @@ def test_is_timestep_in_manifest():
     assert is_timestep_in_manifest(5, m) is False
     assert is_timestep_in_manifest(5, m, tolerance=1) is True
     assert is_timestep_in_manifest(6, m, tolerance=1) is False
+
+
+def test_build_manifest_v2_round_trips_interaction_events():
+    events = [
+        {
+            "action": "click",
+            "selector": "#cta-hero",
+            "pts_sec": 1.2,
+            "t_idx": 1,
+            "target": {"dom_id": "#cta-hero", "tag": "BUTTON"},
+        },
+        {
+            "action": "hover",
+            "selector": "#nav",
+            "pts_sec": 2.0,
+            "t_idx": 2,
+            "target": {"dom_id": "#nav", "tag": "NAV"},
+        },
+    ]
+    snaps = [{"t_idx": i, "pts_sec": float(i), "url": "http://x/", "scrollY": 0, "scrollX": 0, "elements": []} for i in range(3)]
+    manifest = build_manifest_v2(
+        session_id="sess",
+        initial_url="http://x/",
+        dom_snapshots=snaps,
+        width=1280,
+        height=720,
+        interval_sec=1.0,
+        interaction_events=events,
+    )
+    assert len(manifest["interaction_events"]) == 2
+    assert manifest["interaction_events"][0]["action"] == "click"
+    assert manifest["interaction_events"][0]["t_idx"] == 1
+    assert manifest["interaction_events"][1]["selector"] == "#nav"
+
+
+def test_interaction_t_idx_maps_event_time_to_tr():
+    assert interaction_t_idx(0.0, 1.0) == 0
+    assert interaction_t_idx(1.2, 1.0) == 1
+    assert interaction_t_idx(2.6, 1.0) == 3
+    assert interaction_t_idx(0.5, 0.5) == 1
+
+
+def test_run_step_click_and_hover_return_markers():
+    class FakePage:
+        async def click(self, selector, timeout=30_000):
+            self.last_click = selector
+
+        async def hover(self, selector, timeout=30_000):
+            self.last_hover = selector
+
+        async def evaluate(self, js, selector=None):
+            return {
+                "dom_id": selector,
+                "tag": "BUTTON",
+                "role": "",
+                "text": "Get started",
+                "bbox": [10, 10, 100, 40],
+            }
+
+    page = FakePage()
+    click_marker = asyncio.run(_run_step(page, {"action": "click", "selector": "#cta-hero"}))
+    hover_marker = asyncio.run(_run_step(page, {"action": "hover", "selector": "#cta-hero"}))
+
+    assert click_marker["action"] == "click"
+    assert click_marker["selector"] == "#cta-hero"
+    assert click_marker["target"]["dom_id"] == "#cta-hero"
+    assert hover_marker["action"] == "hover"

@@ -25,3 +25,23 @@ def test_visual_saliency_scores_prominent_cta(tmp_path):
     assert heatmap.shape == (100, 160)
     assert float(heatmap.max()) == 1.0
     assert scored[0]["dom_id"] == "#cta"
+
+
+def test_gaussian_heatmap_peak_near_cta(tmp_path):
+    frame = tmp_path / "frame.jpg"
+    arr = np.full((100, 160, 3), 32, dtype=np.uint8)
+    arr[20:50, 20:120] = [240, 180, 40]
+    Image.fromarray(arr).save(frame)
+    snapshot = {
+        "scrollY": 0,
+        "scrollX": 0,
+        "elements": [
+            {"dom_id": "#cta", "tag": "BUTTON", "text": "Get started", "bbox": [20, 20, 100, 30], "is_intersecting_viewport": True},
+            {"dom_id": "#body", "tag": "P", "text": "Plain text", "bbox": [20, 70, 100, 18], "is_intersecting_viewport": True},
+        ],
+    }
+    heatmap, _ = build_saliency_heatmap(frame, snapshot, capture_h=100, capture_w=160)
+    cy, cx = 35, 70
+    edge_val = float(heatmap[5, 5])
+    center_val = float(heatmap[cy, cx])
+    assert center_val > edge_val

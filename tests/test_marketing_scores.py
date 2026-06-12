@@ -9,9 +9,11 @@ import numpy as np
 from scout_core.marketing_scores import (
     build_activation_analysis,
     build_marketing_scores,
+    compute_comparison_score,
     compute_novelty,
     compute_session_metrics,
     find_drop_moments,
+    map_population_quantile,
     normalize_minmax,
     score_sections,
     score_sections_activation,
@@ -175,3 +177,45 @@ def test_activation_analysis_from_track():
     assert out["sections"][0]["section_id"] == "hero"
     by_id = {s["section_id"]: s for s in out["sections"]}
     assert by_id["pricing"]["score"] > by_id["hero"]["score"]
+
+
+def test_map_population_quantile():
+    ref = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
+    out = map_population_quantile(np.array([0.5, 1.5]), ref)
+    assert out[0] < out[1]
+
+
+def test_compute_comparison_score():
+    display = np.array([80.0, 70.0, 60.0, 50.0])
+    score = compute_comparison_score(display, early_fraction=0.25)
+    assert 0.0 <= score <= 100.0
+
+
+def test_norm_referenced_falls_back_provenance_when_population_too_small(tmp_path: Path, monkeypatch):
+    from scout_core.marketing_scores import build_marketing_scores
+
+    session_dir = tmp_path / "sess"
+    session_dir.mkdir()
+    bundle = {
+        "engagement_track": {"scores": [0.1, 0.2, 0.3], "baseline_flag": None},
+        "section_report": [],
+    }
+    cfg = {
+        "cross_session": {
+            "enabled": True,
+            "norm_id": "tiny_v1",
+            "comparison_mode": "norm_referenced",
+        },
+        "compound_weights": {"engagement": 0.7, "novelty": 0.3},
+        "edge_mask": {},
+        "drop_thresholds": {},
+    }
+    monkeypatch.setattr(
+        "scout_core.marketing_scores.load_population_engagement_samples",
+        lambda _norm: np.array([0.5]),
+    )
+    out = build_marketing_scores(session_dir, bundle, config=cfg)
+    prov = out["provenance"]
+    assert prov["comparison_mode"] == "session_relative"
+    assert prov["norm_fallback_reason"] == "insufficient_population_samples"
+    assert prov["display_curve"] == "minmax_session_compound"
