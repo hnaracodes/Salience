@@ -33,6 +33,13 @@ Cinematic fixture (recommended for emotion-rich capture, ~14 TRs):
 python scripts/record_website_session.py --script configs/walkthrough_scripts/aurora_showcase.yaml
 ```
 
+Autonomous exploration (Threadmind fixture on port 8780):
+
+```bash
+python -m http.server 8780 --directory chatbot_product_site
+python scripts/record_website_session.py --script configs/walkthrough_scripts/explore_threadmind.yaml
+```
+
 Preview fixture: `python -m http.server 8765 --directory tests/fixtures/walkthrough_site` → open `index.html` (Aurora showcase).
 
 Note the printed `session_id`.
@@ -87,6 +94,12 @@ Default CPU visual saliency (no Modal):
 python scripts/extract_section_heatmaps.py --session-id <session_id> --saliency --refresh-sections
 ```
 
+Production profile (Modal DINOv2 + dense per-TR heatmaps):
+
+```bash
+python scripts/extract_section_heatmaps.py --session-id <session_id> --production --refresh-sections
+```
+
 Optional Modal DINOv2 attention:
 
 ```bash
@@ -104,6 +117,14 @@ python scripts/extract_section_heatmaps.py --session-id <session_id> --uniform-h
 ```bash
 python scripts/analyze_session.py --session-id <session_id> --norm-id <norm_id> --website --ground
 ```
+
+Optional offline Microsoft Clarity click CSV (50/50 blend with heuristic clickability when selectors match):
+
+```bash
+python scripts/analyze_session.py --session-id <session_id> --norm-id <norm_id> --website --clarity-csv path/to/clarity_export.csv
+```
+
+Or place `clarity_clicks.csv` in the session folder. Attribution mode defaults to `per_tr_sum` in `configs/section_analytics.yaml` (set `attribution.mode: section_blend` to restore legacy section-average blending).
 
 This writes `section_report[]` and `marketing_scores` (schema v4): a session-relative **0–100 display curve**, five rubric metrics, drop moments, and per-section scores. Marketing scores are derived from `engagement_track` (VAN/DMN Z) plus preds novelty — they do **not** replace dual-track outputs or claim eye-tracking accuracy. Tune display weights in `configs/marketing_scores.yaml`.
 

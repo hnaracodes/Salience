@@ -1,0 +1,14 @@
+# Calibrated element attribution weights (update after validate_attention_proxy.py).
+
+calibration_id: default_v0
+attention_weight: 0.68
+click_weight: 0.32
+engagement_activation_blend: 0.72
+
+thresholds:
+  spearman_min: 0.4
+  top1_cta_hit_min: 0.6
+
+disclaimer: >-
+  Attention proxy calibrated against behavioral click telemetry where available;
+  not eye-tracking or guaranteed gaze prediction.

@@ -172,3 +172,4 @@ class TestSectionHeatmapEnrich:
         with_elements = [sec for sec in report if sec.get("top_elements")]
         assert with_elements
         assert "combined_score" in with_elements[0]["top_elements"][0]
+        assert with_elements[0]["element_attribution"]["mode"] == "per_tr_sum"

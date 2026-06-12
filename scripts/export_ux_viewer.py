@@ -87,6 +87,63 @@ def _build_element_tr_index(
     return index
 
 
+def _build_element_scores_index(sections: list[dict]) -> dict[str, dict]:
+    """Per dom_id rollup of attribution scores for click-to-inspect in the viewer."""
+    index: dict[str, dict] = {}
+
+    def _merge(dom_id: str, el: dict, *, section_id: str | None, t_idx: int | None) -> None:
+        row = index.setdefault(
+            dom_id,
+            {
+                "dom_id": dom_id,
+                "tag": el.get("tag"),
+                "section_ids": [],
+                "by_t": {},
+                "rollup": {},
+            },
+        )
+        if el.get("tag") and not row.get("tag"):
+            row["tag"] = el.get("tag")
+        if section_id and section_id not in row["section_ids"]:
+            row["section_ids"].append(section_id)
+
+        score_row = {
+            "combined_score": el.get("combined_score"),
+            "attention_score": el.get("attention_score"),
+            "clickability": el.get("clickability"),
+            "attention_density": el.get("attention_density") or el.get("mean_attention_density"),
+            "attribution_flags": el.get("attribution_flags") or [],
+            "clarity_matched": el.get("clarity_matched"),
+            "n_samples": el.get("n_samples"),
+            "section_id": section_id,
+        }
+        if t_idx is not None:
+            row["by_t"][str(t_idx)] = score_row
+
+        combined = float(el.get("combined_score") or 0.0)
+        best = float(row["rollup"].get("combined_score") or 0.0)
+        if combined >= best:
+            row["rollup"] = {**score_row, "source": f"TR {t_idx}" if t_idx is not None else "section rollup"}
+
+    for sec in sections:
+        sid = sec.get("section_id")
+        for el in sec.get("top_elements") or []:
+            dom_id = el.get("dom_id")
+            if dom_id:
+                _merge(str(dom_id), el, section_id=sid, t_idx=None)
+        for t_str, elements in (sec.get("element_scores_by_t") or {}).items():
+            try:
+                t_idx = int(t_str)
+            except (TypeError, ValueError):
+                continue
+            for el in elements or []:
+                dom_id = el.get("dom_id")
+                if dom_id:
+                    _merge(str(dom_id), el, section_id=sid, t_idx=t_idx)
+
+    return index
+
+
 def _export_brain_assets(session_id: str, session_dir: Path, out_dir: Path, manifest: dict) -> dict | None:
     """Copy brain viewer binaries and optional PlotBrain MP4 into ux_viewer/."""
     if not (session_dir / "preds.npz").is_file():
@@ -379,6 +436,7 @@ def main() -> None:
     capture = manifest.get("capture") or {}
     brain_viewer = _export_brain_assets(args.session_id, session_dir, out_dir, manifest)
     element_tr_index = _build_element_tr_index(sections, events)
+    element_scores_index = _build_element_scores_index(sections)
 
     marketing_narrative = bundle.get("marketing_narrative")
     element_insight_index: dict[str, dict] = {}
@@ -404,6 +462,7 @@ def main() -> None:
         "sections": sections,
         "events": events,
         "element_tr_index": element_tr_index,
+        "element_scores_index": element_scores_index,
         "engagement_track": bundle.get("engagement_track"),
         "emotion_track": bundle.get("emotion_track"),
         "brain_viewer": brain_viewer,

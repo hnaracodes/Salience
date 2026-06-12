@@ -139,6 +139,11 @@ def expected_tr_count(duration_sec: float, interval_sec: float) -> int:
     return max(1, int(math.ceil(duration_sec / interval_sec)))
 
 
+def interaction_t_idx(event_time: float, interval_sec: float) -> int:
+    """Map wall-clock offset to TR index (matches scripted capture marker logic)."""
+    return int(round(float(event_time) / max(float(interval_sec), 1e-6)))
+
+
 def build_manifest_v2(
     *,
     session_id: str,
@@ -271,8 +276,6 @@ async def _record_linear_scroll_async(
     initial_settle_ms = int(script.get("initial_settle_ms", 1500))
 
     snapshots: list[dict[str, Any]] = []
-    interaction_events: list[dict[str, Any]] = []
-    interaction_events: list[dict[str, Any]] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -378,6 +381,140 @@ async def _finalize_video(session_dir: Path, video_dir: Path) -> str:
     return video_rel
 
 
+async def _execute_explore_action(page: Any, action: Any) -> dict[str, Any] | None:
+    """Run one explore_policy action; return interaction marker or None."""
+    from scout_core.explore_policy import ExploreAction
+
+    if not isinstance(action, ExploreAction):
+        return None
+    if action.kind == "scroll_down":
+        scroll_px = int((action.metadata or {}).get("scroll_px", 540))
+        await page.evaluate(f"window.scrollBy(0, {scroll_px})")
+        return None
+    if action.kind in ("click", "hover") and action.selector:
+        step = {"action": action.kind, "selector": action.selector}
+        return await _run_step(page, step)
+    return None
+
+
+async def _record_explore_async(
+    *,
+    session_id: str,
+    session_dir: Path,
+    script: dict[str, Any],
+    interval_sec: float,
+    width: int,
+    height: int,
+    initial_url: str,
+    video_dir: Path,
+) -> dict[str, Any]:
+    """Bounded autonomous exploration: sample-then-act per TR clock."""
+    from playwright.async_api import async_playwright
+
+    from scout_core.explore_policy import ExploreBudget, load_explore_config, next_action
+
+    cfg = load_explore_config(script)
+    budget = ExploreBudget(
+        max_tr=int(cfg.get("max_tr", 24)),
+        max_clicks=int(cfg.get("max_clicks", 12)),
+        max_pages=int(cfg.get("max_pages", 6)),
+    )
+    scroll_settle_ms = int(cfg.get("scroll_settle_ms", 500))
+    initial_settle_ms = int(cfg.get("initial_settle_ms", 1500))
+
+    snapshots: list[dict[str, Any]] = []
+    interaction_events: list[dict[str, Any]] = []
+    exploration_log: list[dict[str, Any]] = []
+    pages_visited: list[str] = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            viewport={"width": width, "height": height},
+            record_video_dir=str(video_dir),
+            record_video_size={"width": width, "height": height},
+        )
+        page = await context.new_page()
+        await page.goto(initial_url, wait_until="networkidle", timeout=120_000)
+        await page.evaluate(VISIBILITY_TRACKER_JS)
+        await asyncio.sleep(initial_settle_ms / 1000.0)
+        budget.record_page(page.url)
+
+        while not budget.at_limit():
+            t_idx = budget.t_idx
+            event_time = t_idx * interval_sec
+            snapshots.append(await _capture_snapshot(
+                page, session_dir, t_idx=t_idx, event_time=event_time,
+            ))
+
+            metrics = await page.evaluate(PAGE_METRICS_JS)
+            action = next_action(
+                snapshot=snapshots[-1],
+                page_url=page.url,
+                initial_url=initial_url,
+                budget=budget,
+                cfg=cfg,
+                viewport_h=height,
+                scroll_height=int(metrics.get("scrollHeight", 0)),
+                client_height=int(metrics.get("clientHeight", height)),
+            )
+
+            exploration_log.append({
+                "t_idx": t_idx,
+                "action": action.kind,
+                "selector": action.selector,
+                "url": page.url,
+                "reason": action.reason,
+            })
+
+            if action.kind == "stop":
+                budget.t_idx += 1
+                break
+
+            if action.kind in ("click", "hover") and action.selector:
+                marker = await _execute_explore_action(page, action)
+                action_key = f"{page.url}|{action.selector}"
+                budget.record_click(action_key)
+                if marker is not None:
+                    marker.update({
+                        "pts_sec": round(float(event_time), 3),
+                        "t_idx": t_idx,
+                    })
+                    interaction_events.append(marker)
+                await asyncio.sleep(scroll_settle_ms / 1000.0)
+                budget.record_page(page.url)
+                from urllib.parse import urlparse as _urlparse
+                _path = _urlparse(page.url).path or "/"
+                if _path not in pages_visited:
+                    pages_visited.append(_path)
+            elif action.kind == "scroll_down":
+                await _execute_explore_action(page, action)
+                await asyncio.sleep(scroll_settle_ms / 1000.0)
+
+            budget.t_idx += 1
+            if budget.t_idx < budget.max_tr:
+                await asyncio.sleep(interval_sec)
+
+        await context.close()
+        await browser.close()
+
+    actual_duration = len(snapshots) * interval_sec
+    manifest = build_manifest_v2(
+        session_id=session_id,
+        initial_url=initial_url,
+        dom_snapshots=snapshots,
+        width=width,
+        height=height,
+        interval_sec=interval_sec,
+        duration_sec=actual_duration,
+        interaction_events=interaction_events,
+    )
+    manifest["capture_mode"] = "explore"
+    manifest["pages_visited"] = pages_visited or budget.pages_visited
+    manifest["exploration_log"] = exploration_log
+    return manifest
+
+
 async def record_website_session_async(
     *,
     session_id: str,
@@ -390,6 +527,8 @@ async def record_website_session_async(
     ``scroll_mode: linear`` — fixed scroll increment per TR; TR count is derived
     from measured page height (recommended for heatmap / viewer alignment).
 
+    ``scroll_mode: explore`` — bounded autonomous nav/CTA discovery per TR clock.
+
     ``scroll_mode: scripted`` (default) — YAML ``steps`` interleaved with TR
     samples on a fixed ``duration_sec`` timeline.
     """
@@ -401,6 +540,34 @@ async def record_website_session_async(
 
     video_dir = session_dir / "_playwright_video"
     video_dir.mkdir(parents=True, exist_ok=True)
+
+    if scroll_mode == "explore":
+        manifest = await _record_explore_async(
+            session_id=session_id,
+            session_dir=session_dir,
+            script=script,
+            interval_sec=interval_sec,
+            width=width,
+            height=height,
+            initial_url=initial_url,
+            video_dir=video_dir,
+        )
+        manifest["video"]["path"] = await _finalize_video(session_dir, video_dir)
+        from scout_core.session_align import pad_manifest_snapshots_to_video_duration
+
+        preds_path = session_dir / "preds.npz"
+        target_tr = None
+        if preds_path.is_file():
+            try:
+                import numpy as _np
+
+                target_tr = int(_np.load(preds_path)["preds"].shape[0])
+            except Exception:
+                target_tr = None
+        manifest = pad_manifest_snapshots_to_video_duration(
+            manifest, session_dir, target_tr_count=target_tr,
+        )
+        return manifest
 
     if scroll_mode == "linear":
         manifest = await _record_linear_scroll_async(
@@ -457,6 +624,7 @@ async def record_website_session_async(
     all_events.sort(key=lambda x: (x[0], x[1]))
 
     snapshots: list[dict[str, Any]] = []
+    interaction_events: list[dict[str, Any]] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -488,7 +656,7 @@ async def record_website_session_async(
                     if marker is not None:
                         marker.update({
                             "pts_sec": round(float(event_time), 3),
-                            "t_idx": int(round(float(event_time) / max(interval_sec, 1e-6))),
+                            "t_idx": interaction_t_idx(event_time, interval_sec),
                         })
                         interaction_events.append(marker)
 

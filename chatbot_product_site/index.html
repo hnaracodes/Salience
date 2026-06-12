@@ -9,6 +9,8 @@
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
+  <div class="engagement-wash" aria-hidden="true"></div>
+  <div class="engagement-spotlight" aria-hidden="true"></div>
 
   <header role="banner">
     <a href="index.html" class="logo" id="logo">
@@ -45,7 +47,7 @@
   <span class="section-marker" style="top: 92vh" data-section="cta">08 · Start</span>
 
   <main class="page-wrap journey" role="main">
-    <section id="hero" class="section" aria-labelledby="hero-title">
+    <section id="hero" class="section section-engage-peak" data-engage="peak" aria-labelledby="hero-title">
       <div class="section-inner hero-grid">
         <div>
           <p class="section-label">Conversational intelligence</p>
@@ -71,7 +73,7 @@
       </div>
     </section>
 
-    <section id="why-subscribe" class="section" aria-labelledby="why-title">
+    <section id="why-subscribe" class="section section-engage-rise" data-engage="rise" aria-labelledby="why-title">
       <div class="section-inner">
         <p class="section-label">The honest economics</p>
         <h2 id="why-title">Why Threadmind needs a subscription</h2>
@@ -106,7 +108,7 @@
       </div>
     </section>
 
-    <section id="how-it-works" class="section" aria-labelledby="how-title">
+    <section id="how-it-works" class="section section-engage-neutral" data-engage="neutral" aria-labelledby="how-title">
       <div class="section-inner">
         <p class="section-label">Scroll the ball — watch the flow</p>
         <h2 id="how-title">From question to grounded answer</h2>
@@ -131,7 +133,7 @@
       </div>
     </section>
 
-    <section id="models-preview" class="section" aria-labelledby="models-title">
+    <section id="models-preview" class="section section-engage-rise" data-engage="rise" aria-labelledby="models-title">
       <div class="section-inner">
         <p class="section-label">Model stack</p>
         <h2 id="models-title">Pick the brain that matches the task</h2>
@@ -156,7 +158,7 @@
       </div>
     </section>
 
-    <section id="pricing-teaser" class="section" aria-labelledby="pricing-title">
+    <section id="pricing-teaser" class="section section-engage-peak" data-engage="peak" aria-labelledby="pricing-title">
       <div class="section-inner">
         <p class="section-label">Plans</p>
         <h2 id="pricing-title">Simple pricing, serious capability</h2>
@@ -183,7 +185,7 @@
       </div>
     </section>
 
-    <section id="testimonials" class="section" aria-labelledby="testimonials-title">
+    <section id="testimonials" class="section section-engage-dip" data-engage="dip" aria-labelledby="testimonials-title">
       <div class="section-inner">
         <p class="section-label">Teams on Threadmind</p>
         <h2 id="testimonials-title">Why they upgraded</h2>
@@ -194,7 +196,7 @@
       </div>
     </section>
 
-    <section id="faq" class="section" aria-labelledby="faq-title">
+    <section id="faq" class="section section-engage-dip" data-engage="dip" aria-labelledby="faq-title">
       <div class="section-inner">
         <p class="section-label">FAQ</p>
         <h2 id="faq-title">Subscription questions</h2>
@@ -213,7 +215,7 @@
       </div>
     </section>
 
-    <section id="cta" class="section" aria-labelledby="cta-title">
+    <section id="cta" class="section section-engage-peak" data-engage="peak" aria-labelledby="cta-title">
       <div class="section-inner">
         <h2 id="cta-title">Start thinking faster today</h2>
         <p class="lead" style="margin-inline: auto;">
@@ -263,6 +265,7 @@
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
   <script src="assets/js/site.js"></script>
+  <script src="assets/js/scroll-choreography.js"></script>
   <script src="assets/js/scroll-ball.js"></script>
 </body>
 </html>

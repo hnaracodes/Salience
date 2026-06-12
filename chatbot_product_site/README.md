@@ -4,7 +4,7 @@ Multi-page marketing site for an AI chatbot product (ChatGPT-style). Built for *
 
 ## Design direction
 
-**Editorial warmth + mechanical precision** — ink backgrounds, copper/signal accents, Fraunces + IBM Plex (no Inter, no purple mesh gradients). The homepage features a **scroll-driven metallic ball** on a fixed rail that rotates and morphs color as you pass each section (GSAP ScrollTrigger).
+**Editorial warmth + mechanical precision** — ink backgrounds, copper/signal accents, Fraunces + IBM Plex (no Inter, no purple mesh gradients). The homepage features a **scroll-driven metallic ball** on a fixed rail that rotates and morphs color as you pass each section (GSAP ScrollTrigger). `scroll-choreography.js` adds section engagement washes — peak zones (hero, pricing, CTA) get copper/signal spotlight; dip zones (FAQ, testimonials) desaturate for stronger capture contrast.
 
 ## Preview
 

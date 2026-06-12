@@ -58,6 +58,56 @@ def normalize_minmax(values: np.ndarray) -> np.ndarray:
     return 100.0 * (arr - low) / (high - low)
 
 
+def load_population_engagement_samples(norm_id: str) -> np.ndarray | None:
+    """Load reference engagement means from scout_norms/<norm_id>/engagement_samples.json."""
+    path = PROJECT_ROOT / "scout_norms" / norm_id / "engagement_samples.json"
+    if not path.is_file():
+        return None
+    import json
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    samples = data.get("session_mean_engagement") or []
+    if not samples:
+        return None
+    return np.asarray(samples, dtype=np.float64)
+
+
+def map_population_quantile(values: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    """Map values to 0–100 via empirical CDF against reference population."""
+    arr = np.asarray(values, dtype=np.float64)
+    ref_sorted = np.sort(np.asarray(ref, dtype=np.float64))
+    if ref_sorted.size < 2:
+        return normalize_minmax(arr)
+    out = np.zeros_like(arr)
+    for i, v in enumerate(arr):
+        rank = float(np.searchsorted(ref_sorted, v, side="right")) / float(ref_sorted.size)
+        out[i] = 100.0 * rank
+    return np.clip(out, 0.0, 100.0)
+
+
+def compute_comparison_score(
+    engagement: np.ndarray,
+    *,
+    early_fraction: float = 0.25,
+    weights: dict[str, float] | None = None,
+) -> float:
+    """ViralAnalyser-style cross-session comparison score (0–100 scale inputs)."""
+    w = weights or {"early": 0.48, "avg": 0.34, "floor": 0.18}
+    arr = np.asarray(engagement, dtype=np.float64)
+    if arr.size == 0:
+        return 0.0
+    n_early = max(1, int(np.ceil(arr.size * early_fraction)))
+    early_avg = float(np.mean(arr[:n_early]))
+    signal_avg = float(np.mean(arr))
+    floor_score = float(np.min(arr))
+    raw = (
+        w.get("early", 0.48) * early_avg
+        + w.get("avg", 0.34) * signal_avg
+        + w.get("floor", 0.18) * floor_score
+    )
+    return float(np.clip(raw, 0.0, 100.0))
+
+
 def _clip_score(value: float) -> int:
     return int(max(0, min(100, round(value))))
 
@@ -615,11 +665,40 @@ def build_marketing_scores(
         novelty_source = "unavailable"
 
     weights = cfg.get("compound_weights") or {}
-    display = compound_signal(
-        engagement,
-        novelty,
-        engagement_weight=float(weights.get("engagement", 0.7)),
-        novelty_weight=float(weights.get("novelty", 0.3)),
+    cross_cfg = cfg.get("cross_session") or {}
+    comparison_mode = str(cross_cfg.get("comparison_mode", "session_relative"))
+    norm_id = str(cross_cfg.get("norm_id", "naturalistic_v1"))
+    pop_ref = load_population_engagement_samples(norm_id) if cross_cfg.get("enabled") else None
+
+    norm_active = (
+        comparison_mode == "norm_referenced"
+        and pop_ref is not None
+        and pop_ref.size >= 2
+    )
+    effective_comparison_mode = comparison_mode if norm_active else "session_relative"
+    if norm_active:
+        eng_display = map_population_quantile(engagement, pop_ref)
+        nov_display = map_population_quantile(novelty, pop_ref) if np.any(novelty) else normalize_minmax(novelty)
+        display = (
+            float(weights.get("engagement", 0.7)) * eng_display
+            + float(weights.get("novelty", 0.3)) * nov_display
+        )
+        display = np.clip(display, 0.0, 100.0).astype(np.float64)
+        display_curve_label = "population_quantile_compound"
+    else:
+        display = compound_signal(
+            engagement,
+            novelty,
+            engagement_weight=float(weights.get("engagement", 0.7)),
+            novelty_weight=float(weights.get("novelty", 0.3)),
+        )
+        display_curve_label = "minmax_session_compound"
+
+    cmp_weights = cross_cfg.get("comparison_weights") or {}
+    comparison_score = compute_comparison_score(
+        display,
+        early_fraction=float(cross_cfg.get("early_tr_fraction", 0.25)),
+        weights=cmp_weights,
     )
 
     edge_cfg = cfg.get("edge_mask") or {}
@@ -653,17 +732,27 @@ def build_marketing_scores(
     ]
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "provenance": {
             "activation_source": activation_source,
             "novelty_source": novelty_source,
-            "display_curve": "minmax_session_compound",
+            "display_curve": display_curve_label,
+            "comparison_mode": effective_comparison_mode,
+            "norm_id": norm_id if norm_active else None,
+            "norm_fallback_reason": (
+                None if norm_active else (
+                    "insufficient_population_samples"
+                    if comparison_mode == "norm_referenced" and cross_cfg.get("enabled")
+                    else None
+                )
+            ),
             "baseline_flag": baseline_flag,
             "compound_weights": {
                 "engagement": float(weights.get("engagement", 0.7)),
                 "novelty": float(weights.get("novelty", 0.3)),
             },
         },
+        "comparison_score": round(comparison_score, 2),
         "display_curve": {
             "tr_duration_sec": tr_duration_sec,
             "points": points,

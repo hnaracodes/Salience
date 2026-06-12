@@ -1,0 +1,27 @@
+# Default budgets and safety guards for scroll_mode: explore
+
+explore:
+  max_tr: 48
+  max_clicks: 18
+  max_pages: 10
+  same_origin_only: true
+  allow_subdomains: false
+  scroll_px_per_tr: 540
+  scroll_settle_ms: 500
+  initial_settle_ms: 1500
+  guidance: heuristic
+  # Finish scrolling the current page before in-page CTAs (nav links still win via bonus).
+  scroll_to_bottom_before_clicks: true
+  min_scroll_fraction_before_clicks: 0.92
+  allow_nav_clicks_during_scroll: true
+  prioritize_unvisited_nav: true
+  unvisited_page_bonus: 0.4
+  unvisited_click_threshold: 0.35
+  click_score_threshold: 0.5
+  deny_selectors:
+    - 'a[href*="logout"]'
+    - 'button[type="submit"][formaction*="checkout"]'
+  deny_href_patterns:
+    - '^mailto:'
+    - '^tel:'
+    - '^javascript:void'

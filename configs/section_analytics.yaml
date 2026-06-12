@@ -3,8 +3,8 @@
 tr_duration_sec: 1.0
 # Max heatmap extractions per section (first / peak / last sampling).
 max_samples_per_section: 3
-# Cap total ViT heatmap calls per session.
-max_heatmaps_per_session: 20
+# Cap total ViT heatmap calls per session (raise for production / dense coverage).
+max_heatmaps_per_session: 60
 # Minimum element bbox area (px^2) for attention scoring.
 min_element_area: 400
 # Z thresholds for section-level flags (not grounding spikes).
@@ -15,5 +15,12 @@ top_elements_per_section: 5
 
 # Combine spatial saliency with temporal TRIBE signals for element-level UX attribution.
 attribution:
+  mode: per_tr_sum   # per_tr_sum | section_blend
   attention_weight: 0.68
   click_weight: 0.32
+  engagement_activation_blend: 0.72
+  max_tr_per_section: 30
+
+# Optional Microsoft Clarity CSV merge (offline export only).
+clarity:
+  blend_weight: 0.5

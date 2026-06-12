@@ -45,5 +45,16 @@ disclaimer: >-
   Session-relative display scores derived from neural engagement and temporal change;
   not eye-tracking, not guaranteed conversion, and not a clinical emotion diagnosis.
 
-# Deferred multi-session comparison (ViralAnalyser-style):
-# comparison_score = 0.48 * early_avg + 0.34 * signal_avg + 0.18 * floor_score
+# Cross-session normative scoring (see scout_core/marketing_scores.py).
+cross_session:
+  enabled: true
+  norm_id: naturalistic_v1
+  # norm_referenced requires >=2 sessions in scout_norms/<norm_id>/engagement_samples.json
+  comparison_mode: norm_referenced   # norm_referenced | session_relative
+  comparison_weights:
+    early: 0.48
+    avg: 0.34
+    floor: 0.18
+  early_tr_fraction: 0.25
+
+# ViralAnalyser-style comparison_score = early*early_avg + avg*signal_avg + floor*floor_score

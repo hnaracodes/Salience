@@ -10,13 +10,17 @@ Usage:
     python scripts/run_website_session.py --session-id <id> --stage narrative
     python scripts/run_website_session.py --session-id <id> --stage all --script ... --norm-id default_v1
 
-Stages: capture | tribe | dual_track | heatmaps | analyze | narrative | all
+Stages: capture | tribe | dual_track | heatmaps | analyze | narrative | export_viewer | all
+
+Optional: --create-baseline (Modal gray-video baseline before dual_track)
+           --inspect (print preds sample after pipeline)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -33,6 +37,27 @@ STAGES = ("capture", "tribe", "dual_track", "heatmaps", "analyze", "narrative", 
 def _run(cmd: list[str]) -> None:
     print("+", " ".join(cmd))
     subprocess.run(cmd, cwd=PROJECT_ROOT, check=True)
+
+
+def _modal_run(target: str, extra: list[str] | None = None) -> None:
+    extra = extra or []
+    if shutil.which("modal"):
+        _run(["modal", "run", target, *extra])
+        return
+    _run([sys.executable, "-m", "modal", "run", target, *extra])
+
+
+def _stage_baseline() -> None:
+    _modal_run("tribe.py::record_baseline")
+
+
+def _stage_inspect(session_id: str) -> None:
+    _run([
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "inspect_session.py"),
+        "--session-id",
+        session_id,
+    ])
 
 
 def _stage_capture(args: argparse.Namespace) -> str:
@@ -57,7 +82,7 @@ def _stage_capture(args: argparse.Namespace) -> str:
 
 
 def _stage_tribe(session_id: str) -> None:
-    _run(["modal", "run", "tribe.py::record_session", "--session-id", session_id])
+    _modal_run("tribe.py::record_session", ["--session-id", session_id])
 
 
 def _stage_dual_track(session_id: str, args: argparse.Namespace) -> None:
@@ -142,14 +167,29 @@ def main() -> None:
     parser.add_argument("--with-heatmaps", action="store_true")
     parser.add_argument("--llm-provider", default=None)
     parser.add_argument("--goal", default=None, help="Site goal paragraph for narrative stage")
+    parser.add_argument(
+        "--create-baseline",
+        action="store_true",
+        help="Before dual_track: modal run tribe.py::record_baseline (gray video → preds_baseline.npz)",
+    )
+    parser.add_argument(
+        "--inspect",
+        action="store_true",
+        help="After pipeline: print sample preds / SQLite row via inspect_session.py",
+    )
+    parser.add_argument("--no-marketing-scores", action="store_true", dest="no_marketing_scores")
+    parser.add_argument("--skip-narrative", action="store_true", help="Omit narrative stage when --stage all")
     args = parser.parse_args()
 
     session_id = args.session_id
-    stages = (
-        ["capture", "tribe", "dual_track", "heatmaps", "analyze", "narrative", "export_viewer"]
-        if args.stage == "all"
-        else [args.stage]
-    )
+    all_stages = ["capture", "tribe", "dual_track", "heatmaps", "analyze", "narrative", "export_viewer"]
+    if args.skip_narrative:
+        all_stages = [s for s in all_stages if s != "narrative"]
+    stages = all_stages if args.stage == "all" else [args.stage]
+
+    if args.create_baseline and "dual_track" in stages:
+        print("create-baseline → tribe.py::record_baseline")
+        _stage_baseline()
 
     for stage in stages:
         if stage == "capture":
@@ -185,6 +225,12 @@ def main() -> None:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
                 manifest.setdefault("alignment", {})["preds_validation"] = report
                 manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        if args.inspect:
+            _stage_inspect(session_id)
+        viewer_dir = SESSIONS_DIR / session_id / "ux_viewer"
+        if viewer_dir.is_dir():
+            print(f"\nUX viewer: http://127.0.0.1:8787/index.html?base=.  (serve: python -m http.server 8787 --directory {viewer_dir})")
+            print(f"session_id={session_id}")
 
 
 if __name__ == "__main__":
