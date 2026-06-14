@@ -17,6 +17,7 @@ This is the unified registry for Ledger Protocol sessions. Future agents should 
 | `CS-20260611-PRODUCT-CLAIMS` | 2026-06-11 | completed | website | `composer-2.5@CS-20260611-PRODUCT-CLAIMS` | [sessions/CS-20260611-PRODUCT-CLAIMS](./CS-20260611-PRODUCT-CLAIMS/session.md) | Calibrated attention, cross-session norms, explore mode, conversion model |
 | `CS-20260611-TEXT-ENGAGEMENT-SCORING` | 2026-06-11 | in_progress | website | `composer-2.5@CS-20260611-TEXT-ENGAGEMENT-SCORING` | [sessions/CS-20260611-TEXT-ENGAGEMENT-SCORING](./CS-20260611-TEXT-ENGAGEMENT-SCORING/session.md) | Text/copy engagement scoring gap; fuse copy signals with neural ratings |
 | `CS-20260612-PUSH-HARDENING` | 2026-06-12 | completed | website | `composer-2.5@CS-20260612-PUSH-HARDENING` | [sessions/CS-20260612-PUSH-HARDENING](./CS-20260612-PUSH-HARDENING/session.md) | Pre-push audit; viewer XSS hardening; marketing provenance fix |
+| `CS-20260612-SAAS-PRODUCTION` | 2026-06-12 | completed | saas | `claude-sonnet-4-5@CS-20260612-SAAS-PRODUCTION` | [sessions/CS-20260612-SAAS-PRODUCTION](./CS-20260612-SAAS-PRODUCTION/session.md) | Full SaaS build: portability refactor, copy signals, FastAPI, Next.js UI, Docker, CI |
 
 ## Archived NeuroEmo Sessions
 

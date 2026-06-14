@@ -228,13 +228,15 @@ def _template_element_insights(
         reaction = _infer_reaction(eng_z, row.get("section_flags") or [], density=density)
         text_snip = (row.get("text") or "")[:80]
         label = row.get("display_role") or "component"
-        plain = (
-            f"The {label.lower()} "
-            f"{('(\"' + text_snip + '\") ') if text_snip else ''}"
-            f"in section '{row.get('section_id')}' drew model attention "
-            f"(density {density:.4f})." if density is not None else
-            f"The {label.lower()} in section '{row.get('section_id')}' was sampled."
-        )
+        quote_part = f'("{text_snip}") ' if text_snip else ""
+        if density is not None:
+            plain = (
+                f"The {label.lower()} {quote_part}"
+                f"in section '{row.get('section_id')}' drew model attention "
+                f"(density {density:.4f})."
+            )
+        else:
+            plain = f"The {label.lower()} in section '{row.get('section_id')}' was sampled."
         rec = (
             f"To support the site goal, clarify how this {label.lower()} "
             f"helps visitors: {site_goal[:120]}…"

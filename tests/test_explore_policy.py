@@ -8,6 +8,7 @@ from scout_core.explore_policy import (
     is_same_origin,
     load_explore_config,
     next_action,
+    safe_locator_strategy,
     score_actionable_elements,
 )
 
@@ -165,3 +166,43 @@ def test_scroll_before_click_blocks_early_cta():
         client_height=720,
     )
     assert action.kind == "scroll_down"
+
+
+def test_safe_locator_strategy_link_returns_role_and_name():
+    el = {
+        "tag": "A",
+        "text": "Get started free",
+        "href": "/pricing",
+    }
+    result = safe_locator_strategy(el, allow_role_locators=True)
+    assert result["locator_role"] == "link"
+    assert result["locator_name"] == "Get started free"
+    assert result["locator_href"] == "/pricing"
+    assert "selector" not in result
+
+
+def test_safe_locator_strategy_blocks_css_in_production_mode():
+    """Production mode must not emit a raw CSS selector."""
+    el = {
+        "tag": "BUTTON",
+        "dom_id": "#hero-cta.btn.btn-primary.cta-dangerous[onclick='eval(x)']",
+        "text": "Click me",
+        "href": "",
+    }
+    result = safe_locator_strategy(el, allow_role_locators=True)
+    # Role-based result should contain no CSS/XPath
+    assert "selector" not in result
+    assert result["locator_role"] == "button"
+    assert result["locator_name"] == "Click me"
+
+
+def test_safe_locator_strategy_legacy_mode_returns_selector():
+    el = {
+        "tag": "A",
+        "dom_id": "#nav-link",
+        "text": "Features",
+        "href": "/features",
+    }
+    result = safe_locator_strategy(el, allow_role_locators=False)
+    assert "selector" in result
+    assert "locator_role" not in result

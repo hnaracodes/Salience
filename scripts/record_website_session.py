@@ -23,19 +23,48 @@ import sys
 import uuid
 from pathlib import Path
 
+import yaml
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from activation_store import SESSIONS_DIR
-from scout_core.walkthrough import load_walkthrough_script, record_website_session_async
+from scout_core.walkthrough import record_website_session_async
 
 DEFAULT_SCRIPTS_DIR = PROJECT_ROOT / "configs" / "walkthrough_scripts"
+
+
+def _load_capture_script(script_path: Path, url: str | None) -> dict:
+    """Load YAML capture config; inject user URL for explore-only profiles."""
+    with script_path.open(encoding="utf-8") as f:
+        script = yaml.safe_load(f) or {}
+
+    if url:
+        from services.api.ssrf import SSRFViolation, validate_url
+
+        try:
+            validate_url(url.strip())
+        except SSRFViolation as exc:
+            raise SystemExit(f"URL rejected: {exc.reason}") from exc
+        script["initial_url"] = url.strip()
+
+    if not script.get("initial_url"):
+        raise SystemExit(
+            "Missing initial_url: pass --url or use a walkthrough script that defines initial_url"
+        )
+
+    if script.get("explore") is not None and not script.get("scroll_mode"):
+        script["scroll_mode"] = "explore"
+
+    script.setdefault("viewport", {"width": 1280, "height": 720})
+    return script
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--script", type=Path, required=True, help="Walkthrough YAML path")
     parser.add_argument("--session-id", default=None, help="Reuse or pre-assign session id")
+    parser.add_argument("--url", default=None, help="Target URL (required for explore-only configs)")
     parser.add_argument("--interval-sec", type=float, default=None, help="Override TR interval (default from script or 1.0)")
     args = parser.parse_args()
 
@@ -43,7 +72,7 @@ def main() -> None:
     if not script_path.is_file():
         raise SystemExit(f"Walkthrough script not found: {script_path}")
 
-    script = load_walkthrough_script(script_path)
+    script = _load_capture_script(script_path, args.url)
     interval_sec = args.interval_sec if args.interval_sec is not None else float(
         script.get("interval_sec", 1.0)
     )

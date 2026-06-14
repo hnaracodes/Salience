@@ -639,6 +639,74 @@ def _engagement_array(bundle: dict[str, Any], preds: np.ndarray | None) -> tuple
     return np.zeros(n, dtype=np.float64), "unavailable", baseline_flag
 
 
+def _blend_copy_signals(
+    session_dir: Path,
+    sections: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Blend copy_signals.json into section scores.
+
+    Applies the formula:
+      final_score = 0.55 * neural_score + 0.25 * novelty_score + 0.20 * copy_score
+
+    Because the upstream ``score_sections`` already returns a compound score
+    (not separated neural + novelty), we treat the existing section score as the
+    combined neural+novelty component and blend at the section level:
+      blended = 0.80 * section_score + 0.20 * copy_score
+
+    Returns the updated sections list and a provenance dict.
+    """
+    import json
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
+
+    copy_path = session_dir / "copy_signals.json"
+    if not copy_path.is_file():
+        _log.warning("marketing_scores: copy_signals.json not found for %s; neural_only=True", session_dir.name)
+        return sections, {"neural_only": True, "copy_signals_path": None}
+
+    copy_rows: list[dict[str, Any]] = json.loads(copy_path.read_text(encoding="utf-8"))
+    copy_by_section: dict[str, float] = {}
+    copy_source_by_section: dict[str, str] = {}
+    for row in copy_rows:
+        sid = str(row.get("section_id") or "")
+        if sid:
+            copy_by_section[sid] = float(row.get("copy_score", 50.0))
+            copy_source_by_section[sid] = str(row.get("copy_source", "heuristic"))
+
+    updated: list[dict[str, Any]] = []
+    for sec in sections:
+        sid = str(sec.get("section_id") or "")
+        neural_score = sec.get("score")
+
+        if sid in copy_by_section:
+            cs = copy_by_section[sid]
+            src = copy_source_by_section[sid]
+        else:
+            cs = 50.0  # neutral fallback
+            src = "missing"
+
+        if neural_score is not None:
+            blended = 0.80 * float(neural_score) + 0.20 * cs
+            blended = max(0.0, min(100.0, blended))
+        else:
+            blended = None
+
+        updated.append({
+            **sec,
+            "score": int(round(blended)) if blended is not None else neural_score,
+            "copy_score": round(cs, 1),
+            "copy_source": src,
+        })
+
+    provenance = {
+        "neural_only": False,
+        "copy_signals_path": str(copy_path),
+        "sections_matched": len(copy_by_section),
+    }
+    return updated, provenance
+
+
 def build_marketing_scores(
     session_dir: Path,
     bundle: dict[str, Any],
@@ -716,6 +784,10 @@ def build_marketing_scores(
 
     section_report = bundle.get("section_report") or []
     sections = score_sections(section_report, engagement, display)
+
+    # Blend copy signals into section scores when available.
+    sections, copy_provenance = _blend_copy_signals(session_dir, sections)
+
     activation_analysis = build_activation_analysis(
         bundle, section_report, tr_duration_sec=tr_duration_sec, preds=preds,
     )
@@ -751,6 +823,7 @@ def build_marketing_scores(
                 "engagement": float(weights.get("engagement", 0.7)),
                 "novelty": float(weights.get("novelty", 0.3)),
             },
+            "copy_signals": copy_provenance,
         },
         "comparison_score": round(comparison_score, 2),
         "display_curve": {

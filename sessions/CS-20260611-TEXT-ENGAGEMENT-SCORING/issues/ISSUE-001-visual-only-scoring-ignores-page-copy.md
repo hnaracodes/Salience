@@ -1,7 +1,9 @@
 ---
 id: ISSUE-001
 session_id: CS-20260611-TEXT-ENGAGEMENT-SCORING
-status: open
+status: resolved
+resolution: scout_core/copy_signals.py heuristic track + marketing_scores 80/20 fusion; viewer copy chips
+resolved_in: CS-20260612-SAAS-PRODUCTION
 owner: agent
 related:
   - CS-20260521-WEB-PIPELINE-FOUNDATION

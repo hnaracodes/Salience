@@ -1,6 +1,8 @@
 ---
 id: ISSUE-SEC-004
-status: open
+status: resolved
+resolution: safe_locator_strategy() + allow_role_locators in explore_production.yaml; walkthrough uses page.get_by_role()
+resolved_in: CS-20260612-SAAS-PRODUCTION
 severity: medium
 category: security
 title: Explore mode trusts captured CSS selectors
