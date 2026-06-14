@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling — disabled if user prefers reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom scrollbar — ink-themed */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #08090b; }
+::-webkit-scrollbar-thumb { background: #1c2028; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2563ff; }
+
+/* Selection */
+::selection { background: rgba(37,99,255,0.25); color: #f0f2f5; }
+
+/* Hero scan line — slow horizontal sweep */
+@keyframes hero-scan {
+  0%, 100% { opacity: 0.15; transform: translateY(0); }
+  50% { opacity: 0.55; transform: translateY(120px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-scan-line {
+    animation: hero-scan 8s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-signal {
+    animation: none;
+    opacity: 1;
+  }
+
+  .hero-scan-line {
+    animation: none;
+    opacity: 0.35;
+  }
+}
+
+/* Scroll reveals — only hide after ScrollScene mounts (avoids blank page if JS fails) */
+html.has-scroll-scene [data-reveal] {
+  opacity: 0;
+  transform: translateY(40px);
+}
+
+/* Legal page typography */
+.prose-legal h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f0f2f5;
+}
+
+.prose-legal h3 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f0f2f5;
+}
+
+.prose-legal ul {
+  margin-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.prose-legal li {
+  margin-top: 0.35rem;
+}
+
+.prose-legal a {
+  color: #2563ff;
+}
+
+.prose-legal a:hover {
+  text-decoration: underline;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-color: #1c2028 #08090b;
+  scrollbar-width: thin;
+}

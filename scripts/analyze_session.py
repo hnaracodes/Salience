@@ -332,6 +332,8 @@ def _run_grounding_step(
 # ---------------------------------------------------------------------------
 
 def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Path]:
+    from scout_core.storage_migrations import resolve_storage_path
+
     row = conn.execute(
         "SELECT path_roi_parquet, path_network_parquet FROM norm_bundle WHERE norm_id = ?",
         (norm_id,),
@@ -340,7 +342,7 @@ def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Pat
         raise SystemExit(
             f"norm_id {norm_id!r} not registered. Run: python scripts/compute_norms.py --norm-id {norm_id} ..."
         )
-    return Path(row[0]), Path(row[1])
+    return resolve_storage_path(row[0]), resolve_storage_path(row[1])
 
 
 def main() -> None:

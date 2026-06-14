@@ -1,0 +1,19 @@
+# Production crawl profile for arbitrary user-submitted URLs.
+# Tighter budgets than localhost fixtures; role-based locators only.
+
+explore:
+  max_tr: 60
+  max_clicks: 20
+  max_pages: 8
+  scroll_to_bottom_before_clicks: true
+  allow_nav_clicks_during_scroll: false
+  prioritize_unvisited_nav: true
+  unvisited_page_bonus: 0.40
+  unvisited_click_threshold: 0.5
+  min_scroll_fraction_before_clicks: 0.75
+  allow_role_locators: true          # ISSUE-SEC-004 closure: prefer role/name over CSS
+  max_wall_sec: 300                   # 5-minute hard cap per page
+  per_page_max_tr: 20
+  robots_txt_respect: true           # fetch and obey robots.txt before crawl
+  same_origin_only: true
+  allow_subdomains: false

@@ -61,19 +61,56 @@ class ExploreBudget:
 @dataclass
 class ExploreAction:
     kind: str  # scroll_down | click | hover | wait | stop
-    selector: str | None = None
+    selector: str | None = None  # kept for backward compat; prefer locator fields
+    locator_role: str | None = None   # e.g. "link", "button"
+    locator_name: str | None = None   # accessible name / visible text
+    locator_href: str | None = None   # for links: href value for uniqueness check
     reason: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def safe_locator_strategy(
+    el: dict[str, Any],
+    allow_role_locators: bool = True,
+) -> dict[str, Any]:
+    """Return locator fields for an element, preferring role/name over raw CSS.
+
+    In production (allow_role_locators=True) this never passes raw CSS or XPath
+    selectors, which closes ISSUE-SEC-004.  In legacy/dev mode it falls back to
+    the existing element_selector() behaviour (selector field only).
+    """
+    if not allow_role_locators:
+        return {"selector": element_selector(el)}
+
+    tag = (el.get("tag") or "").upper()
+    text = (el.get("text") or "")[:80]
+    href = str(el.get("href") or "")
+
+    if tag == "A":
+        return {
+            "locator_role": "link",
+            "locator_name": text,
+            "locator_href": href,
+        }
+    if tag == "BUTTON":
+        return {
+            "locator_role": "button",
+            "locator_name": text,
+        }
+    return {
+        "locator_role": tag.lower() or "generic",
+        "locator_name": text,
+    }
 
 
 def load_explore_config(script: dict[str, Any], defaults_path: Path | None = None) -> dict[str, Any]:
     """Merge script explore: block with explore_defaults.yaml."""
     cfg_path = defaults_path or DEFAULT_EXPLORE_CONFIG
-    base: dict[str, Any] = {}
+    base: dict[str, Any] = {"allow_role_locators": True}  # production default
     if cfg_path.is_file():
         with cfg_path.open(encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
-        base = dict(raw.get("explore") or {})
+        base.update(raw.get("explore") or {})
     override = script.get("explore") or {}
     base.update(override)
     return base
@@ -281,6 +318,8 @@ def next_action(
     unvisited_threshold = float(cfg.get("unvisited_click_threshold", 0.35))
     current_path = urlparse(page_url).path or "/"
 
+    allow_role = bool(cfg.get("allow_role_locators", True))
+
     if ranked and budget.clicks < budget.max_clicks:
         score, el, kind = ranked[0]
         dom_id = str(el.get("dom_id") or "")
@@ -294,12 +333,14 @@ def next_action(
             is_unvisited_nav and cfg.get("allow_nav_clicks_during_scroll", True)
         )
         threshold = unvisited_threshold if is_unvisited_nav else click_threshold
-        if allow_now and score >= threshold and selector:
+        if allow_now and score >= threshold and (selector or allow_role):
+            locator_fields = safe_locator_strategy(el, allow_role_locators=allow_role)
             return ExploreAction(
                 kind=kind,
-                selector=selector,
+                selector=None if allow_role else selector,
                 reason=f"element_score={score:.2f}",
                 metadata={"dom_id": dom_id, "score": round(score, 4), "href": href},
+                **locator_fields,
             )
 
     scroll_px = int(cfg.get("scroll_px_per_tr", 540))
@@ -319,12 +360,15 @@ def next_action(
         selector = element_selector(el, initial_url=initial_url)
         href = str(el.get("href") or "")
         path = _href_path(href, initial_url) if href else ""
-        if selector and (path not in budget.pages_visited or score >= unvisited_threshold):
-            return ExploreAction(
-                kind=kind,
-                selector=selector,
-                reason=f"fallback_click score={score:.2f}",
-                metadata={"dom_id": dom_id, "href": href},
-            )
+        if selector or allow_role:
+            if path not in budget.pages_visited or score >= unvisited_threshold:
+                locator_fields = safe_locator_strategy(el, allow_role_locators=allow_role)
+                return ExploreAction(
+                    kind=kind,
+                    selector=None if allow_role else selector,
+                    reason=f"fallback_click score={score:.2f}",
+                    metadata={"dom_id": dom_id, "href": href},
+                    **locator_fields,
+                )
 
     return ExploreAction(kind="stop", reason="page_end_no_actions")

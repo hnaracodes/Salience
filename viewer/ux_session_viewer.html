@@ -329,6 +329,25 @@
       margin: 4px 0 8px;
     }
 
+    .copy-chip {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      background: rgba(34, 197, 94, 0.08);
+      color: #86efac;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+
+    .copy-chip.dim {
+      border-color: var(--border-strong);
+      background: var(--surface-elevated);
+      color: var(--text-dim);
+    }
+
     .element-detail-actions {
       display: flex;
       flex-wrap: wrap;
@@ -1464,6 +1483,28 @@
       return null;
     }
 
+    function lookupCopySignal(sectionId) {
+      if (!sectionId) return null;
+      const rows = viewerBundle.copy_signals || [];
+      return rows.find(r => r.section_id === sectionId) || null;
+    }
+
+    function renderCopyChips(copyRow) {
+      if (!copyRow) return "";
+      const src = copyRow.copy_source ? escapeHtml(copyRow.copy_source) : "heuristic";
+      const chips = [
+        copyRow.clarity != null ? `<span class="copy-chip">clarity ${Math.round(copyRow.clarity)}</span>` : "",
+        copyRow.urgency != null ? `<span class="copy-chip">urgency ${Math.round(copyRow.urgency)}</span>` : "",
+        copyRow.goal_fit != null && copyRow.goal_fit > 0
+          ? `<span class="copy-chip">goal fit ${Math.round(copyRow.goal_fit)}</span>` : "",
+        copyRow.copy_score != null
+          ? `<span class="copy-chip">copy ${Math.round(copyRow.copy_score)}</span>` : "",
+        `<span class="copy-chip dim">${src}</span>`,
+      ].filter(Boolean).join("");
+      const flags = (copyRow.flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+      return `<div class="sec-meta-row" style="margin-top:8px">${chips}${flags}</div>`;
+    }
+
     function selectElement(domId, opts = {}) {
       if (!domId) return;
       if (opts.t != null && !opts.skipJump) {
@@ -1517,6 +1558,8 @@
       const safeTagLine = escapeHtml(tagLine);
       const safeTitle = titleText ? escapeHtml(truncateText(titleText, 80)) : "";
       const safeFlags = (score?.attribution_flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+      const copyRow = lookupCopySignal(sec?.section_id);
+      const copyChips = renderCopyChips(copyRow);
       panel.hidden = false;
       panel.innerHTML = `
         <h3>${safeDomId}${clarityBadge}</h3>
@@ -1531,6 +1574,7 @@
           <span>clickability ${clickability != null ? Math.round(clickability) : "—"}</span>
         </div>
         ${safeFlags ? `<div class="sec-meta-row" style="margin-top:6px">${safeFlags}</div>` : ""}
+        ${copyChips}
         ${ins?.plain_summary ? `<p class="insight-rec" style="margin-top:8px;margin-bottom:0">${escapeHtml(ins.plain_summary)}</p>` : ""}
         ${ins?.recommendation ? `<p class="insight-rec" style="margin-top:6px;margin-bottom:0"><strong>Suggestion:</strong> ${escapeHtml(ins.recommendation)}</p>` : ""}
         <div class="element-detail-actions">

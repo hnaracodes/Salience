@@ -54,6 +54,18 @@ Maps UI copy and bundle fields to evidence tier. Update when validation memos ch
 
 **Not claimable:** Guaranteed revenue lift.
 
+### Copy engagement (multimodal fusion)
+
+| Field | Tier | Safe language |
+|-------|------|---------------|
+| `copy_signals[].clarity` | T0–T1 | Heuristic readability proxy from visible DOM text |
+| `copy_signals[].urgency` | T0–T1 | CTA/imperative keyword density heuristic |
+| `copy_signals[].goal_fit` | T0–T1 | Keyword overlap with user-supplied `site_goal` |
+| `marketing_scores.sections[].copy_score` | T0–T1 | Fused section score when `copy_source` is present |
+| `marketing_scores.provenance.copy_source: llm` | T0 | Model-assisted copy assessment (optional Tier B) |
+
+**Not claimable:** Copy scores reflect text heuristics or optional LLM pass — not user comprehension studies. Neural TRIBE scores remain pixel-driven; copy is a parallel signal fused at analyze time (`neural_only: false` in config).
+
 ## Evidence artifacts
 
 | Artifact | Path |

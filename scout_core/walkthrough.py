@@ -391,9 +391,24 @@ async def _execute_explore_action(page: Any, action: Any) -> dict[str, Any] | No
         scroll_px = int((action.metadata or {}).get("scroll_px", 540))
         await page.evaluate(f"window.scrollBy(0, {scroll_px})")
         return None
-    if action.kind in ("click", "hover") and action.selector:
-        step = {"action": action.kind, "selector": action.selector}
-        return await _run_step(page, step)
+    if action.kind in ("click", "hover"):
+        if action.locator_role and action.locator_name is not None:
+            locator = page.get_by_role(action.locator_role, name=action.locator_name)
+            if action.locator_href:
+                # Extra uniqueness check: prefer the href-anchored link but fall
+                # back to the role/name locator if the href form finds nothing.
+                esc = action.locator_href.replace("'", "\\'")
+                locator = page.locator(f"a[href='{esc}']").or_(locator)
+            await locator.first.click(timeout=5000)
+            return {
+                "action": action.kind,
+                "locator_role": action.locator_role,
+                "locator_name": action.locator_name,
+                "locator_href": action.locator_href,
+            }
+        if action.selector:
+            step = {"action": action.kind, "selector": action.selector}
+            return await _run_step(page, step)
     return None
 
 
@@ -463,6 +478,8 @@ async def _record_explore_async(
                 "t_idx": t_idx,
                 "action": action.kind,
                 "selector": action.selector,
+                "locator_role": action.locator_role,
+                "locator_name": action.locator_name,
                 "url": page.url,
                 "reason": action.reason,
             })
@@ -471,9 +488,15 @@ async def _record_explore_async(
                 budget.t_idx += 1
                 break
 
-            if action.kind in ("click", "hover") and action.selector:
+            _has_target = bool(action.selector or action.locator_role)
+            if action.kind in ("click", "hover") and _has_target:
                 marker = await _execute_explore_action(page, action)
-                action_key = f"{page.url}|{action.selector}"
+                # Build a stable action key for deduplication regardless of locator style.
+                action_key = (
+                    f"{page.url}|role={action.locator_role}:{action.locator_name}"
+                    if action.locator_role
+                    else f"{page.url}|{action.selector}"
+                )
                 budget.record_click(action_key)
                 if marker is not None:
                     marker.update({

@@ -487,6 +487,10 @@ def main() -> None:
         "element_insight_index": element_insight_index,
         "interaction_events": manifest.get("interaction_events") or [],
     }
+    copy_signals_path = session_dir / "copy_signals.json"
+    if copy_signals_path.is_file():
+        viewer_bundle["copy_signals"] = json.loads(copy_signals_path.read_text(encoding="utf-8"))
+
     (out_dir / "viewer_bundle.json").write_text(
         json.dumps(viewer_bundle, indent=2), encoding="utf-8",
     )
