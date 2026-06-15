@@ -30,6 +30,104 @@ img { max-width: 100%; height: auto; display: block; }
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* —— Scroll-driven engagement wash (GSAP updates CSS vars) —— */
+.engagement-wash {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--wash-opacity);
+  background: rgb(var(--wash-r), var(--wash-g), var(--wash-b));
+  transition: opacity 0.15s linear;
+  mix-blend-mode: screen;
+}
+
+.engagement-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: calc(var(--spotlight-strength) * 0.85);
+  background: radial-gradient(
+    ellipse 55% 45% at var(--spotlight-x) var(--spotlight-y),
+    rgba(232, 176, 122, 0.55) 0%,
+    rgba(109, 184, 138, 0.22) 35%,
+    transparent 70%
+  );
+  mix-blend-mode: soft-light;
+}
+
+.journey {
+  filter: saturate(var(--section-saturate)) brightness(var(--section-brightness));
+  transition: filter 0.4s var(--ease-out);
+}
+
+.section[data-engage="peak"] h1,
+.section[data-engage="peak"] h2 {
+  text-shadow: 0 0 48px rgba(232, 176, 122, 0.35);
+}
+
+.section[data-engage="dip"] {
+  color: color-mix(in srgb, var(--paper) 82%, var(--ink));
+}
+
+.section[data-engage="dip"] .section-label,
+.section[data-engage="dip"] .lead {
+  color: color-mix(in srgb, var(--paper-muted) 70%, var(--ink));
+}
+
+.section-engage-peak .btn-primary {
+  animation: cta-pulse 2.4s var(--ease-in-out) infinite;
+  box-shadow: 0 0 0 0 rgba(109, 184, 138, 0.5);
+}
+
+@keyframes cta-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(109, 184, 138, 0.45);
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    box-shadow: 0 0 28px 6px rgba(109, 184, 138, 0.35);
+    transform: translateY(-2px) scale(1.02);
+  }
+}
+
+.section-engage-peak .hero-visual {
+  border-color: rgba(196, 137, 90, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(232, 176, 122, 0.25),
+    0 24px 80px rgba(196, 137, 90, 0.2);
+}
+
+.section-engage-peak .price-tier.highlight {
+  border-color: var(--signal);
+  box-shadow:
+    0 0 0 2px rgba(109, 184, 138, 0.35),
+    0 16px 48px rgba(109, 184, 138, 0.15);
+  background: linear-gradient(165deg, rgba(109, 184, 138, 0.12), var(--ink-panel));
+}
+
+.section-engage-rise .cost-card.revealed,
+.section-engage-rise .model-card.featured {
+  border-color: rgba(196, 137, 90, 0.45);
+  box-shadow: 0 12px 40px rgba(196, 137, 90, 0.12);
+}
+
+#cta.section-engage-peak {
+  background: linear-gradient(180deg, var(--ink-elevated), #1a1410 50%, var(--ink));
+  border-top: 1px solid rgba(232, 176, 122, 0.2);
+}
+
+#cta.section-engage-peak h2 {
+  color: var(--copper-bright);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .section-engage-peak .btn-primary { animation: none; }
+  .journey { filter: none; }
+  .engagement-wash, .engagement-spotlight { display: none; }
+}
+
 /* —— Header —— */
 header[role="banner"] {
   position: fixed;

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, improved]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest
+      - name: Run unit tests (no GPU, no Modal)
+        env:
+          FAKE_TRIBE: "1"
+          PYTHONPATH: .
+        run: python -m pytest tests/ -v --tb=short -m "not integration"
+
+  build-api:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.api -t scout-api .
+
+  build-worker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.worker -t scout-worker .

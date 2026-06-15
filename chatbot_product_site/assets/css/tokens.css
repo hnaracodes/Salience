@@ -36,4 +36,15 @@
 
   --content-max: 1120px;
   --header-h: 64px;
+
+  /* Scroll-choreography wash (updated by GSAP) */
+  --wash-r: 10;
+  --wash-g: 9;
+  --wash-b: 8;
+  --wash-opacity: 0;
+  --spotlight-x: 50%;
+  --spotlight-y: 40%;
+  --spotlight-strength: 0;
+  --section-saturate: 1;
+  --section-brightness: 1;
 }

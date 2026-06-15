@@ -291,6 +291,86 @@
       margin: 0 0 10px;
     }
 
+    .element-detail-panel {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.32);
+      border: 1px solid var(--accent-cyan-dim);
+    }
+
+    .element-detail-panel[hidden] { display: none !important; }
+
+    .element-detail-panel h3 {
+      margin: 0 0 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .element-detail-panel .el-detail-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .element-detail-panel .el-detail-score {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent-amber);
+      line-height: 1.1;
+    }
+
+    .element-detail-panel .el-detail-source {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin: 4px 0 8px;
+    }
+
+    .copy-chip {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      background: rgba(34, 197, 94, 0.08);
+      color: #86efac;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+
+    .copy-chip.dim {
+      border-color: var(--border-strong);
+      background: var(--surface-elevated);
+      color: var(--text-dim);
+    }
+
+    .element-detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .element-detail-actions button {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      background: var(--surface-elevated);
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .element-detail-actions button:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
     .element-correlate {
       margin-top: 10px;
       padding: 10px 12px;
@@ -1029,6 +1109,20 @@
       margin: 0 0 var(--space-sm);
     }
 
+    .clarity-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #0f3d2e;
+      background: #b8f0d8;
+      border: 1px solid #6fd4a8;
+      vertical-align: middle;
+    }
+
     .element-empty-help strong {
       font-family: var(--font-mono);
       font-weight: 500;
@@ -1164,6 +1258,11 @@
             <span class="badge" id="opacityVal">55%</span>
           </div>
         </div>
+        <div class="control-group">
+          <label class="control-label" for="elementMask">
+            <input type="checkbox" id="elementMask" /> Element mask
+          </label>
+        </div>
       </div>
     </div>
     <div class="hud-meta">
@@ -1235,6 +1334,8 @@
 
         <section class="panel">
           <h2 class="panel-title">Element attention</h2>
+          <p class="source-note">Click any highlighted box on the page to inspect that element&apos;s scores.</p>
+          <div id="elementDetail" class="element-detail-panel" hidden aria-live="polite"></div>
           <p class="source-note" id="elementSourceNote"></p>
           <ul class="element-list" id="topEl"></ul>
           <div id="elementCorrelate" class="element-correlate" hidden></div>
@@ -1250,7 +1351,27 @@
 
   <script>
     const params = new URLSearchParams(location.search);
-    const base = params.get("base") || ".";
+
+    function escapeHtml(s) {
+      if (s == null) return "";
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function resolveBase(raw) {
+      const v = (raw || ".").trim();
+      if (!v || v === ".") return ".";
+      if (/^https?:\/\//i.test(v)) return ".";
+      if (v.includes("..")) return ".";
+      if (!/^[\w./-]+$/.test(v)) return ".";
+      return v;
+    }
+
+    const base = resolveBase(params.get("base"));
 
     const walkVideo = document.getElementById("walkVideo");
     const frameImg = document.getElementById("frameImg");
@@ -1279,6 +1400,8 @@
     let heatmapOffscreen = null;
     let currentT = 0;
     let heatmapOpacityFactor = 0.55;
+    let elementMaskEnabled = false;
+    const elementMask = document.getElementById("elementMask");
     let activeSectionId = null;
     let selectedDomId = null;
     let brainSurface = null;
@@ -1338,55 +1461,151 @@
       return v == null ? null : Number(v);
     }
 
+    function lookupElementScore(domId, t) {
+      const sec = sectionForTimestep(t)
+        || (viewerBundle.sections || []).find(s => s.section_id === activeSectionId);
+      if (sec) {
+        const byT = sec.element_scores_by_t || {};
+        const atT = (byT[String(t)] || []).find(e => e.dom_id === domId);
+        if (atT) return { ...atT, source: `TR ${t}` };
+        const nearest = nearestSampleT(sec, t);
+        if (nearest != null) {
+          const atN = (byT[String(nearest)] || []).find(e => e.dom_id === domId);
+          if (atN) return { ...atN, source: `nearest sample TR ${nearest}` };
+        }
+        const rollup = (sec.top_elements || []).find(e => e.dom_id === domId);
+        if (rollup) return { ...rollup, source: "section rollup" };
+      }
+      const idx = (viewerBundle.element_scores_index || {})[domId];
+      if (idx?.rollup && Object.keys(idx.rollup).length) {
+        return { ...idx.rollup, source: idx.rollup.source || "session best" };
+      }
+      return null;
+    }
+
+    function lookupCopySignal(sectionId) {
+      if (!sectionId) return null;
+      const rows = viewerBundle.copy_signals || [];
+      return rows.find(r => r.section_id === sectionId) || null;
+    }
+
+    function renderCopyChips(copyRow) {
+      if (!copyRow) return "";
+      const src = copyRow.copy_source ? escapeHtml(copyRow.copy_source) : "heuristic";
+      const chips = [
+        copyRow.clarity != null ? `<span class="copy-chip">clarity ${Math.round(copyRow.clarity)}</span>` : "",
+        copyRow.urgency != null ? `<span class="copy-chip">urgency ${Math.round(copyRow.urgency)}</span>` : "",
+        copyRow.goal_fit != null && copyRow.goal_fit > 0
+          ? `<span class="copy-chip">goal fit ${Math.round(copyRow.goal_fit)}</span>` : "",
+        copyRow.copy_score != null
+          ? `<span class="copy-chip">copy ${Math.round(copyRow.copy_score)}</span>` : "",
+        `<span class="copy-chip dim">${src}</span>`,
+      ].filter(Boolean).join("");
+      const flags = (copyRow.flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+      return `<div class="sec-meta-row" style="margin-top:8px">${chips}${flags}</div>`;
+    }
+
     function selectElement(domId, opts = {}) {
       if (!domId) return;
-      selectedDomId = domId;
-      const index = (viewerBundle.element_tr_index || {})[domId];
-      const jumpT = opts.t ?? index?.salient_trs?.[0]?.t ?? index?.grounded_spikes?.[0];
-      if (jumpT != null && !opts.skipJump) {
-        setTimestep(Number(jumpT));
+      if (opts.t != null && !opts.skipJump) {
+        selectedDomId = domId;
+        setTimestep(Number(opts.t));
         return;
       }
-      const sec = (viewerBundle.sections || []).find(s => s.section_id === activeSectionId)
+      selectedDomId = domId;
+      const sec = sectionForTimestep(currentT)
+        || (viewerBundle.sections || []).find(s => s.section_id === activeSectionId)
         || (viewerBundle.sections || [])[0];
+      if (sec) activeSectionId = sec.section_id;
       updateSidebar(sec?.section_id || activeSectionId, currentT);
-      renderElementCorrelate(domId);
+      renderElementDetail(domId, currentT);
       const snap = snapshotForTimestep(currentT);
       if (snap) {
         const { elements } = elementsForTimestep(sec, currentT);
         drawBboxes(snap, elements);
       }
+      const row = document.querySelector(`.el-row[data-dom-id="${CSS.escape(domId)}"]`);
+      if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
 
-    function renderElementCorrelate(domId) {
-      const box = document.getElementById("elementCorrelate");
+    function renderElementDetail(domId, t) {
+      const panel = document.getElementById("elementDetail");
+      const correlate = document.getElementById("elementCorrelate");
       if (!domId) {
-        box.hidden = true;
+        panel.hidden = true;
+        correlate.hidden = true;
         return;
       }
+      const score = lookupElementScore(domId, t);
       const ins = elementInsight(domId);
       const index = (viewerBundle.element_tr_index || {})[domId] || {};
       const salient = index.salient_trs || [];
       const grounded = index.grounded_spikes || [];
+      const snapEl = (snapshotForTimestep(t)?.elements || []).find(e => e.dom_id === domId);
+
+      const combined = score?.combined_score != null ? Number(score.combined_score) : null;
+      const attention = score?.attention_score != null ? Number(score.attention_score) : null;
+      const clickability = score?.clickability != null ? Number(score.clickability) : null;
+      const pct = combined != null ? Math.min(100, Math.max(0, combined)) : 0;
+      const clarityBadge = score?.clarity_matched
+        ? `<span class="clarity-badge" title="Microsoft Clarity CSV match">Clarity</span>`
+        : "";
+      const peakT = salient[0]?.t ?? grounded[0] ?? null;
+      const titleText = ins?.text || snapEl?.text || "";
+      const tagLine = score?.tag || snapEl?.tag || ins?.role || "element";
+
+      const safeDomId = escapeHtml(domId);
+      const safeTagLine = escapeHtml(tagLine);
+      const safeTitle = titleText ? escapeHtml(truncateText(titleText, 80)) : "";
+      const safeFlags = (score?.attribution_flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+      const copyRow = lookupCopySignal(sec?.section_id);
+      const copyChips = renderCopyChips(copyRow);
+      panel.hidden = false;
+      panel.innerHTML = `
+        <h3>${safeDomId}${clarityBadge}</h3>
+        <div class="el-detail-tag">${safeTagLine}${safeTitle ? ` · "${safeTitle}"` : ""}</div>
+        <div class="el-detail-score">${combined != null ? `${Math.round(combined)}/100` : "—"}</div>
+        <div class="el-detail-source">${score?.source ? `Scores from ${escapeHtml(score.source)}` : "No attribution scores for this element yet"}</div>
+        <div class="attn-meter" role="presentation" aria-hidden="true">
+          <div class="attn-meter-fill" style="width:${pct.toFixed(1)}%"></div>
+        </div>
+        <div class="score-pair">
+          <span>attention ${attention != null ? Math.round(attention) : "—"}</span>
+          <span>clickability ${clickability != null ? Math.round(clickability) : "—"}</span>
+        </div>
+        ${safeFlags ? `<div class="sec-meta-row" style="margin-top:6px">${safeFlags}</div>` : ""}
+        ${copyChips}
+        ${ins?.plain_summary ? `<p class="insight-rec" style="margin-top:8px;margin-bottom:0">${escapeHtml(ins.plain_summary)}</p>` : ""}
+        ${ins?.recommendation ? `<p class="insight-rec" style="margin-top:6px;margin-bottom:0"><strong>Suggestion:</strong> ${escapeHtml(ins.recommendation)}</p>` : ""}
+        <div class="element-detail-actions">
+          ${peakT != null ? `<button type="button" data-jump-tr="${peakT}">Jump to peak TR ${peakT}</button>` : ""}
+          ${grounded.length ? `<button type="button" data-jump-tr="${grounded[0]}">Jump to grounded spike TR ${grounded[0]}</button>` : ""}
+        </div>`;
+      panel.querySelectorAll("[data-jump-tr]").forEach(btn => {
+        btn.addEventListener("click", () => selectElement(domId, { t: Number(btn.dataset.jumpTr) }));
+      });
+
       const chips = salient.slice(0, 8).map(row => {
-        const active = row.t === currentT ? " active" : "";
+        const active = row.t === t ? " active" : "";
         return `<button type="button" class="tr-chip${active}" data-tr="${row.t}">TR ${row.t} · ${formatDensity(row.density)}</button>`;
       }).join("");
-      const title = ins?.role || domId;
-      const textLine = ins?.text ? `<p class="brain-meta">"${truncateText(ins.text, 120)}"</p>` : "";
-      box.hidden = false;
-      box.innerHTML = `
-        <h4>${title}</h4>
-        ${textLine}
-        <p class="source-note" style="margin:0">Brain state when this element was most visually salient (model attention). Not a direct UI response measure.</p>
-        ${ins?.plain_summary ? `<p class="insight-rec" style="margin-top:8px">${ins.plain_summary}</p>` : ""}
-        ${ins?.job ? `<p class="insight-job"><strong>Job:</strong> ${ins.job}</p>` : ""}
-        ${ins?.recommendation ? `<p class="insight-rec"><strong>Suggestion:</strong> ${ins.recommendation}</p>` : ""}
-        ${grounded.length ? `<p class="brain-meta">Grounded spikes: ${grounded.map(t => `TR ${t}`).join(", ")}</p>` : ""}
-        ${salient.length ? `<div class="tr-chip-row">${chips}</div>` : "<p class=\"empty-note\">No salient TR samples for this element yet.</p>"}`;
-      box.querySelectorAll(".tr-chip").forEach(btn => {
-        btn.addEventListener("click", () => selectElement(domId, { t: Number(btn.dataset.tr), skipJump: false }));
-      });
+      if (salient.length || grounded.length) {
+        correlate.hidden = false;
+        correlate.innerHTML = `
+          <h4>Salience timeline</h4>
+          <p class="source-note" style="margin:0">Model attention density when this element was on screen.</p>
+          ${grounded.length ? `<p class="brain-meta">Grounded spikes: ${grounded.map(tr => `TR ${tr}`).join(", ")}</p>` : ""}
+          ${salient.length ? `<div class="tr-chip-row">${chips}</div>` : ""}`;
+        correlate.querySelectorAll(".tr-chip").forEach(btn => {
+          btn.addEventListener("click", () => selectElement(domId, { t: Number(btn.dataset.tr) }));
+        });
+      } else {
+        correlate.hidden = true;
+      }
+    }
+
+    function renderElementCorrelate(domId) {
+      renderElementDetail(domId, currentT);
     }
 
     async function loadJson(path) {
@@ -1529,7 +1748,8 @@
         const isSel = selectedDomId && el.dom_id === selectedDomId;
         const ins = elementInsight(el.dom_id);
         const reaction = ins?.reaction || (isHi ? "engaging" : "neutral");
-        const isScored = scoredIds.has(el.dom_id) || ins;
+        const isScored = scoredIds.has(el.dom_id) || ins
+          || (viewerBundle.element_scores_index || {})[el.dom_id];
         const dimmed = !isScored && !isSel;
 
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -1556,8 +1776,17 @@
         if (isHi || isSel || ins) g.appendChild(label);
         g.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          if (el.dom_id) selectElement(el.dom_id);
+          if (el.dom_id) selectElement(el.dom_id, { skipJump: true });
         });
+        g.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            if (el.dom_id) selectElement(el.dom_id, { skipJump: true });
+          }
+        });
+        g.setAttribute("tabindex", "0");
+        g.setAttribute("role", "button");
+        g.setAttribute("aria-label", `Inspect ${bboxLabelFor(el)}`);
         bboxCanvas.appendChild(g);
       }
     }
@@ -1599,6 +1828,38 @@
       octx.clearRect(0, 0, w, h);
       octx.drawImage(heatmapRawImg, 0, 0);
       const raw = octx.getImageData(0, 0, w, h);
+      if (elementMaskEnabled && sessionManifest && sessionManifest.dom_snapshots) {
+        const snap = sessionManifest.dom_snapshots[currentT] || sessionManifest.dom_snapshots[0];
+        const sec = (viewerBundle.sections || []).find((s) => s.section_id === sectionSelect.value);
+        const tops = (sec && sec.top_elements) ? sec.top_elements.slice(0, 5) : [];
+        const scrollY = snap.scrollY || 0;
+        const capH = (viewerBundle.capture || {}).height || h;
+        const mask = document.createElement("canvas");
+        mask.width = w;
+        mask.height = h;
+        const mctx = mask.getContext("2d");
+        mctx.fillStyle = "#000";
+        mctx.fillRect(0, 0, w, h);
+        mctx.fillStyle = "#fff";
+        for (const el of tops) {
+          const bb = el.bbox || [];
+          if (bb.length < 4) continue;
+          const vx = bb[0];
+          const vy = bb[1] - scrollY;
+          const vw = bb[2];
+          const vh = bb[3];
+          const capW = (viewerBundle.capture || {}).width || w;
+          const sx = w / capW;
+          const sy = h / capH;
+          mctx.fillRect(vx * sx, vy * sy, vw * sx, vh * sy);
+        }
+        const maskData = mctx.getImageData(0, 0, w, h);
+        for (let i = 0; i < raw.data.length; i += 4) {
+          if (maskData.data[i] < 128) {
+            raw.data[i + 3] = 0;
+          }
+        }
+      }
       const mapped = applyColormap(raw, heatmapOpacityFactor);
 
       const tmp = document.createElement("canvas");
@@ -1775,7 +2036,7 @@
       const text = narrative.executive_summary;
       if (text) {
         summary.hidden = false;
-        summary.innerHTML = `<h3>Executive summary</h3><p class="source-note" style="margin:0">${text}</p>`;
+        summary.innerHTML = `<h3>Executive summary</h3><p class="source-note" style="margin:0">${escapeHtml(text)}</p>`;
       } else {
         summary.hidden = true;
         summary.innerHTML = "";
@@ -1913,16 +2174,16 @@
         const channel = triggers.emotion_channel || null;
         const emotionZ = triggers.emotion_z;
         const eCls = emotionClass(channel);
-        const channelLabel = channel
+        const channelLabel = escapeHtml(channel
           ? String(channel).replace(/_/g, " ")
-          : "spike";
+          : "spike");
         const zBlock = emotionZ != null
           ? `<span class="emotion-z"><span>Z</span>${Number(emotionZ).toFixed(2)}</span>`
           : "";
         const extraTriggers = Object.entries(triggers)
           .filter(([k, v]) => v != null && k !== "emotion_channel" && k !== "emotion_z")
           .slice(0, 3)
-          .map(([k, v]) => `${k}=${typeof v === "number" ? v.toFixed(2) : v}`)
+          .map(([k, v]) => `${escapeHtml(k)}=${escapeHtml(typeof v === "number" ? v.toFixed(2) : v)}`)
           .join(" · ");
         const g = ev.grounding;
         if (g?.dom_id) {
@@ -1933,10 +2194,10 @@
               ${zBlock}
             </div>
             ${extraTriggers ? `<div class="trigger">${extraTriggers}</div>` : ""}
-            <div class="winner">${g.dom_id} <span style="color:var(--text-dim)">(${g.tag || "?"})</span> · attn ${dens}</div>
+            <div class="winner">${escapeHtml(g.dom_id)} <span style="color:var(--text-dim)">(${escapeHtml(g.tag || "?")})</span> · attn ${dens}</div>
           </div>`;
         }
-        const reason = ev.grounding_skip_reason || "not grounded";
+        const reason = escapeHtml(ev.grounding_skip_reason || "not grounded");
         return `<div class="grounding-card ${eCls}">
             <div class="emotion-head">
               <span class="emotion-channel">${channelLabel}</span>
@@ -1982,7 +2243,7 @@
       }
       const flags = sec.flags || [];
       const flagHtml = flags.length
-        ? flags.map(f => `<span class="flag-chip">${f}</span>`).join("")
+        ? flags.map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("")
         : '<span class="flag-chip empty">none</span>';
       const hs = sec.heatmap_stats;
       let hmBadges = "";
@@ -2022,7 +2283,7 @@
       renderSectionDetail(sec);
 
       document.getElementById("secTips").innerHTML = (sec.recommendations || [])
-        .map(tip => `<li>${tip}</li>`).join("");
+        .map(tip => `<li>${escapeHtml(tip)}</li>`).join("");
 
       const { elements, source } = elementsForTimestep(sec, t);
       document.getElementById("elementSourceNote").textContent =
@@ -2051,12 +2312,16 @@
             ? Math.min(100, Math.max(0, combined))
             : (dens != null && maxDens > 0 ? Math.min(100, (Number(dens) / maxDens) * 100) : 0);
           const sel = selectedDomId && e.dom_id === selectedDomId ? " selected" : "";
-          const flagHtml = (e.attribution_flags || []).map(f => `<span class="flag-chip">${f}</span>`).join("");
-          return `<li class="el-row clickable${sel}" data-dom-id="${e.dom_id || ""}" tabindex="0" role="button">
+          const flagHtml = (e.attribution_flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+          const clarityBadge = e.clarity_matched
+            ? `<span class="clarity-badge" title="Microsoft Clarity CSV match">Clarity</span>`
+            : "";
+          const safeDom = escapeHtml(e.dom_id || "");
+          return `<li class="el-row clickable${sel}" data-dom-id="${safeDom}" tabindex="0" role="button">
             <div class="el-row-head">
               <div>
-                <div class="el-dom">${e.dom_id || "—"}</div>
-                <div class="el-tag">${e.tag || ""}</div>
+                <div class="el-dom">${safeDom || "—"}${clarityBadge}</div>
+                <div class="el-tag">${escapeHtml(e.tag || "")}</div>
               </div>
               <div class="el-score">${combined != null ? Math.round(combined) + "/100" : formatDensity(dens)}${nLabel}</div>
             </div>
@@ -2073,7 +2338,7 @@
         list.querySelectorAll(".el-row.clickable").forEach(row => {
           const domId = row.dataset.domId;
           if (!domId) return;
-          const handler = () => selectElement(domId);
+          const handler = () => selectElement(domId, { skipJump: true });
           row.addEventListener("click", handler);
           row.addEventListener("keydown", (ev) => {
             if (ev.key === "Enter" || ev.key === " ") {
@@ -2083,7 +2348,7 @@
           });
         });
       }
-      if (selectedDomId) renderElementCorrelate(selectedDomId);
+      if (selectedDomId) renderElementDetail(selectedDomId, currentT);
     }
 
     function showFrameLayer(useFrame) {
@@ -2189,7 +2454,7 @@
       drawActivationCurve();
       syncBrainPanel(t);
       updateFrameCaption(t);
-      if (selectedDomId) renderElementCorrelate(selectedDomId);
+      if (selectedDomId) renderElementDetail(selectedDomId, currentT);
     }
 
     function syncBrainPanel(t) {
@@ -2297,6 +2562,13 @@
         heatmapOpacity.setAttribute("aria-valuetext", `${heatmapOpacity.value} percent`);
         drawHeatmap();
       });
+
+      if (elementMask) {
+        elementMask.addEventListener("change", () => {
+          elementMaskEnabled = elementMask.checked;
+          drawHeatmap();
+        });
+      }
 
       window.addEventListener("resize", resizeCanvases);
 

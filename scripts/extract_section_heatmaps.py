@@ -162,7 +162,22 @@ def main() -> None:
     parser.add_argument("--refresh-sections", action="store_true", help="Re-merge top_elements into analysis_bundle")
     parser.add_argument("--capture-height", type=int, default=None)
     parser.add_argument("--capture-width", type=int, default=None)
+    parser.add_argument(
+        "--production",
+        action="store_true",
+        help="Production profile: Modal DINOv2 heatmaps + dense TR sampling",
+    )
     args = parser.parse_args()
+
+    if args.production:
+        args.modal = True
+        if not args.timesteps:
+            manifest_path = SESSIONS_DIR / args.session_id / "session_manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                n = len(manifest.get("dom_snapshots") or [])
+                if n > 0:
+                    args.timesteps = ",".join(str(i) for i in range(n))
 
     session_dir = SESSIONS_DIR / args.session_id
     if not session_dir.is_dir():

@@ -332,6 +332,8 @@ def _run_grounding_step(
 # ---------------------------------------------------------------------------
 
 def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Path]:
+    from scout_core.storage_migrations import resolve_storage_path
+
     row = conn.execute(
         "SELECT path_roi_parquet, path_network_parquet FROM norm_bundle WHERE norm_id = ?",
         (norm_id,),
@@ -340,7 +342,7 @@ def _load_norm_bundle(conn: sqlite3.Connection, norm_id: str) -> tuple[Path, Pat
         raise SystemExit(
             f"norm_id {norm_id!r} not registered. Run: python scripts/compute_norms.py --norm-id {norm_id} ..."
         )
-    return Path(row[0]), Path(row[1])
+    return resolve_storage_path(row[0]), resolve_storage_path(row[1])
 
 
 def main() -> None:
@@ -412,6 +414,15 @@ def main() -> None:
         action="store_true",
         default=False,
         help="Skip marketing_scores even in --website / --sections mode.",
+    )
+    parser.add_argument(
+        "--clarity-csv",
+        type=Path,
+        default=None,
+        help=(
+            "Optional Microsoft Clarity click-export CSV. "
+            "Falls back to scout_data/sessions/<id>/clarity_clicks.csv when omitted."
+        ),
     )
     args = parser.parse_args()
 
@@ -576,8 +587,25 @@ def main() -> None:
         else:
             from scout_core.section_pipeline import run_section_analytics
 
-            section_report = run_section_analytics(session_dir, bundle_dict)
+            pipeline_extras: dict[str, Any] = {}
+            clarity_csv = args.clarity_csv
+            if clarity_csv is not None and not clarity_csv.is_absolute():
+                clarity_csv = PROJECT_ROOT / clarity_csv
+            section_report = run_section_analytics(
+                session_dir,
+                bundle_dict,
+                clarity_csv=clarity_csv,
+                pipeline_extras=pipeline_extras,
+            )
             bundle_dict["section_report"] = section_report
+            if pipeline_extras.get("clarity_attribution"):
+                bundle_dict["clarity_attribution"] = pipeline_extras["clarity_attribution"]
+                meta = pipeline_extras["clarity_attribution"]
+                print(
+                    f"  Clarity CSV: {meta.get('n_matched', 0)}/{meta.get('n_rows', 0)} elements matched.",
+                )
+                if meta.get("host_warning"):
+                    print(f"  WARNING: {meta['host_warning']}", file=sys.stderr)
             print(f"  {len(section_report)} section(s) in section_report[].")
 
     # -----------------------------------------------------------------------
@@ -618,8 +646,16 @@ def main() -> None:
         ms = bundle_dict["marketing_scores"]
         print(
             f"  overall_score={ms.get('overall_score')} "
+            f"comparison_score={ms.get('comparison_score')} "
             f"display_avg={ms.get('display_curve', {}).get('avg_score')}"
         )
+
+    conversion_model = PROJECT_ROOT / "scout_data" / "models" / "conversion_v1.npz"
+    if conversion_model.is_file() and bundle_dict.get("section_report"):
+        from scout_core.conversion_model import LogisticConversionModel, score_bundle
+
+        model = LogisticConversionModel.load(conversion_model)
+        bundle_dict["conversion_prediction"] = score_bundle(bundle_dict, model)
 
     out_json.write_text(json.dumps(bundle_dict, indent=2), encoding="utf-8")
 

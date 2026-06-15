@@ -7,6 +7,32 @@ from pathlib import Path
 
 import numpy as np
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _portable_storage_path(path: Path) -> str:
+    """Store repo-relative paths so SQLite works across host OS and containers."""
+    resolved = path.resolve()
+    try:
+        return str(resolved.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+def resolve_storage_path(stored: str) -> Path:
+    """Resolve a path from SQLite — supports repo-relative and legacy absolute entries."""
+    raw = Path(stored)
+    if raw.is_file():
+        return raw
+    relative = PROJECT_ROOT / stored
+    if relative.is_file():
+        return relative
+    fallback = PROJECT_ROOT / "scout_norms" / raw.parent.name / raw.name
+    if fallback.is_file():
+        return fallback
+    return raw
+
+
 KRAGEL_EMOTION_COLUMNS = [
     "contentment", "amusement", "surprise", "fear", "anger", "sadness", "neutral",
 ]
@@ -142,8 +168,8 @@ def register_norm_bundle(
         """,
         (
             norm_id,
-            str(roi_parquet.resolve()),
-            str(network_parquet.resolve()),
+            _portable_storage_path(roi_parquet),
+            _portable_storage_path(network_parquet),
             json.dumps(meta),
             datetime.now(timezone.utc).isoformat(),
         ),

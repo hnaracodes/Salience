@@ -234,6 +234,30 @@ def score_snapshot_elements(
     return rows
 
 
+def _stamp_gaussian(
+    heatmap: np.ndarray,
+    cx: float,
+    cy: float,
+    sigma_x: float,
+    sigma_y: float,
+    peak: float,
+) -> None:
+    """Add an isotropic-ish Gaussian blob centered at (cx, cy)."""
+    h, w = heatmap.shape
+    radius = max(3, int(3.0 * max(sigma_x, sigma_y)))
+    x0 = max(0, int(cx) - radius)
+    x1 = min(w, int(cx) + radius + 1)
+    y0 = max(0, int(cy) - radius)
+    y1 = min(h, int(cy) + radius + 1)
+    if x1 <= x0 or y1 <= y0:
+        return
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    g = np.exp(
+        -0.5 * (((xx - cx) / max(sigma_x, 1e-3)) ** 2 + ((yy - cy) / max(sigma_y, 1e-3)) ** 2),
+    )
+    heatmap[y0:y1, x0:x1] = np.maximum(heatmap[y0:y1, x0:x1], (peak * g).astype(np.float32))
+
+
 def build_saliency_heatmap(
     frame_path: Path,
     snapshot: dict[str, Any],
@@ -241,13 +265,19 @@ def build_saliency_heatmap(
     capture_h: int | None = None,
     capture_w: int | None = None,
     config_path: Path | None = None,
+    max_elements: int | None = None,
+    gaussian_sigma_frac: float = 0.35,
 ) -> tuple[np.ndarray, list[dict[str, Any]]]:
-    """Rasterize per-element saliency into a heatmap matching capture resolution."""
+    """Rasterize per-element saliency into a heatmap matching capture resolution.
+
+    Uses Gaussian falloff from bbox centers (ISSUE-002) instead of flat rectangle fill.
+    """
     image = _load_image_rgb(frame_path)
     img_h, img_w = image.shape[:2]
     out_h = int(capture_h or img_h)
     out_w = int(capture_w or img_w)
     cfg = load_saliency_config(config_path)
+    cap_n = max_elements if max_elements is not None else int(cfg.get("max_raster_elements", 40))
     heatmap = np.zeros((out_h, out_w), dtype=np.float32)
     scored: list[dict[str, Any]] = []
     scale_x = out_w / max(img_w, 1)
@@ -261,8 +291,11 @@ def build_saliency_heatmap(
             scroll_x=int(snapshot.get("scrollX", 0)),
             config=cfg,
         )
-        if row is None:
-            continue
+        if row is not None:
+            scored.append(row)
+
+    scored.sort(key=lambda r: r["saliency_score"], reverse=True)
+    for row in scored[:cap_n]:
         vx, vy, vw, vh = row["viewport_bbox"]
         x1 = max(0, min(out_w, int(round(vx * scale_x))))
         y1 = max(0, min(out_h, int(round(vy * scale_y))))
@@ -270,10 +303,12 @@ def build_saliency_heatmap(
         y2 = max(0, min(out_h, int(round((vy + vh) * scale_y))))
         if x2 <= x1 or y2 <= y1:
             continue
-        value = float(row["saliency_score"])
-        heatmap[y1:y2, x1:x2] = np.maximum(heatmap[y1:y2, x1:x2], value)
-        scored.append(row)
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        sigma_x = max(4.0, (x2 - x1) * gaussian_sigma_frac)
+        sigma_y = max(4.0, (y2 - y1) * gaussian_sigma_frac)
+        _stamp_gaussian(heatmap, cx, cy, sigma_x, sigma_y, float(row["saliency_score"]))
 
     if np.max(heatmap) > 0:
         heatmap = heatmap / float(np.max(heatmap))
-    return heatmap.astype(np.float32), sorted(scored, key=lambda r: r["saliency_score"], reverse=True)
+    return heatmap.astype(np.float32), scored[:cap_n]
