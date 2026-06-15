@@ -18,7 +18,7 @@ jobs:
         env:
           FAKE_TRIBE: "1"
           PYTHONPATH: .
-        run: python -m pytest tests/ -v --tb=short -k "not playwright"
+        run: python -m pytest tests/ -v --tb=short -m "not integration"
 
   build-api:
     runs-on: ubuntu-latest
