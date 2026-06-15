@@ -14,3 +14,5 @@ joblib>=1.4
 yt-dlp>=2024.1
 imageio[ffmpeg]>=2.34
 google-genai>=1.0
+fastapi
+tldextract
