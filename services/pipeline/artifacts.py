@@ -1,14 +1,14 @@
-"""R2 / S3-compatible artifact storage for scan results."""
+"""S3-compatible artifact storage for scan results (Backblaze B2 in prod, MinIO locally)."""
 
 from __future__ import annotations
 
 import logging
 import mimetypes
-import os
 import warnings
 from pathlib import Path
 
 from activation_store import SESSIONS_DIR
+from services.infra.config import load_object_storage_config
 
 logger = logging.getLogger(__name__)
 
@@ -18,39 +18,31 @@ def _is_local_dev_object_store(endpoint: str) -> bool:
     return "minio" in lowered or "localhost:9000" in lowered or "127.0.0.1:9000" in lowered
 
 
-def _internal_endpoint_url() -> str:
-    return os.environ["R2_ENDPOINT_URL"]
-
-
-def _browser_endpoint_url() -> str:
+def _browser_endpoint_url(cfg) -> str:
     """S3 endpoint hostname reachable from the user's browser (not Docker-internal)."""
-    public = os.environ.get("R2_PUBLIC_ENDPOINT_URL", "").strip()
-    if public:
-        return public
-    internal = os.environ.get("R2_ENDPOINT_URL", "")
-    if _is_local_dev_object_store(internal):
+    if cfg.public_endpoint_url:
+        return cfg.public_endpoint_url
+    if _is_local_dev_object_store(cfg.endpoint_url):
         return "http://127.0.0.1:9000"
-    return internal
+    return cfg.endpoint_url
 
 
-def _client(*, endpoint_url: str | None = None):
+def _client(cfg, *, endpoint_url: str | None = None):
     import boto3
     from botocore.config import Config
 
     return boto3.client(
         "s3",
-        endpoint_url=endpoint_url or _internal_endpoint_url(),
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        endpoint_url=endpoint_url or cfg.endpoint_url,
+        aws_access_key_id=cfg.access_key_id,
+        aws_secret_access_key=cfg.secret_access_key,
         config=Config(signature_version="s3v4"),
     )
 
 
-def _ensure_bucket(client, bucket: str) -> None:
-    """Create the dev MinIO bucket when missing; production R2 buckets must pre-exist."""
+def _ensure_bucket(client, bucket: str, *, endpoint: str) -> None:
+    """Create the dev MinIO bucket when missing; production buckets must pre-exist."""
     from botocore.exceptions import ClientError
-
-    endpoint = os.environ.get("R2_ENDPOINT_URL", "")
 
     try:
         client.head_bucket(Bucket=bucket)
@@ -62,7 +54,8 @@ def _ensure_bucket(client, bucket: str) -> None:
 
     if not _is_local_dev_object_store(endpoint):
         raise RuntimeError(
-            f"R2 bucket {bucket!r} does not exist at {endpoint}. Create it in Cloudflare R2 first."
+            f"Object storage bucket {bucket!r} does not exist at {endpoint}. "
+            "Create it in Backblaze B2 (or your S3 provider) first."
         )
 
     client.create_bucket(Bucket=bucket)
@@ -89,22 +82,22 @@ def upload_viewer(
     *,
     sanitize: bool = False,
 ) -> str:
-    """Upload ux_viewer/ directory to R2 under scans/<scan_id>/ux_viewer/.
+    """Upload ux_viewer/ directory to object storage under scans/<scan_id>/ux_viewer/.
 
     sanitize=False by default: exported index.html is a trusted repo template and
     must keep its script tags for the viewer to boot.
     """
     viewer_dir = SESSIONS_DIR / session_id / "ux_viewer"
+    cfg = load_object_storage_config()
 
-    if not os.environ.get("R2_ENDPOINT_URL"):
+    if not cfg.configured:
         index = viewer_dir / "index.html"
         local_url = index.as_uri() if index.is_file() else viewer_dir.as_uri()
-        logger.info("upload_viewer: R2 not configured; returning local path %s", local_url)
+        logger.info("upload_viewer: object storage not configured; returning local path %s", local_url)
         return local_url
 
-    bucket = os.environ["R2_BUCKET"]
-    upload_client = _client()
-    _ensure_bucket(upload_client, bucket)
+    upload_client = _client(cfg)
+    _ensure_bucket(upload_client, cfg.bucket, endpoint=cfg.endpoint_url)
 
     for file_path in sorted(viewer_dir.rglob("*")):
         if not file_path.is_file():
@@ -122,21 +115,20 @@ def upload_viewer(
             body = file_path.read_bytes()
 
         upload_client.put_object(
-            Bucket=bucket,
+            Bucket=cfg.bucket,
             Key=key,
             Body=body,
             ContentType=content_type,
         )
-        logger.debug("upload_viewer: uploaded %s → s3://%s/%s", file_path.name, bucket, key)
+        logger.debug("upload_viewer: uploaded %s → s3://%s/%s", file_path.name, cfg.bucket, key)
 
-    public_url_base = os.environ.get("R2_PUBLIC_URL", "")
-    if public_url_base:
-        viewer_url = f"{public_url_base.rstrip('/')}/scans/{scan_id}/ux_viewer/index.html"
+    if cfg.public_url:
+        viewer_url = f"{cfg.public_url.rstrip('/')}/scans/{scan_id}/ux_viewer/index.html"
     else:
-        presign_client = _client(endpoint_url=_browser_endpoint_url())
+        presign_client = _client(cfg, endpoint_url=_browser_endpoint_url(cfg))
         viewer_url = presign_client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": bucket, "Key": f"scans/{scan_id}/ux_viewer/index.html"},
+            Params={"Bucket": cfg.bucket, "Key": f"scans/{scan_id}/ux_viewer/index.html"},
             ExpiresIn=604800,
         )
 

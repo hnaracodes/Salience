@@ -1,9 +1,36 @@
 """Alembic environment configuration."""
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+# TribeV2 repo root — required for `from services.api.models import ...`
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+
+def _load_repo_dotenv() -> None:
+    """Load TribeV2/.env when running Alembic locally (shell env takes precedence)."""
+    env_path = _REPO_ROOT / ".env"
+    if not env_path.is_file():
+        return
+    parsed: dict[str, str] = {}
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        parsed[key.strip()] = val.strip().strip('"').strip("'")
+    for key, val in parsed.items():
+        if key not in os.environ:
+            os.environ[key] = val
+
+
+_load_repo_dotenv()
 
 from services.api.models import Base
 

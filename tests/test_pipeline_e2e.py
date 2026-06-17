@@ -73,7 +73,8 @@ def test_full_pipeline_fake_tribe_localhost_fixture(
 
     monkeypatch.setenv("FAKE_TRIBE", "1")
     monkeypatch.setenv("SSRF_ALLOW_LOCALHOST", "1")
-    monkeypatch.setenv("R2_ENDPOINT_URL", "")  # local file:// viewer URL
+    monkeypatch.delenv("S3_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("R2_ENDPOINT_URL", raising=False)  # local file:// viewer URL
 
     session_id = uuid.uuid4().hex
     scan_id = session_id

@@ -4,7 +4,7 @@ Endpoints:
   POST /v1/scans         — submit URL, enqueue job
   GET  /v1/scans         — list user's scans (paginated)
   GET  /v1/scans/{id}    — status + viewer URL
-  DELETE /v1/scans/{id}  — purge scan + R2 artifacts
+  DELETE /v1/scans/{id}  — purge scan + object storage artifacts
 """
 import json
 import os
@@ -15,7 +15,6 @@ from uuid import uuid4
 
 import boto3
 from arq import create_pool
-from arq.connections import RedisSettings
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, func, select
@@ -25,13 +24,9 @@ from services.api import ssrf
 from services.api.auth import get_current_user
 from services.api.models import Base, Scan, ScanArtifact, User
 from services.api.schemas import ScanCreate, ScanListResponse, ScanResponse
+from services.infra.config import load_object_storage_config, load_redis_settings
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./scout.db")
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-R2_ENDPOINT_URL = os.environ.get("R2_ENDPOINT_URL", "")
-R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
-R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-R2_BUCKET = os.environ.get("R2_BUCKET", "scout")
 
 _CORS_ORIGINS = json.loads(os.environ.get("CORS_ORIGINS", '["http://localhost:3000"]'))
 
@@ -48,7 +43,7 @@ async def lifespan(app: FastAPI):
     global arq_pool
     # In dev, create tables directly; Alembic handles prod migrations.
     Base.metadata.create_all(engine)
-    redis_settings = RedisSettings.from_dsn(REDIS_URL)
+    redis_settings = load_redis_settings()
     arq_pool = await create_pool(redis_settings)
     yield
     if arq_pool:
@@ -207,32 +202,33 @@ def delete_scan(
     if scan is None or scan.user_id != user.id:
         raise HTTPException(status_code=404, detail="Scan not found")
 
-    _delete_r2_artifacts(scan_id)
+    _delete_object_storage_artifacts(scan_id)
 
     db.delete(scan)
     db.commit()
 
 
-def _delete_r2_artifacts(scan_id: str):
-    """Remove all R2 objects under scans/{scan_id}/. Silently skips if R2 is unconfigured."""
-    if not R2_ENDPOINT_URL:
+def _delete_object_storage_artifacts(scan_id: str):
+    """Remove all objects under scans/{scan_id}/. Silently skips if storage is unconfigured."""
+    cfg = load_object_storage_config()
+    if not cfg.configured:
         return
 
     s3 = boto3.client(
         "s3",
-        endpoint_url=R2_ENDPOINT_URL,
-        aws_access_key_id=R2_ACCESS_KEY_ID,
-        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        endpoint_url=cfg.endpoint_url,
+        aws_access_key_id=cfg.access_key_id,
+        aws_secret_access_key=cfg.secret_access_key,
     )
 
     paginator = s3.get_paginator("list_objects_v2")
     prefix = f"scans/{scan_id}/"
 
-    for page in paginator.paginate(Bucket=R2_BUCKET, Prefix=prefix):
+    for page in paginator.paginate(Bucket=cfg.bucket, Prefix=prefix):
         objects = page.get("Contents", [])
         if not objects:
             continue
         s3.delete_objects(
-            Bucket=R2_BUCKET,
+            Bucket=cfg.bucket,
             Delete={"Objects": [{"Key": obj["Key"]} for obj in objects]},
         )
