@@ -13,17 +13,60 @@ from activation_store import SESSIONS_DIR
 logger = logging.getLogger(__name__)
 
 
-def _client():
+def _is_local_dev_object_store(endpoint: str) -> bool:
+    lowered = endpoint.lower()
+    return "minio" in lowered or "localhost:9000" in lowered or "127.0.0.1:9000" in lowered
+
+
+def _internal_endpoint_url() -> str:
+    return os.environ["R2_ENDPOINT_URL"]
+
+
+def _browser_endpoint_url() -> str:
+    """S3 endpoint hostname reachable from the user's browser (not Docker-internal)."""
+    public = os.environ.get("R2_PUBLIC_ENDPOINT_URL", "").strip()
+    if public:
+        return public
+    internal = os.environ.get("R2_ENDPOINT_URL", "")
+    if _is_local_dev_object_store(internal):
+        return "http://127.0.0.1:9000"
+    return internal
+
+
+def _client(*, endpoint_url: str | None = None):
     import boto3
     from botocore.config import Config
 
     return boto3.client(
         "s3",
-        endpoint_url=os.environ["R2_ENDPOINT_URL"],
+        endpoint_url=endpoint_url or _internal_endpoint_url(),
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         config=Config(signature_version="s3v4"),
     )
+
+
+def _ensure_bucket(client, bucket: str) -> None:
+    """Create the dev MinIO bucket when missing; production R2 buckets must pre-exist."""
+    from botocore.exceptions import ClientError
+
+    endpoint = os.environ.get("R2_ENDPOINT_URL", "")
+
+    try:
+        client.head_bucket(Bucket=bucket)
+        return
+    except ClientError as exc:
+        code = str(exc.response.get("Error", {}).get("Code", ""))
+        if code not in {"404", "NoSuchBucket", "NotFound"}:
+            raise
+
+    if not _is_local_dev_object_store(endpoint):
+        raise RuntimeError(
+            f"R2 bucket {bucket!r} does not exist at {endpoint}. Create it in Cloudflare R2 first."
+        )
+
+    client.create_bucket(Bucket=bucket)
+    logger.info("Created missing dev bucket %r at %s", bucket, endpoint)
 
 
 def _sanitize_html(content: str) -> str:
@@ -33,8 +76,8 @@ def _sanitize_html(content: str) -> str:
             "upload_viewer: <script> tag found in index.html; commenting out for upload safety.",
             stacklevel=3,
         )
-        # Replace case-insensitively while preserving original casing of surrounding content.
         import re
+
         content = re.sub(r"<script", "<!-- script", content, flags=re.IGNORECASE)
         logger.warning("upload_viewer: <script> tags neutralized in index.html before upload.")
     return content
@@ -44,28 +87,15 @@ def upload_viewer(
     session_id: str,
     scan_id: str,
     *,
-    sanitize: bool = True,
+    sanitize: bool = False,
 ) -> str:
     """Upload ux_viewer/ directory to R2 under scans/<scan_id>/ux_viewer/.
 
-    Parameters
-    ----------
-    session_id:
-        Local session directory name under SESSIONS_DIR.
-    scan_id:
-        Key prefix for R2 storage: ``scans/<scan_id>/ux_viewer/``.
-    sanitize:
-        If True (default), comments out ``<script`` tags in index.html
-        before upload as a lightweight defense-in-depth measure.
-
-    Returns
-    -------
-    Public URL to the uploaded index.html, or a local file:// path
-    when R2 is not configured (dev mode).
+    sanitize=False by default: exported index.html is a trusted repo template and
+    must keep its script tags for the viewer to boot.
     """
     viewer_dir = SESSIONS_DIR / session_id / "ux_viewer"
 
-    # Local dev fallback: no R2 configured.
     if not os.environ.get("R2_ENDPOINT_URL"):
         index = viewer_dir / "index.html"
         local_url = index.as_uri() if index.is_file() else viewer_dir.as_uri()
@@ -73,7 +103,8 @@ def upload_viewer(
         return local_url
 
     bucket = os.environ["R2_BUCKET"]
-    client = _client()
+    upload_client = _client()
+    _ensure_bucket(upload_client, bucket)
 
     for file_path in sorted(viewer_dir.rglob("*")):
         if not file_path.is_file():
@@ -90,7 +121,7 @@ def upload_viewer(
         else:
             body = file_path.read_bytes()
 
-        client.put_object(
+        upload_client.put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
@@ -100,12 +131,13 @@ def upload_viewer(
 
     public_url_base = os.environ.get("R2_PUBLIC_URL", "")
     if public_url_base:
-        return f"{public_url_base.rstrip('/')}/scans/{scan_id}/ux_viewer/index.html"
+        viewer_url = f"{public_url_base.rstrip('/')}/scans/{scan_id}/ux_viewer/index.html"
+    else:
+        presign_client = _client(endpoint_url=_browser_endpoint_url())
+        viewer_url = presign_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": f"scans/{scan_id}/ux_viewer/index.html"},
+            ExpiresIn=604800,
+        )
 
-    # Generate a presigned URL when no public base URL is set.
-    presigned = client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": bucket, "Key": f"scans/{scan_id}/ux_viewer/index.html"},
-        ExpiresIn=604800,  # 7 days
-    )
-    return presigned
+    return viewer_url

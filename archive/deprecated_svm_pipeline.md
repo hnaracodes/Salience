@@ -24,7 +24,7 @@ However, these datasets are domain-mismatched for the main product:
 - Their labels are not grounded in user actions that drive UX friction.
 - Their video stimuli do not represent feature appeal, navigational uncertainty, or dark-pattern resistance.
 
-Use this option only for generic valence/arousal sanity checks, not as the primary Neural-UX Scout training source.
+Use this option only for generic valence/arousal sanity checks, not as the primary Salience training source.
 
 ### Option B: proprietary UI/UX session dataset (recommended)
 
@@ -335,7 +335,7 @@ per_session:
 
 ---
 
-## From `neural-ux-scout-phased-delivery-plan.md`
+## From `salience-phased-delivery-plan.md`
 
 ### Guiding principle 4 (deprecated)
 

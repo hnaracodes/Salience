@@ -138,7 +138,9 @@ def main() -> None:
         "reducer": args.reducer,
         "seed": args.seed,
         "network_names": network_names_for_ids(net_df["yeo_network_id"].tolist()),
-        "parcellation_csv": str(args.vertex_csv.resolve()),
+        "parcellation_csv": args.vertex_csv.resolve().relative_to(ROOT).as_posix()
+        if args.vertex_csv.resolve().is_relative_to(ROOT)
+        else str(args.vertex_csv.resolve()),
         "leakage_note": (
             "SYNTHETIC BOOTSTRAP — replace with empirical norms from held-out "
             "naturalistic clips before production use."

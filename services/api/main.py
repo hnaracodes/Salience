@@ -1,4 +1,4 @@
-"""Neural-UX Scout API — thin job orchestrator.
+"""Salience API — thin job orchestrator.
 
 Endpoints:
   POST /v1/scans         — submit URL, enqueue job
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         await arq_pool.close()
 
 
-app = FastAPI(title="Neural-UX Scout API", lifespan=lifespan)
+app = FastAPI(title="Salience API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

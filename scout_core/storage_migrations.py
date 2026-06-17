@@ -11,26 +11,46 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _portable_storage_path(path: Path) -> str:
-    """Store repo-relative paths so SQLite works across host OS and containers."""
+    """Store repo-relative POSIX paths so SQLite works across host OS and containers."""
     resolved = path.resolve()
     try:
-        return str(resolved.relative_to(PROJECT_ROOT))
+        return resolved.relative_to(PROJECT_ROOT).as_posix()
     except ValueError:
-        return str(resolved)
+        return resolved.as_posix()
+
+
+def _canonical_scout_norms_path(stored: str) -> Path | None:
+    """Map legacy absolute or backslash paths to scout_norms/<norm_id>/<file>."""
+    normalized = stored.replace("\\", "/")
+    marker = "scout_norms/"
+    if marker not in normalized:
+        return None
+    suffix = normalized.split(marker, 1)[1]
+    if not suffix or "/" not in suffix:
+        return None
+    return PROJECT_ROOT / "scout_norms" / suffix
 
 
 def resolve_storage_path(stored: str) -> Path:
     """Resolve a path from SQLite — supports repo-relative and legacy absolute entries."""
-    raw = Path(stored)
-    if raw.is_file():
-        return raw
-    relative = PROJECT_ROOT / stored
-    if relative.is_file():
-        return relative
-    fallback = PROJECT_ROOT / "scout_norms" / raw.parent.name / raw.name
-    if fallback.is_file():
-        return fallback
-    return raw
+    normalized = stored.replace("\\", "/")
+    candidates: list[Path] = []
+    raw = Path(normalized)
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.append(PROJECT_ROOT / normalized)
+    canonical = _canonical_scout_norms_path(stored)
+    if canonical is not None:
+        candidates.append(canonical)
+    if raw.name and raw.parent.name:
+        candidates.append(PROJECT_ROOT / "scout_norms" / raw.parent.name / raw.name)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+
+    return candidates[0]
 
 
 KRAGEL_EMOTION_COLUMNS = [
