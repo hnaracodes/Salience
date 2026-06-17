@@ -4,8 +4,10 @@ title: Text Content Engagement Scoring
 date: 2026-06-11
 model: composer-2.5
 signature: composer-2.5@CS-20260611-TEXT-ENGAGEMENT-SCORING
-status: in_progress
+status: completed
 track: website
+agent_transcripts:
+  - eec407df-03ee-4fc1-b11f-21abee43c744
 related:
   - CS-20260521-WEB-PIPELINE-FOUNDATION
   - CS-20260528-WEBSITE-CONSOLIDATED
@@ -30,13 +32,14 @@ Logged a product gap: TribeV2 ratings and attribution are driven by visual/neura
 
 ## Validation
 
-- Issue logged; no code changes yet.
+- ISSUE-001 logged in transcript `eec407df-03ee-4fc1-b11f-21abee43c744`
+- Implementation completed in `CS-20260612-SAAS-PRODUCTION` (`scout_core/copy_signals.py`, marketing fusion)
+- ISSUE-001 status: resolved
 
 ## How To Continue
 
-- Read `issues/ISSUE-001-visual-only-scoring-ignores-page-copy.md`
-- Design `text_engagement` track and fusion weights with neural scores
-- Implement structured copy scoring stage before or alongside narrative generation
+- Optional Tier B: LLM-based `copy_source: llm` override per issue proposal
+- Replace heuristic weights via config if product tuning needed
 
 ## Signature
 

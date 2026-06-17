@@ -1,6 +1,6 @@
 ---
 session_id: CS-20260612-SAAS-PRODUCTION
-title: Neural-UX Scout SaaS — Full Production Build
+title: Salience SaaS — Full Production Build
 date: 2026-06-12
 model: claude-sonnet-4-5
 signature: claude-sonnet-4-5@CS-20260612-SAAS-PRODUCTION
@@ -10,6 +10,12 @@ related:
   - CS-20260612-PUSH-HARDENING
   - CS-20260610-PLAYWRIGHT-EXPLORATION
   - CS-20260611-TEXT-ENGAGEMENT-SCORING
+  - CS-20260613-LOCAL-PRODUCT-INTEGRATION
+  - CS-20260616-CI-REQUIREMENTS
+  - CS-20260616-DOCKER-RUNTIME-FIXES
+agent_transcripts:
+  - d4f00b92-9c4d-429f-bed2-47b5a528688f
+  - c9c94c66-b168-4010-896e-941e5eb677ea
 files_touched:
   - services/pipeline/runner.py
   - services/pipeline/artifacts.py
@@ -28,7 +34,7 @@ files_touched:
   - sessions/INDEX.md
 ---
 
-# Neural-UX Scout SaaS — Full Production Build
+# Salience SaaS — Full Production Build
 
 ## Summary
 

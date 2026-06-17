@@ -8,7 +8,7 @@
 ## Feature Isolation, Playwright DOM Capture, Section Analytics & Website Session Pipeline
 
 **Audience:** Project team members who need to understand what changed without reading every diff.  
-**Scope:** All work landed in this session around Neural-UX Scout: emotion Z-scoring, spatial credit assignment (feature isolation), Playwright integration, marketing section reports, orchestrated website capture, UX viewer, and LLM narrative layer.
+**Scope:** All work landed in this session around Salience: emotion Z-scoring, spatial credit assignment (feature isolation), Playwright integration, marketing section reports, orchestrated website capture, UX viewer, and LLM narrative layer.
 
 **Do not edit the planning artifact:** The implementation plan lives at `.cursor/plans/website_session_pipeline_*.plan.md` — this document is the human-readable changelog and architecture guide.
 
@@ -533,7 +533,7 @@ python scripts/run_website_session.py --stage all --script configs/walkthrough_s
 | `viewer/ux_session_viewer.html` | Heatmap + DOM overlay UI |
 | `docs/runbooks/website-session.md` | Operator runbook |
 | `docs/implementation-plans/feature_isolation.md` | Updated with website flow |
-| `docs/implementation-plans/neural-ux-scout-architecture-plan.md` | Checklist updated for orchestrator |
+| `docs/implementation-plans/salience-architecture-plan.md` | Checklist updated for orchestrator |
 
 ### Tests added
 

@@ -14,10 +14,13 @@
   - `CS-20260528-WEBSITE-CONSOLIDATED`
   - `CS-20260607-USABLE-UX-INSIGHTS`
   - `CS-20260611-PRODUCT-CLAIMS`
-- Agent transcript: `b3afe3e5-fc5d-4d5e-9526-45492bea3328` (pipeline context, usable-UX follow-ups)
-- Open issues considered: none duplicate this text-scoring gap
+- Agent transcript: `eec407df-03ee-4fc1-b11f-21abee43c744` (issue creation chat)
+- Resolution: `scout_core/copy_signals.py` + marketing fusion in `CS-20260612-SAAS-PRODUCTION`; ISSUE-001 status `resolved`
 
-## Step 2 - Changes
+## Step 3 - Completion (2026-06-16)
+
+- Session status updated to `completed` after SaaS copy_signals shipped
+- Ledger cross-ref: `CS-20260612-SAAS-PRODUCTION`, transcript `d4f00b92-9c4d-429f-bed2-47b5a528688f`
 
 - Files touched:
   - `sessions/CS-20260611-TEXT-ENGAGEMENT-SCORING/session.md` (new)

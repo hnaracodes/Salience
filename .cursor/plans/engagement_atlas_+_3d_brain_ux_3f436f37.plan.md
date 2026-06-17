@@ -186,7 +186,7 @@ Extend [`scripts/export_ux_viewer.py`](scripts/export_ux_viewer.py):
 
 - **Parcellation overlay on 3D brain:** Export compact `vertex_yeo7.bin` (uint8 per vertex) from [`configs/vertex_regions.csv`](configs/vertex_regions.csv) for network tint mode.
 - **Atlas CSV hardening:** Add `yeo7_network_name` column at build time in [`scripts/neuroEmoCode/build_schaefer_vertex_regions.py`](scripts/neuroEmoCode/build_schaefer_vertex_regions.py).
-- **Unified streaming viewer:** [`docs/implementation-plans/neural-ux-scout-architecture-plan.md`](docs/implementation-plans/neural-ux-scout-architecture-plan.md) `viz_web/` — out of scope for this pass.
+- **Unified streaming viewer:** [`docs/implementation-plans/salience-architecture-plan.md`](docs/implementation-plans/salience-architecture-plan.md) `viz_web/` — out of scope for this pass.
 
 ---
 

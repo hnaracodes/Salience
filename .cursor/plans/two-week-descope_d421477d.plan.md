@@ -1,6 +1,6 @@
 ---
 name: two-week-descope
-overview: "Refocus the repo on one repeatable Neural-UX Scout prototype spine: Playwright capture → TRIBEv2 inference → dual-track → heatmaps → grounding/feature isolation → viewer/report. Freeze parallel NeuroEmo R&D until the website pipeline is proven end-to-end on real sessions."
+overview: "Refocus the repo on one repeatable Salience prototype spine: Playwright capture → TRIBEv2 inference → dual-track → heatmaps → grounding/feature isolation → viewer/report. Freeze parallel NeuroEmo R&D until the website pipeline is proven end-to-end on real sessions."
 todos:
   - id: freeze-scope
     content: Declare the zero-shot website-session pipeline as the only mainline; freeze NeuroEmo phases 3–6, new classifiers, and atlas experiments unless they block pipeline parity.
@@ -45,7 +45,7 @@ NeuroEmo supervised work (surface-native Schaefer, vertex equivalence, postfix m
 | Non-anger grounding + heatmap provenance | Landed | `scripts/analyze_session.py`, `scripts/extract_section_heatmaps.py` |
 | Unit/regression tests | Landed | `tests/test_record_website_session.py`, `test_analyze_session_spikes.py`, `test_heatmap_provenance.py`, `test_feature_isolation.py`, `test_section_analytics.py` |
 | Operator runbook | Partial | [docs/runbooks/website-session.md](../../docs/runbooks/website-session.md) exists; orchestrator flags need tightening |
-| **Full E2E on a fresh session (Modal TRIBE + Modal heatmaps + viewer)** | **Not proven in sprint docs** | P0 checkpoints in [neural-ux-scout-phased-delivery-plan.md](../../docs/implementation-plans/neural-ux-scout-phased-delivery-plan.md) still open |
+| **Full E2E on a fresh session (Modal TRIBE + Modal heatmaps + viewer)** | **Not proven in sprint docs** | P0 checkpoints in [salience-phased-delivery-plan.md](../../docs/implementation-plans/salience-phased-delivery-plan.md) still open |
 | Multiple benchmark walkthroughs | Gap | Only [configs/walkthrough_scripts/localhost_demo.yaml](../../configs/walkthrough_scripts/localhost_demo.yaml) |
 
 ### NeuroEmo — advanced in parallel (freeze, do not extend)
@@ -60,7 +60,7 @@ Recent work that should **not** expand during this sprint:
 
 ## Reasoning
 
-[neural-ux-scout-phased-delivery-plan.md](../../docs/implementation-plans/neural-ux-scout-phased-delivery-plan.md) principle #1: **one runnable spine first**. May 25 hardening fixed known correctness bugs (capture-after-steps, anger-only spikes, silent placeholder heatmaps). That makes the spine *trustworthy in code* but does not replace a **repeatable operator proof** on real Modal runs.
+[salience-phased-delivery-plan.md](../../docs/implementation-plans/salience-phased-delivery-plan.md) principle #1: **one runnable spine first**. May 25 hardening fixed known correctness bugs (capture-after-steps, anger-only spikes, silent placeholder heatmaps). That makes the spine *trustworthy in code* but does not replace a **repeatable operator proof** on real Modal runs.
 
 The team has invested heavily in NeuroEmo training accuracy and atlas provenance while **P0-C1–C4** (golden session, Modal parity, artifact bundle, non-author runbook) remain unchecked. This sprint closes that gap.
 
@@ -308,5 +308,5 @@ Otherwise defer it.
 |------|------------------------|
 | [playwright-pipeline-fixes_0e4e0672.plan.md](playwright-pipeline-fixes_0e4e0672.plan.md) | Implementation done; **verification** is this sprint’s job |
 | [neuroemo_remaining_high_leverage_opportunities_2026-05-27.plan.md](neuroemo_remaining_high_leverage_opportunities_2026-05-27.plan.md) | Phases 3–6 **frozen** |
-| [neural-ux-scout-phased-delivery-plan.md](../../docs/implementation-plans/neural-ux-scout-phased-delivery-plan.md) | Close **P0-C1–C4** via testing ladder |
+| [salience-phased-delivery-plan.md](../../docs/implementation-plans/salience-phased-delivery-plan.md) | Close **P0-C1–C4** via testing ladder |
 | [feature_isolation.md](../../docs/implementation-plans/feature_isolation.md) | Defines heatmap + DOM intersection semantics for Layer 3 checks |

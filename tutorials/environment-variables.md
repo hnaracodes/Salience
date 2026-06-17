@@ -1,6 +1,6 @@
 # Environment variables reference
 
-All variables used across Neural-UX Scout production services. Set these in each host's secret manager (Vercel, Railway, Render, Modal) — never commit real values.
+All variables used across Salience production services. Set these in each host's secret manager (Vercel, Railway, Render, Modal) — never commit real values.
 
 ---
 
@@ -27,7 +27,7 @@ Without `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, the app runs in **dev bypass mode**
 | `R2_ENDPOINT_URL` | Yes (prod) | `https://<accountid>.r2.cloudflarestorage.com` | S3-compatible endpoint |
 | `R2_ACCESS_KEY_ID` | Yes (prod) | — | R2 API token access key |
 | `R2_SECRET_ACCESS_KEY` | Yes (prod) | — | R2 API token secret |
-| `R2_BUCKET` | Yes (prod) | `neural-ux-scout` | Bucket for `scans/<id>/ux_viewer/` |
+| `R2_BUCKET` | Yes (prod) | `salience` | Bucket for `scans/<id>/ux_viewer/` |
 | `R2_PUBLIC_URL` | Recommended | `https://artifacts.yourdomain.com` | Public base for viewer links; omit to use 7-day presigned URLs |
 | `CLERK_JWKS_URL` | Yes (prod) | `https://<clerk-domain>/.well-known/jwks.json` | JWT verification |
 | `CLERK_ISSUER` | Yes (prod) | `https://<clerk-domain>` | Must match token `iss` claim |

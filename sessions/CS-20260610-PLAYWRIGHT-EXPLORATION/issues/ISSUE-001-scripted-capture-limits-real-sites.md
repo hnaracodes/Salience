@@ -38,4 +38,4 @@ Implement `FEATURE-001` (`scroll_mode: explore`) — a bounded, same-origin expl
 
 - Pipeline verification: `.cursor/agents/pipeline-runner.md`
 - Implementation plan: `.cursor/plans/playwright-exploration-mode.plan.md`
-- Architecture vision: `docs/implementation-plans/neural-ux-scout-architecture-plan.md` §4
+- Architecture vision: `docs/implementation-plans/salience-architecture-plan.md` §4

@@ -2,9 +2,12 @@
 
 ## Step 1 — Context
 
+- Agent transcripts (implementation chats):
+  - `d4f00b92-9c4d-429f-bed2-47b5a528688f` — Phases 0–2 (runner, copy_signals, explore hardening)
+  - `c9c94c66-b168-4010-896e-941e5eb677ea` — Phases 3 & 5 (FastAPI, Docker, CI)
 - Files read: sessions/INDEX.md, CS-20260612-PUSH-HARDENING/issues/ISSUE-SEC-004, tribe.py, explore_policy.py, run_website_session.py, activation_store.py, pipeline-runner.md, frontend-design-specialist.md, code-auditor.md
 - Prior sessions consulted: CS-20260612-PUSH-HARDENING (open ISSUE-SEC-004), CS-20260611-TEXT-ENGAGEMENT-SCORING (open ISSUE-001)
-- Plan audited: neural-ux_scout_saas_581e709b.plan.md — 12 gaps found and closed before build
+- Plan audited: salience_saas_581e709b.plan.md — 12 gaps found and closed before build
 - Open issues going in: ISSUE-SEC-004 (explore selectors), ISSUE-001 (visual-only scoring)
 
 ## Step 2 — Phase 0: Pipeline Portability

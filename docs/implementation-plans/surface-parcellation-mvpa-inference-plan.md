@@ -1,6 +1,6 @@
-ï»¿# Microplan: atlas-backed surface masks and MVPA inference
+# Microplan: atlas-backed surface masks and MVPA inference
 
-Companion doc for **[neural-ux-scout-architecture-plan.md](neural-ux-scout-architecture-plan.md)** and **[neural-ux-scout-phased-delivery-plan.md](neural-ux-scout-phased-delivery-plan.md)**. Execution blueprint for the **strong neuroscience-facing layer** on top of scaffolding in [`activation_store.py`](../../activation_store.py) (within-session percentiles + coarse `vertex_fraction` bins).
+Companion doc for **[salience-architecture-plan.md](salience-architecture-plan.md)** and **[salience-phased-delivery-plan.md](salience-phased-delivery-plan.md)**. Execution blueprint for the **strong neuroscience-facing layer** on top of scaffolding in [`activation_store.py`](../../activation_store.py) (within-session percentiles + coarse `vertex_fraction` bins).
 
 ---
 
@@ -8,11 +8,11 @@ Companion doc for **[neural-ux-scout-architecture-plan.md](neural-ux-scout-archi
 
 Turn dense **`preds[T, V]`** into:
 
-1. **Anatomically meaningful surface masks** via a versioned vertexâ†’parcel/network mapping (replacing mesh-index proxies).
+1. **Anatomically meaningful surface masks** via a versioned vertex?parcel/network mapping (replacing mesh-index proxies).
 2. **Network-level features** that preserve the spatial activation pattern inside each network, rather than averaging vertices.
 3. **Continuous Z-score engagement and cosine-similarity emotion profiles produced without any trained model**, using surface network masks and downloadable NeuroVault templates.
 
-Guardrail (product copy): output language remains **model-relative hypotheses**, aligned with Neural-UX Scout Â§3 in the main implementation plan.
+Guardrail (product copy): output language remains **model-relative hypotheses**, aligned with Salience §3 in the main implementation plan.
 
 ---
 
@@ -51,7 +51,7 @@ Minimum columns after upgrade:
 | `vertex_index` | int | 0..V-1, Tribev2 order |
 | `parcel_id` | int | Stable atlas parcel id |
 | `parcel_label` | string | Human label (e.g. Schaefer name) |
-| `yeo_network_id` | int (nullable) | 1â€“7 or NULL if unknown |
+| `yeo_network_id` | int (nullable) | 1–7 or NULL if unknown |
 | `yeo_network_name` | string | e.g. `SomMot`, `SalVentAttn` |
 | `hemisphere` | `lh`/`rh` | From atlas |
 
@@ -90,22 +90,22 @@ New package directory:
 ```text
 scout_core/
   __init__.py
-  parcellation.py       # load vertex_regions.csv â†’ dense parcel_id[V]
-  mvpa_engine.py        # SurfaceMasker/network masks â†’ windows â†’ sklearn probability traces
+  parcellation.py       # load vertex_regions.csv ? dense parcel_id[V]
+  mvpa_engine.py        # SurfaceMasker/network masks ? windows ? sklearn probability traces
   schemas.py            # pydantic models
   storage_migrations.py # neuro SQLite DDL + inserts
 
 scripts/
-  build_vertex_regions_csv.py   # atlas â†’ CSV
-  train_mvpa_model.py           # labeled corpus preds.npz â†’ scout_models/<model_id>/model.pkl
-  analyze_session.py            # session id â†’ SQLite augment + analysis_bundle.json
+  build_vertex_regions_csv.py   # atlas ? CSV
+  train_mvpa_model.py           # labeled corpus preds.npz ? scout_models/<model_id>/model.pkl
+  analyze_session.py            # session id ? SQLite augment + analysis_bundle.json
 ```
 
 Deprecated/deleted modules:
 
-- [`scout_core/aggregate.py`](../../scout_core/aggregate.py) â€” delete or keep only as a legacy helper. Averaging vertices into parcel/network means destroys the spatial â€œbarcodeâ€ MVPA needs to detect cognitive states.
-- [`scout_core/threshold_engine.py`](../../scout_core/threshold_engine.py) â€” delete/deprecate. The inference output is a probability trace from a trained model, not a rules engine event.
-- [`configs/calibrated_rules.yaml`](../../configs/calibrated_rules.yaml) â€” delete/deprecate. YAML thresholds should not be the source of truth for cognitive-state detection.
+- [`scout_core/aggregate.py`](../../scout_core/aggregate.py) — delete or keep only as a legacy helper. Averaging vertices into parcel/network means destroys the spatial “barcode” MVPA needs to detect cognitive states.
+- [`scout_core/threshold_engine.py`](../../scout_core/threshold_engine.py) — delete/deprecate. The inference output is a probability trace from a trained model, not a rules engine event.
+- [`configs/calibrated_rules.yaml`](../../configs/calibrated_rules.yaml) — delete/deprecate. YAML thresholds should not be the source of truth for cognitive-state detection.
 
 ---
 
@@ -145,9 +145,9 @@ def predict_probability_trace(model, X: np.ndarray) -> np.ndarray: ...  # shape 
 
 ## SQLite extensions (neuro tables)
 
-- **`mvpa_model_bundle`** â€” `model_id`, model path, `label_map_json`, `meta_json`, `created_at`
-- **`session_masked_feature_meta`** â€” network mask id, selected vertex count, window size, timestep alignment
-- **`mvpa_probability_trace`** â€” per timestep class probabilities + model id + network mask metadata
+- **`mvpa_model_bundle`** — `model_id`, model path, `label_map_json`, `meta_json`, `created_at`
+- **`session_masked_feature_meta`** — network mask id, selected vertex count, window size, timestep alignment
+- **`mvpa_probability_trace`** — per timestep class probabilities + model id + network mask metadata
 
 DDL lives in [`scout_core/storage_migrations.py`](../../scout_core/storage_migrations.py); [`activation_store.py`](../../activation_store.py) calls `ensure_neuro_schema()` on connect.
 
@@ -180,7 +180,7 @@ flowchart TD
 ## Integration with `modal run tribe.py::record`
 
 - **Modal / GPU**: inference unchanged; writes `preds.npz` + SQLite peaks (UX scaffolding).
-- **Local CPU post-step**: `python scripts/run_dual_track.py --session-id â€¦` reads `preds.npz` + `preds_baseline.npz` + precomputed templates, computes engagement and emotion scores, fills neuro tables + **`scout_data/sessions/<id>/analysis_bundle.json`**.
+- **Local CPU post-step**: `python scripts/run_dual_track.py --session-id …` reads `preds.npz` + `preds_baseline.npz` + precomputed templates, computes engagement and emotion scores, fills neuro tables + **`scout_data/sessions/<id>/analysis_bundle.json`**.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Intent
 
-This plan implements the Neural-UX Scout demographic multiplexer as a late-stage feature branching system on top of Meta TRIBE v2. The design freezes the expensive universal stimulus encoder and trains only a demographic prototype embedding table plus a shared readout head.
+This plan implements the Salience demographic multiplexer as a late-stage feature branching system on top of Meta TRIBE v2. The design freezes the expensive universal stimulus encoder and trains only a demographic prototype embedding table plus a shared readout head.
 
 The target production path is:
 
@@ -21,7 +21,7 @@ This must not fork TRIBE into separate demographic models. The only trainable de
 
 ## Directory Structure
 
-The current repo has root-level `tribe.py`, `scout_core/`, `scripts/`, `configs/`, and `tests/`. Add the demographic multiplexer under a new `neural_ux_scout/` package while keeping the existing baseline code stable.
+The current repo has root-level `tribe.py`, `scout_core/`, `scripts/`, `configs/`, and `tests/`. Add the demographic multiplexer under a new `salience/` package while keeping the existing baseline code stable.
 
 ```text
 TribeV2Application/
@@ -42,7 +42,7 @@ TribeV2Application/
     aggregate_centroids.py              # new: group subject tensors into Y_target[K,T,V]
     package_webdataset.py               # new: video + centroid tensor tar sharding
     schemas.py                          # new: pydantic contracts for subject/video/cluster rows
-  neural_ux_scout/
+  salience/
     __init__.py                         # new
     mux/
       __init__.py                       # new
@@ -148,7 +148,7 @@ Where `V = 20484` for TRIBE's `fsaverage5` surface output.
 
 ## `tribe_mux.py`
 
-Place this file at `neural_ux_scout/mux/tribe_mux.py`.
+Place this file at `salience/mux/tribe_mux.py`.
 
 ```python
 from __future__ import annotations
@@ -666,7 +666,7 @@ For Modal, store shards on a `modal.Volume` or external object storage. Keep sam
 
 ## `train_clusters.py`
 
-Place this file at `neural_ux_scout/modal_app/train_clusters.py`.
+Place this file at `salience/modal_app/train_clusters.py`.
 
 This is a skeletal script. The `TribeLatentExtractor` adapter must be implemented after the R0 source-code spike finds TRIBE's internal universal hidden state.
 
@@ -775,7 +775,7 @@ class DemographicMuxTrainer:
     def setup(self) -> None:
         import torch
 
-        from neural_ux_scout.mux.tribe_mux import TribeDemographicMux, TribeMuxConfig
+        from salience.mux.tribe_mux import TribeDemographicMux, TribeMuxConfig
 
         self.device = torch.device("cuda")
         self.latent_extractor = TribeLatentExtractor(cache_folder="/mnt/mux/hf_cache")
@@ -921,7 +921,7 @@ class DemographicMuxTrainer:
 
 ## Inference Contract
 
-Place Modal inference in `neural_ux_scout/modal_app/inference_mux.py`.
+Place Modal inference in `salience/modal_app/inference_mux.py`.
 
 ### API
 

@@ -1,14 +1,14 @@
-# Feature Isolation — Spatial Credit Assignment (Neural-UX Scout)
+# Feature Isolation — Spatial Credit Assignment (Salience)
 
-Companion doc for **[neural-ux-scout-architecture-plan.md](neural-ux-scout-architecture-plan.md)** (P4 grounding), **[surface-parcellation-mvpa-inference-plan.md](surface-parcellation-mvpa-inference-plan.md)** (MVPA / `[T, 20484]`), and **[ux-emotion-proxy-classification-plan.md](ux-emotion-proxy-classification-plan.md)** (Playwright telemetry).
+Companion doc for **[salience-architecture-plan.md](salience-architecture-plan.md)** (P4 grounding), **[surface-parcellation-mvpa-inference-plan.md](surface-parcellation-mvpa-inference-plan.md)** (MVPA / `[T, 20484]`), and **[ux-emotion-proxy-classification-plan.md](ux-emotion-proxy-classification-plan.md)** (Playwright telemetry).
 
-**Phase placement:** Extends **P4 — Neural barriers & grounding** in [neural-ux-scout-phased-delivery-plan.md](neural-ux-scout-phased-delivery-plan.md). Runs **after** `preds.npz` exists and Dual-Track / MVPA scalar traces are available.
+**Phase placement:** Extends **P4 — Neural barriers & grounding** in [salience-phased-delivery-plan.md](salience-phased-delivery-plan.md). Runs **after** `preds.npz` exists and Dual-Track / MVPA scalar traces are available.
 
 ---
 
 ## Intent
 
-The Neural-UX Scout **Dual-Track** system produces global, frame-level cognitive scores from MVPA and probability traces over the cortical stream **`preds[T, 20484]`** (fsaverage5 surface, `V = 20484`). That stack answers **when** a state spiked and **how strongly**, but not **what on screen** the user was likely attending to at that moment—the **Spatial Credit Assignment Problem**.
+The Salience **Dual-Track** system produces global, frame-level cognitive scores from MVPA and probability traces over the cortical stream **`preds[T, 20484]`** (fsaverage5 surface, `V = 20484`). That stack answers **when** a state spiked and **how strongly**, but not **what on screen** the user was likely attending to at that moment—the **Spatial Credit Assignment Problem**.
 
 This plan closes that gap by:
 
@@ -251,7 +251,7 @@ Required for intersection (recorder: Playwright explorer per architecture plan; 
 2. **Extract:** Modal `extract_frame_attention` returns a **`(1080, 1920)`** float32 heatmap for that frame on A100 without OOM.
 3. **Intersect:** [`scout_core/dom_intersect.py`](../../scout_core/dom_intersect.py) selects a single winner `dom_id` with a documented `attention_density` score.
 4. **Persist:** `scout_data/sessions/<id>/analysis_bundle.json` includes an `events[]` entry whose `grounding` object matches the contract above.
-5. **Dashboard:** The React viewer (`viz_web/`, planned in [neural-ux-scout-architecture-plan.md](neural-ux-scout-architecture-plan.md)) highlights the winning HTML tag at `t_spike` on the timeline (bbox overlay or selector chip synced to the walkthrough video).
+5. **Dashboard:** The React viewer (`viz_web/`, planned in [salience-architecture-plan.md](salience-architecture-plan.md)) highlights the winning HTML tag at `t_spike` on the timeline (bbox overlay or selector chip synced to the walkthrough video).
 
 ---
 

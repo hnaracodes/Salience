@@ -145,7 +145,7 @@ API and worker **must share the same Redis URL**.
 
 ### 3.3 Cloudflare R2
 
-1. Cloudflare Dashboard → **R2** → Create bucket (e.g. `neural-ux-scout-prod`).
+1. Cloudflare Dashboard → **R2** → Create bucket (e.g. `salience-prod`).
 2. **Manage R2 API tokens** → Create token with Object Read & Write on that bucket.
 3. Note:
    - `R2_ENDPOINT_URL` — `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
