@@ -9,6 +9,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://scout:scout@postgres:5432/scout
       REDIS_URL: redis://redis:6379
+      # Local dev: MinIO stands in for Backblaze B2 (legacy R2_* names via services/infra/config.py)
       R2_ENDPOINT_URL: http://minio:9000
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin
@@ -32,10 +33,13 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://scout:scout@postgres:5432/scout
       REDIS_URL: redis://redis:6379
+      # Local dev: MinIO stands in for Backblaze B2 (legacy R2_* names via services/infra/config.py)
       R2_ENDPOINT_URL: http://minio:9000
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin
       R2_BUCKET: scout
+      R2_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      R2_PUBLIC_URL: http://127.0.0.1:9000/scout
       FAKE_TRIBE: "1"
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       MODAL_TOKEN_ID: ${MODAL_TOKEN_ID:-}
@@ -72,6 +76,21 @@ services:
       - "127.0.0.1:9001:9001"
     volumes:
       - miniodata:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+      mc mb local/scout --ignore-existing;
+      mc anonymous set download local/scout/scans;
+      printf '[{\"AllowedOrigin\":[\"*\"],\"AllowedMethod\":[\"GET\",\"HEAD\"],\"AllowedHeader\":[\"*\"],\"ExposeHeader\":[\"ETag\",\"Content-Length\",\"Content-Type\"]}]' > /tmp/scout-cors.json;
+      mc cors set local/scout /tmp/scout-cors.json;
+      echo minio_init_dev: bucket scout ready;
+      "
+    restart: "no"
 
 volumes:
   pgdata:

@@ -14,15 +14,18 @@ Assets that must be present (or fetchable) before a scan can run all stages.
 
 | Asset | Expected Path | Remote Key | Notes |
 |---|---|---|---|
-| `preds_baseline.npz` | `scout_data/preds_baseline.npz` | `assets/preds_baseline.npz` (R2) | Baseline prediction array for dual-track Track 1 comparison. If absent, `dual_track.py` logs a warning and runs Track 2 only (session-relative novelty). Fetch from R2 before first production scan: `aws s3 cp s3://<bucket>/assets/preds_baseline.npz scout_data/preds_baseline.npz --endpoint-url $R2_ENDPOINT_URL` |
+| `preds_baseline.npz` | `scout_data/preds_baseline.npz` | `assets/preds_baseline.npz` (B2) | Baseline prediction array for dual-track Track 1 comparison. If absent, `dual_track.py` logs a warning and runs Track 2 only (session-relative novelty). Fetch from B2 before first production scan: `aws s3 cp s3://<bucket>/assets/preds_baseline.npz scout_data/preds_baseline.npz --endpoint-url $S3_ENDPOINT_URL` |
 
 ## Environment Variables (production)
 
 ```
-R2_ENDPOINT_URL        — Cloudflare R2 endpoint (https://…r2.cloudflarestorage.com)
-R2_ACCESS_KEY_ID       — R2 access key
-R2_SECRET_ACCESS_KEY   — R2 secret key
-R2_BUCKET              — Bucket name for scan artifacts
-R2_PUBLIC_URL          — Optional public base URL for viewer links
+S3_ENDPOINT_URL        — Backblaze B2 S3 endpoint (https://s3.<region>.backblazeb2.com)
+S3_ACCESS_KEY_ID       — B2 application key ID
+S3_SECRET_ACCESS_KEY   — B2 application key secret
+S3_BUCKET              — B2 bucket name for scan artifacts
+S3_PUBLIC_URL          — Optional public base URL for viewer links (omit for presigned URLs)
+REDIS_URL              — Upstash Redis TCP URL (rediss:// recommended)
 FAKE_TRIBE=1           — Dev mode: skip Modal calls, use synthetic preds
 ```
+
+Legacy `R2_*` names are still accepted for local MinIO via docker-compose.

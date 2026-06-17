@@ -216,7 +216,7 @@ def _stage_export_viewer(session_id: str, scan_id: str) -> str:
 
     from services.pipeline.artifacts import upload_viewer
 
-    viewer_url = upload_viewer(session_id, scan_id)
+    viewer_url = upload_viewer(session_id, scan_id, sanitize=False)
     logger.info("export_viewer: viewer available at %s", viewer_url)
     return viewer_url
 

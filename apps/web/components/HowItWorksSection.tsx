@@ -14,7 +14,7 @@ const steps = [
   },
   {
     number: '02',
-    title: 'Scout crawls',
+    title: `${SITE.name} crawls`,
     description:
       'Playwright scrolls each page to the bottom, clicks nav links, and records video + DOM snapshots.',
     visual: 'crawl' as const,
