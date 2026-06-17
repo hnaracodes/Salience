@@ -9,6 +9,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://scout:scout@postgres:5432/scout
       REDIS_URL: redis://redis:6379
+      # Local dev: MinIO stands in for Backblaze B2 (legacy R2_* names via services/infra/config.py)
       R2_ENDPOINT_URL: http://minio:9000
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin
@@ -32,6 +33,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://scout:scout@postgres:5432/scout
       REDIS_URL: redis://redis:6379
+      # Local dev: MinIO stands in for Backblaze B2 (legacy R2_* names via services/infra/config.py)
       R2_ENDPOINT_URL: http://minio:9000
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin

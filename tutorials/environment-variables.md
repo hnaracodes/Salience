@@ -22,13 +22,13 @@ Without `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, the app runs in **dev bypass mode**
 
 | Variable | Required | Example | Notes |
 |----------|----------|---------|-------|
-| `DATABASE_URL` | Yes | `postgresql+asyncpg://user:pass@host:5432/scout` | SQLAlchemy URL; `+asyncpg` is stripped internally |
-| `REDIS_URL` | Yes | `redis://default:pass@host:6379` | Arq job queue |
-| `R2_ENDPOINT_URL` | Yes (prod) | `https://<accountid>.r2.cloudflarestorage.com` | S3-compatible endpoint |
-| `R2_ACCESS_KEY_ID` | Yes (prod) | — | R2 API token access key |
-| `R2_SECRET_ACCESS_KEY` | Yes (prod) | — | R2 API token secret |
-| `R2_BUCKET` | Yes (prod) | `salience` | Bucket for `scans/<id>/ux_viewer/` |
-| `R2_PUBLIC_URL` | Recommended | `https://artifacts.yourdomain.com` | Public base for viewer links; omit to use 7-day presigned URLs |
+| `DATABASE_URL` | Yes | `postgresql://postgres.[ref]:pass@…pooler.supabase.com:5432/postgres` | Supabase Session pooler (IPv4) or direct |
+| `REDIS_URL` | Yes | `rediss://default:pass@[name].upstash.io:6379` | Upstash Redis for Arq; `rediss://` auto-applied for Upstash |
+| `S3_ENDPOINT_URL` | Yes (prod) | `https://s3.us-east-005.backblazeb2.com` | Backblaze B2 S3 endpoint |
+| `S3_ACCESS_KEY_ID` | Yes (prod) | — | B2 application key ID |
+| `S3_SECRET_ACCESS_KEY` | Yes (prod) | — | B2 application key secret |
+| `S3_BUCKET` | Yes (prod) | `salience-prod` | B2 bucket for `scans/<id>/ux_viewer/` |
+| `S3_PUBLIC_URL` | No | — | Omit for 7-day presigned viewer URLs (recommended) |
 | `CLERK_JWKS_URL` | Yes (prod) | `https://<clerk-domain>/.well-known/jwks.json` | JWT verification |
 | `CLERK_ISSUER` | Yes (prod) | `https://<clerk-domain>` | Must match token `iss` claim |
 | `CORS_ORIGINS` | Yes | `["https://app.yourdomain.com"]` | JSON array string; include staging origins |
@@ -42,12 +42,13 @@ Health check path: `GET /health` → `{"status":"ok"}`
 | Variable | Required | Example | Notes |
 |----------|----------|---------|-------|
 | `DATABASE_URL` | Yes | Same as API | Worker updates scan status in Postgres |
-| `REDIS_URL` | Yes | Same as API | Must point to same Redis instance as API |
-| `R2_ENDPOINT_URL` | Yes (prod) | Same as API | Uploads viewer artifacts after pipeline |
-| `R2_ACCESS_KEY_ID` | Yes (prod) | Same as API | |
-| `R2_SECRET_ACCESS_KEY` | Yes (prod) | Same as API | |
-| `R2_BUCKET` | Yes (prod) | Same as API | |
-| `R2_PUBLIC_URL` | Recommended | Same as API | Stored in `scans.viewer_url` |
+| `REDIS_URL` | Yes | Same as API | Must point to same Upstash database as API |
+| `S3_ENDPOINT_URL` | Yes (prod) | Same as API | Uploads viewer artifacts to B2 after pipeline |
+| `S3_ACCESS_KEY_ID` | Yes (prod) | Same as API | |
+| `S3_SECRET_ACCESS_KEY` | Yes (prod) | Same as API | |
+| `S3_BUCKET` | Yes (prod) | Same as API | |
+| `S3_PUBLIC_URL` | No | Same as API | Stored in `scans.viewer_url` when set |
+| `GEMINI_API_KEY` | Yes (prod) | — | Narrative stage (`configs/llm_narrative.yaml`) |
 | `MODAL_TOKEN_ID` | Yes (prod) | — | From `modal token new` |
 | `MODAL_TOKEN_SECRET` | Yes (prod) | — | Paired with token ID |
 | `FAKE_TRIBE` | Dev/CI only | `1` | Skips Modal GPU; synthetic preds + uniform heatmaps |
@@ -94,7 +95,7 @@ MODAL_TOKEN_ID=
 MODAL_TOKEN_SECRET=
 ```
 
-Compose defaults use MinIO as R2 stand-in and `FAKE_TRIBE=1` on the worker.
+Compose defaults use MinIO via legacy `R2_*` env names (read by `services/infra/config.py`) and `FAKE_TRIBE=1` on the worker.
 
 ---
 
@@ -126,8 +127,8 @@ Use **Production** instance keys on Vercel production and API production.
 # API health
 curl https://api.yourdomain.com/health
 
-# R2 connectivity (from machine with AWS CLI)
-aws s3 ls s3://your-bucket --endpoint-url $R2_ENDPOINT_URL
+# B2 connectivity (from machine with AWS CLI)
+aws s3 ls s3://your-bucket --endpoint-url $S3_ENDPOINT_URL
 
 # Modal lookup (from worker env)
 python -c "import modal; print(modal.Cls.lookup('tribe-v2-brain-sim', 'TribeInference'))"

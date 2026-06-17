@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from botocore.exceptions import ClientError
 
+from services.infra.config import load_object_storage_config
 from services.pipeline import artifacts
 
 
@@ -16,21 +17,23 @@ def test_ensure_bucket_creates_missing_minio_bucket(monkeypatch):
     client = MagicMock()
     client.head_bucket.side_effect = [_client_error("404")]
 
-    monkeypatch.setenv("R2_ENDPOINT_URL", "http://minio:9000")
+    monkeypatch.setenv("S3_ENDPOINT_URL", "http://minio:9000")
 
-    artifacts._ensure_bucket(client, "scout")
+    cfg = load_object_storage_config()
+    artifacts._ensure_bucket(client, "scout", endpoint=cfg.endpoint_url)
 
     client.create_bucket.assert_called_once_with(Bucket="scout")
 
 
-def test_ensure_bucket_skips_create_for_production_r2(monkeypatch):
+def test_ensure_bucket_skips_create_for_production_b2(monkeypatch):
     client = MagicMock()
     client.head_bucket.side_effect = [_client_error("NoSuchBucket")]
 
-    monkeypatch.setenv("R2_ENDPOINT_URL", "https://account.r2.cloudflarestorage.com")
+    monkeypatch.setenv("S3_ENDPOINT_URL", "https://s3.us-east-005.backblazeb2.com")
 
     with pytest.raises(RuntimeError, match="does not exist"):
-        artifacts._ensure_bucket(client, "scout")
+        cfg = load_object_storage_config()
+        artifacts._ensure_bucket(client, "scout", endpoint=cfg.endpoint_url)
 
     client.create_bucket.assert_not_called()
 
@@ -42,12 +45,14 @@ def test_sanitize_html_comments_script_tags():
 
 
 def test_presign_uses_browser_endpoint_for_local_minio(monkeypatch):
-    monkeypatch.setenv("R2_ENDPOINT_URL", "http://minio:9000")
-    monkeypatch.delenv("R2_PUBLIC_ENDPOINT_URL", raising=False)
-    assert artifacts._browser_endpoint_url() == "http://127.0.0.1:9000"
+    monkeypatch.setenv("S3_ENDPOINT_URL", "http://minio:9000")
+    monkeypatch.delenv("S3_PUBLIC_ENDPOINT_URL", raising=False)
+    cfg = load_object_storage_config()
+    assert artifacts._browser_endpoint_url(cfg) == "http://127.0.0.1:9000"
 
 
 def test_presign_respects_explicit_public_endpoint(monkeypatch):
-    monkeypatch.setenv("R2_ENDPOINT_URL", "http://minio:9000")
-    monkeypatch.setenv("R2_PUBLIC_ENDPOINT_URL", "http://localhost:9000")
-    assert artifacts._browser_endpoint_url() == "http://localhost:9000"
+    monkeypatch.setenv("S3_ENDPOINT_URL", "http://minio:9000")
+    monkeypatch.setenv("S3_PUBLIC_ENDPOINT_URL", "http://localhost:9000")
+    cfg = load_object_storage_config()
+    assert artifacts._browser_endpoint_url(cfg) == "http://localhost:9000"

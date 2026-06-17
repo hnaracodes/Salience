@@ -4,10 +4,10 @@ import os
 import sys
 from pathlib import Path
 
-from arq.connections import RedisSettings
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from services.infra.config import load_redis_settings
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -115,7 +115,7 @@ class WorkerSettings:
     functions = [run_scan_task]
     # Arq reads this class attribute at startup; None would silently fall back
     # to localhost:6379 and break in any container environment.
-    redis_settings = RedisSettings.from_dsn(os.environ.get("REDIS_URL", "redis://localhost:6379"))
+    redis_settings = load_redis_settings()
 
     @staticmethod
     async def on_startup(ctx):
