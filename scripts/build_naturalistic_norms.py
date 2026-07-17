@@ -43,33 +43,31 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--norm-id", default="naturalistic_v1")
     parser.add_argument("--glob", default="scout_data/sessions/*/preds.npz")
-    parser.add_argument("--min-clips", type=int, default=1)
+    parser.add_argument("--min-clips", type=int, default=15)
     parser.add_argument("--exclude", nargs="*", default=[])
     args = parser.parse_args()
 
     paths = sorted(ROOT.glob(args.glob))
-    paths = [p for p in paths if p.parent.name not in args.exclude]
-    if len(paths) < args.min_clips:
-        print(
-            f"Warning: only {len(paths)} preds.npz found (min_clips={args.min_clips}). "
-            "Norms will be sparse until more sessions are captured.",
-        )
-
+    paths = [p for p in paths if p.parent.name not in set(args.exclude)]
     if not paths:
         raise SystemExit("No preds.npz files found. Capture sessions and run Modal TRIBE first.")
+    if len(paths) < args.min_clips:
+        raise SystemExit(
+            f"Need at least {args.min_clips} preds.npz after exclusions; found {len(paths)}. "
+            "Capture more sessions or lower --min-clips only for non-production experiments."
+        )
 
-    subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / "scripts" / "compute_norms.py"),
-            "--norm-id",
-            args.norm_id,
-            "--glob",
-            args.glob,
-        ],
-        cwd=ROOT,
-        check=True,
-    )
+    compute_cmd = [
+        sys.executable,
+        str(ROOT / "scripts" / "compute_norms.py"),
+        "--norm-id",
+        args.norm_id,
+        "--glob",
+        args.glob,
+    ]
+    for sid in args.exclude:
+        compute_cmd.extend(["--exclude", sid])
+    subprocess.run(compute_cmd, cwd=ROOT, check=True)
 
     session_dirs = [p.parent for p in paths]
     engagement_means = _collect_engagement_means(session_dirs)

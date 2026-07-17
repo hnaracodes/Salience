@@ -1,0 +1,104 @@
+{
+  "model_id": "horikawa_ridge_dims_v1",
+  "data_source": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\tribev2_fused\\train_dims.npz",
+  "fused_lovo_mean_r": 0.23628237531064192,
+  "group_kfold_mean_r": 0.21910601559423568,
+  "cortical_only_lovo_mean_r": 0.2402539043571037,
+  "subcortical_lift": -0.00397152904646178,
+  "permutation_lovo_mean_r": -0.0001874620583370201,
+  "permutation_null_std": 0.05060950347711623,
+  "permutation_p_value": 0.038461538461538464,
+  "in_sample_mean_r2": 0.29142252850001976,
+  "per_target_r": {
+    "approach": 0.2167399222974964,
+    "arousal": 0.2981083198617484,
+    "attention": 0.24263698582000823,
+    "certainty": 0.26808257737214247,
+    "commitment": 0.2535921168069082,
+    "control": 0.29240919698253953,
+    "dominance": 0.14193559661007993,
+    "effort": 0.20259626992607968,
+    "fairness": 0.2202062964557057,
+    "identity": 0.1789015491785215,
+    "obstruction": 0.31873229818875704,
+    "safety": 0.26210986466338326,
+    "upswing": 0.17512119162914314,
+    "valence": 0.2367810685564732
+  },
+  "bootstrap_ci_per_target": {
+    "approach": {
+      "r": 0.2167399222974964,
+      "ci_low": 0.1567724962679722,
+      "ci_high": 0.29677322238741716
+    },
+    "arousal": {
+      "r": 0.2981083198617484,
+      "ci_low": 0.23265423099091445,
+      "ci_high": 0.3960335875108023
+    },
+    "attention": {
+      "r": 0.24263698582000823,
+      "ci_low": 0.15474033278041657,
+      "ci_high": 0.3465772375112617
+    },
+    "certainty": {
+      "r": 0.26808257737214247,
+      "ci_low": 0.19850336714737862,
+      "ci_high": 0.35201552297825817
+    },
+    "commitment": {
+      "r": 0.2535921168069082,
+      "ci_low": 0.14346455187163537,
+      "ci_high": 0.33775999098384096
+    },
+    "control": {
+      "r": 0.29240919698253953,
+      "ci_low": 0.17659127154840307,
+      "ci_high": 0.3619913380221064
+    },
+    "dominance": {
+      "r": 0.14193559661007993,
+      "ci_low": 0.02455108558922162,
+      "ci_high": 0.24942778545031133
+    },
+    "effort": {
+      "r": 0.20259626992607968,
+      "ci_low": 0.12345819686989185,
+      "ci_high": 0.25753422757139566
+    },
+    "fairness": {
+      "r": 0.2202062964557057,
+      "ci_low": 0.1413641400153506,
+      "ci_high": 0.3277036557318257
+    },
+    "identity": {
+      "r": 0.1789015491785215,
+      "ci_low": 0.09491170345954449,
+      "ci_high": 0.2604198844843421
+    },
+    "obstruction": {
+      "r": 0.31873229818875704,
+      "ci_low": 0.21573508775760242,
+      "ci_high": 0.39356299948710183
+    },
+    "safety": {
+      "r": 0.26210986466338326,
+      "ci_low": 0.15590905031100408,
+      "ci_high": 0.3409260859753148
+    },
+    "upswing": {
+      "r": 0.17512119162914314,
+      "ci_low": 0.10564204366135062,
+      "ci_high": 0.26284664604585417
+    },
+    "valence": {
+      "r": 0.2367810685564732,
+      "ci_low": 0.14530985922346312,
+      "ci_high": 0.35209305930813845
+    }
+  },
+  "exported_cv_mean_r": 0.23628237531064192,
+  "train_eval_delta": 0.0,
+  "pass_subcortical_lift": false,
+  "pass_beats_permutation": true
+}

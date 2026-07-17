@@ -51,12 +51,23 @@ def behavioral_score_from_clarity(
     return scores
 
 
-def model_scores_from_section(section: dict[str, Any]) -> dict[str, float]:
+def model_scores_from_section(
+    section: dict[str, Any],
+    *,
+    attention_weight: float | None = None,
+) -> dict[str, float]:
+    """Return element model scores, optionally re-fusing raw component scores."""
     out: dict[str, float] = {}
     for el in section.get("top_elements") or []:
         dom_id = str(el.get("dom_id") or "").lower()
         if dom_id:
-            out[dom_id] = float(el.get("combined_score") or 0.0) / 100.0
+            if attention_weight is None:
+                score = float(el.get("combined_score") or 0.0)
+            else:
+                attention = float(el.get("attention_score") or 0.0)
+                clickability = float(el.get("clickability") or 0.0)
+                score = attention_weight * attention + (1.0 - attention_weight) * clickability
+            out[dom_id] = float(np.clip(score / 100.0, 0.0, 1.0))
     return out
 
 
@@ -65,11 +76,25 @@ def spearman_rho(x: list[float], y: list[float]) -> float:
         return float("nan")
     a = np.asarray(x, dtype=np.float64)
     b = np.asarray(y, dtype=np.float64)
-    ra = a.argsort().argsort().astype(np.float64)
-    rb = b.argsort().argsort().astype(np.float64)
+    ra = _average_ranks(a)
+    rb = _average_ranks(b)
     if ra.std() < 1e-9 or rb.std() < 1e-9:
         return float("nan")
     return float(np.corrcoef(ra, rb)[0, 1])
+
+
+def _average_ranks(values: np.ndarray) -> np.ndarray:
+    """Rank values with average ranks for ties, matching Spearman semantics."""
+    order = np.argsort(values, kind="mergesort")
+    ranks = np.empty(values.size, dtype=np.float64)
+    start = 0
+    while start < values.size:
+        stop = start + 1
+        while stop < values.size and values[order[stop]] == values[order[start]]:
+            stop += 1
+        ranks[order[start:stop]] = (start + stop - 1) / 2.0
+        start = stop
+    return ranks
 
 
 def top1_hit(model: dict[str, float], behavioral: dict[str, float]) -> bool:
@@ -85,11 +110,24 @@ def validate_session(
     *,
     clarity_csv: Path | None = None,
     thresholds: dict[str, float] | None = None,
+    attention_weight: float | None = None,
 ) -> dict[str, Any]:
     bundle_path = session_dir / "analysis_bundle.json"
     if not bundle_path.is_file():
-        raise FileNotFoundError(bundle_path)
+        return {
+            "session_id": session_dir.name,
+            "status": "invalid",
+            "reason": "missing_analysis_bundle",
+            "passed": False,
+        }
     bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    if bundle.get("clarity_attribution"):
+        return {
+            "session_id": session_dir.name,
+            "status": "invalid",
+            "reason": "clarity_leakage_in_analysis_bundle",
+            "passed": False,
+        }
     clarity_path = clarity_csv or session_dir / "clarity_clicks.csv"
     if not clarity_path.is_file():
         return {"session_id": session_dir.name, "status": "skipped", "reason": "no_clarity_csv"}
@@ -102,7 +140,7 @@ def validate_session(
     for sec in sections:
         elements = sec.get("top_elements") or []
         beh = behavioral_score_from_clarity(elements, clarity_rows)
-        mod = model_scores_from_section(sec)
+        mod = model_scores_from_section(sec, attention_weight=attention_weight)
         keys = sorted(set(beh) & set(mod))
         if len(keys) < 2:
             continue
@@ -116,8 +154,9 @@ def validate_session(
     agg_rho = float(np.mean(rhos)) if rhos else float("nan")
     hit_rate = hits / total if total else 0.0
     thr = thresholds or {}
-    passed = (
-        (np.isnan(agg_rho) or agg_rho >= float(thr.get("spearman_min", 0.4)))
+    passed = bool(
+        np.isfinite(agg_rho)
+        and agg_rho >= float(thr.get("spearman_min", 0.4))
         and hit_rate >= float(thr.get("top1_cta_hit_min", 0.6))
     )
     return {
@@ -126,11 +165,73 @@ def validate_session(
         "spearman_mean": round(agg_rho, 4) if np.isfinite(agg_rho) else None,
         "top1_hit_rate": round(hit_rate, 4),
         "n_sections": total,
+        "attention_weight": attention_weight,
         "passed": passed,
     }
 
 
-def validate_corpus(validation_dir: Path) -> dict[str, Any]:
+def _resolve_clarity_path(validation_dir: Path, value: str | None) -> Path | None:
+    if not value:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    project_path = PROJECT_ROOT / path
+    return project_path if project_path.is_file() else validation_dir / path
+
+
+def _bootstrap_mean_ci(
+    values: list[float],
+    *,
+    seed: int = 20260611,
+    n_bootstrap: int = 2000,
+) -> list[float] | None:
+    finite = np.asarray([value for value in values if np.isfinite(value)], dtype=np.float64)
+    if finite.size < 2:
+        return None
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, finite.size, size=(n_bootstrap, finite.size))
+    means = finite[indices].mean(axis=1)
+    low, high = np.quantile(means, [0.025, 0.975])
+    return [round(float(low), 4), round(float(high), 4)]
+
+
+def _corpus_summary(
+    results: list[dict[str, Any]],
+    *,
+    thresholds: dict[str, float],
+) -> dict[str, Any]:
+    qualifying = [row for row in results if row.get("status") == "ok"]
+    rhos = [
+        float(row["spearman_mean"])
+        for row in qualifying
+        if row.get("spearman_mean") is not None
+    ]
+    hit_rates = [float(row.get("top1_hit_rate") or 0.0) for row in qualifying]
+    rho_mean = float(np.mean(rhos)) if rhos else float("nan")
+    hit_mean = float(np.mean(hit_rates)) if hit_rates else 0.0
+    passed = bool(
+        qualifying
+        and np.isfinite(rho_mean)
+        and rho_mean >= float(thresholds.get("spearman_min", 0.4))
+        and hit_mean >= float(thresholds.get("top1_cta_hit_min", 0.6))
+    )
+    return {
+        "n_qualifying": len(qualifying),
+        "spearman_macro_mean": round(rho_mean, 4) if np.isfinite(rho_mean) else None,
+        "spearman_macro_ci95": _bootstrap_mean_ci(rhos),
+        "top1_macro_mean": round(hit_mean, 4),
+        "top1_macro_ci95": _bootstrap_mean_ci(hit_rates),
+        "passed": passed,
+    }
+
+
+def validate_corpus(
+    validation_dir: Path,
+    *,
+    roles: set[str] | None = None,
+    attention_weight: float | None = None,
+) -> dict[str, Any]:
     manifest_path = validation_dir / "manifest.json"
     if not manifest_path.is_file():
         return {"status": "empty", "sessions": []}
@@ -143,14 +244,76 @@ def validate_corpus(validation_dir: Path) -> dict[str, Any]:
         clarity = entry.get("clarity_csv")
         if not sid:
             continue
+        role = str(entry.get("role") or "unspecified")
+        if roles is not None and role not in roles:
+            continue
         session_dir = PROJECT_ROOT / "scout_data" / "sessions" / sid
-        clarity_path = Path(clarity) if clarity else None
-        results.append(validate_session(session_dir, clarity_csv=clarity_path, thresholds=thr))
+        clarity_path = _resolve_clarity_path(validation_dir, clarity)
+        result = validate_session(
+            session_dir,
+            clarity_csv=clarity_path,
+            thresholds=thr,
+            attention_weight=attention_weight,
+        )
+        result.update({
+            "role": role,
+            "property_id": entry.get("property_id"),
+            "page_id": entry.get("page_id"),
+            "unique_sessions": entry.get("unique_sessions"),
+            "mapped_clicks": entry.get("mapped_clicks"),
+        })
+        results.append(result)
     passed = sum(1 for r in results if r.get("passed"))
     return {
         "calibration_id": cfg.get("calibration_id"),
         "validation_dir": str(validation_dir),
         "n_sessions": len(results),
         "n_passed": passed,
+        "roles": sorted(roles) if roles is not None else None,
+        "attention_weight": attention_weight,
+        "summary": _corpus_summary(results, thresholds=thr),
         "sessions": results,
+    }
+
+
+def fit_attention_weight(
+    validation_dir: Path,
+    *,
+    roles: set[str] | None = None,
+    candidates: list[float] | None = None,
+) -> dict[str, Any]:
+    """Select a fusion weight without touching holdout entries."""
+    fit_roles = roles or {"train", "validation"}
+    if "holdout" in fit_roles:
+        raise ValueError("Holdout data cannot be used to fit attention weights")
+    grid = candidates or [round(value, 2) for value in np.linspace(0.0, 1.0, 21)]
+    rows = []
+    for weight in grid:
+        report = validate_corpus(
+            validation_dir,
+            roles=fit_roles,
+            attention_weight=float(weight),
+        )
+        summary = report.get("summary") or {}
+        rows.append({
+            "attention_weight": float(weight),
+            "spearman_macro_mean": summary.get("spearman_macro_mean"),
+            "top1_macro_mean": summary.get("top1_macro_mean"),
+            "n_qualifying": summary.get("n_qualifying"),
+        })
+    eligible = [row for row in rows if row.get("spearman_macro_mean") is not None]
+    if not eligible:
+        raise ValueError("No qualifying train/validation sessions for weight fitting")
+    best = max(
+        eligible,
+        key=lambda row: (
+            float(row["spearman_macro_mean"]),
+            float(row.get("top1_macro_mean") or 0.0),
+            -abs(float(row["attention_weight"]) - 0.5),
+        ),
+    )
+    return {
+        "fit_roles": sorted(fit_roles),
+        "best": best,
+        "candidates": rows,
     }

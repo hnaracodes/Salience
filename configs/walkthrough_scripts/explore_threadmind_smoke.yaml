@@ -1,0 +1,25 @@
+# Local Threadmind fixture explore capture (no --url; SSRF blocks loopback injection).
+name: explore_threadmind_smoke
+initial_url: "http://127.0.0.1:8780/index.html"
+viewport:
+  width: 1280
+  height: 720
+interval_sec: 1.0
+scroll_mode: explore
+site_goal: >
+  Discover product value props and navigate toward pricing or signup CTAs.
+
+explore:
+  max_tr: 8
+  max_clicks: 0
+  max_pages: 1
+  per_page_max_tr: 8
+  max_wall_sec: 60
+  initial_settle_ms: 800
+  scroll_px_per_tr: 720
+  scroll_settle_ms: 250
+  scroll_to_bottom_before_clicks: true
+  allow_nav_clicks_during_scroll: false
+  allow_role_locators: true
+  same_origin_only: true
+  allow_subdomains: false

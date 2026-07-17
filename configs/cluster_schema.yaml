@@ -1,0 +1,40 @@
+schema_version: 2
+description: >
+  Allowed demographic fields for cluster assignment. Ethnicity intentionally
+  omitted — no public movie-fMRI dataset provides ethnicity at scale with matched
+  stimuli and consent for demographic modeling.
+
+min_subjects_per_cluster: 20
+require_site_covariate: true
+
+allowed_fields:
+  age_band:
+    type: enum
+    values: [young_adult, middle_adult, older_adult]
+    age_ranges:
+      young_adult: [18, 35]
+      middle_adult: [36, 55]
+      older_adult: [56, 120]
+  sex:
+    type: enum
+    values: [female, male, unknown]
+
+datasets:
+  - hcp_7t
+  - cneuromod
+  - nndb
+  - camcan
+  - forrest
+
+required_metadata_columns:
+  - subject_id
+  - source_subject_id
+  - dataset
+  - age_band
+  - sex
+  - site_id
+
+provenance_fields:
+  - metadata_quality
+  - consent_scope
+  - dua_version

@@ -399,7 +399,8 @@ Default `pytest tests/` excludes `tests/neuroEmoCode/` via `tests/conftest.py`.
 - **FAKE_TRIBE** mode uses synthetic brain outputs — suitable for dev/CI only.
 - Replace **synthetic norms** before production threshold claims.
 - Heatmaps may be **uniform placeholders** in CI; check `heatmap_provenance.placeholder` in `events[]`.
-- TRIBE predicts **cortical surface** vertices only; subcortical structures are not in the public checkpoint.
+- TRIBE predicts **cortical surface** vertices; optional **subcortical head** writes `preds_subcortical.npz` (8802 voxels, Harvard-Oxford).
+- Track 2 default remains **Kragel template** mode; **Horikawa ridge decoder** (`emotion.mode: decoder`) requires trained bundle in `scout_models/` and UX validation (see `docs/validation/ux-affect-study-protocol.md`).
 - Demographic comparison and cluster multiplex features require minimum cluster sizes and suppression rules before any production claims (see architecture plan).
 
 ---

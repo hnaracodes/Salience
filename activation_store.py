@@ -494,3 +494,52 @@ def resolve_vertex_regions(
     if not path.is_file():
         return None
     return load_vertex_regions_csv(path)
+
+
+def save_subcortical_timeseries(
+    preds: np.ndarray,
+    *,
+    session_id: str,
+    tribe_checkpoint: str = "facebook/tribev2-subcortical",
+    atlas_id: str = "harvard_oxford_subcortical_tribev2",
+    extra_meta: dict[str, Any] | None = None,
+) -> Path:
+    """Save preds[T, 8802] to scout_data/sessions/<id>/preds_subcortical.npz.
+
+    Updates sessions.meta_json with subcortical_npz_path when a row exists.
+    """
+    from scout_core.subcortical.io import save_subcortical_npz
+
+    session_dir = SESSIONS_DIR / session_id
+    out_path = save_subcortical_npz(
+        session_dir,
+        preds,
+        atlas_id=atlas_id,
+        tribe_checkpoint=tribe_checkpoint,
+        extra_meta=extra_meta,
+    )
+
+    meta_patch = {
+        "subcortical_npz_path": str(out_path.relative_to(PROJECT_ROOT)),
+        "n_subcortical_voxels": int(preds.shape[1]),
+        "subcortical_atlas_id": atlas_id,
+        "subcortical_checkpoint": tribe_checkpoint,
+    }
+
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT meta_json FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        if row:
+            existing = json.loads(row[0] or "{}")
+            existing.update(meta_patch)
+            conn.execute(
+                "UPDATE sessions SET meta_json = ? WHERE id = ?",
+                (json.dumps(existing), session_id),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    return out_path

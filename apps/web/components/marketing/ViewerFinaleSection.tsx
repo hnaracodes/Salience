@@ -6,10 +6,30 @@ import gsap from 'gsap'
 import { ProductViewerMock } from '@/components/marketing/ProductViewerMock'
 
 const tabs = [
-  { id: 'heatmap', label: 'Heatmap', sub: 'DINOv2 per frame', accent: 'from-yellow-500/20 to-orange-600/30' },
-  { id: 'elements', label: 'Elements', sub: 'Click any bbox', accent: 'from-signal/20 to-signal/5' },
-  { id: 'brain', label: 'Brain strip', sub: 'TRIBE v2 cortical', accent: 'from-neural/25 to-neural/5' },
-  { id: 'copy', label: 'Copy chips', sub: 'Clarity · urgency · fit', accent: 'from-copy/25 to-copy/5' },
+  {
+    id: 'heatmap',
+    label: 'Heatmap',
+    sub: 'DINOv2 per frame',
+    accent: 'from-amber-200/30 to-orange-300/20',
+  },
+  {
+    id: 'elements',
+    label: 'Elements',
+    sub: 'Click any bbox',
+    accent: 'from-blue-200/30 to-signal/10',
+  },
+  {
+    id: 'brain',
+    label: 'Brain strip',
+    sub: 'TRIBE v2 cortical',
+    accent: 'from-orange-200/30 to-neural/10',
+  },
+  {
+    id: 'copy',
+    label: 'Copy chips',
+    sub: 'Clarity · urgency · fit',
+    accent: 'from-green-200/30 to-copy/10',
+  },
 ] as const
 
 type TabId = (typeof tabs)[number]['id']
@@ -17,7 +37,6 @@ type TabId = (typeof tabs)[number]['id']
 export function ViewerFinaleSection() {
   const [active, setActive] = useState<TabId>('heatmap')
   const overlayRef = useRef<HTMLDivElement>(null)
-  const viewerWrapRef = useRef<HTMLDivElement>(null)
 
   useGSAP(
     () => {
@@ -29,33 +48,32 @@ export function ViewerFinaleSection() {
       }
       gsap.fromTo(
         overlayRef.current,
-        { opacity: 0.4 },
-        { opacity: 1, duration: 0.35, ease: 'power2.out' }
+        { opacity: 0.5 },
+        { opacity: 1, duration: 0.5, ease: 'power3.out' }
       )
     },
     { dependencies: [active], scope: overlayRef }
   )
 
   return (
-    <section id="viewer" className="border-t border-ink-700 bg-ink-950 px-6 py-28">
+    <section id="viewer" data-section className="border-t border-line bg-canvas-warm px-6 py-28">
       <div className="mx-auto max-w-6xl">
-        <p className="mb-4 text-xs font-mono uppercase tracking-widest text-text-secondary" data-reveal>
-          Full session viewer
+        <p className="section-eyebrow" data-reveal>
+          Interactive viewer
         </p>
-        <h2
-          className="mb-4 text-3xl font-display font-semibold tracking-tight text-text-primary md:text-4xl"
-          style={{ letterSpacing: '-0.02em' }}
-          data-reveal
-          data-reveal-delay="0.05"
-        >
-          One surface. Every signal.
+        <h2 className="section-heading mb-4" data-reveal data-reveal-delay="0.05">
+          Explore every signal in one report.
         </h2>
-        <p className="mb-8 max-w-2xl text-text-secondary" data-reveal data-reveal-delay="0.08">
-          The only full viewer on this page — switch layers below to see what each mode highlights
-          in your team&apos;s post-scan report.
+        <p
+          className="mb-8 max-w-2xl text-base leading-relaxed text-text-secondary"
+          data-reveal
+          data-reveal-delay="0.08"
+        >
+          After a scan completes, your team gets a shareable viewer with timeline scrubbing,
+          heatmap overlays, element bboxes, and copy fusion chips — switch layers below to
+          preview each mode.
         </p>
 
-        {/* Interactive layer tabs */}
         <div
           className="mb-6 flex flex-wrap gap-2"
           data-reveal
@@ -70,30 +88,30 @@ export function ViewerFinaleSection() {
               role="tab"
               aria-selected={active === tab.id}
               onClick={() => setActive(tab.id)}
-              className={`rounded-md border px-4 py-2 text-left transition-colors ${
+              className={`cursor-pointer rounded-pill border px-4 py-2 text-left transition-all duration-300 ease-premium ${
                 active === tab.id
-                  ? 'border-signal bg-signal/10 text-text-primary'
-                  : 'border-ink-700 bg-ink-900 text-text-secondary hover:border-ink-600'
-              } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal`}
+                  ? 'border-ink-950 bg-ink-950 text-white shadow-card'
+                  : 'border-line bg-surface text-text-secondary hover:border-line-strong hover:text-text-primary'
+              } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-950`}
             >
               <span className="block text-sm font-medium">{tab.label}</span>
-              <span className="font-mono text-[10px] opacity-70">{tab.sub}</span>
+              <span className="text-[10px] opacity-70">{tab.sub}</span>
             </button>
           ))}
         </div>
 
-        <div ref={viewerWrapRef} className="relative" data-reveal data-reveal-delay="0.14">
-          <ProductViewerMock className="shadow-2xl shadow-black/30 ring-1 ring-ink-700" />
+        <div className="relative" data-reveal data-reveal-delay="0.14">
+          <div className="product-mock-shell">
+            <ProductViewerMock />
+          </div>
 
-          {/* Layer emphasis overlay — changes per tab */}
           <div
             ref={overlayRef}
-            className={`pointer-events-none absolute inset-0 rounded-lg bg-gradient-to-br ${tabs.find((t) => t.id === active)?.accent} transition-colors duration-300`}
+            className={`pointer-events-none absolute inset-0 rounded-card-lg bg-gradient-to-br ${tabs.find((t) => t.id === active)?.accent} transition-all duration-500 ease-premium`}
             aria-hidden="true"
           />
 
-          {/* Corner callout per tab */}
-          <div className="pointer-events-none absolute bottom-4 right-4 rounded-lg border border-ink-600 bg-ink-900/90 px-4 py-3 backdrop-blur-sm">
+          <div className="pointer-events-none absolute bottom-6 right-6 rounded-card border border-line bg-surface/95 px-4 py-3 shadow-card-lg backdrop-blur-sm">
             <TabCallout tab={active} />
           </div>
         </div>
@@ -113,7 +131,7 @@ function TabCallout({ tab }: { tab: TabId }) {
   return (
     <>
       <p className="text-xs font-medium text-text-primary">{copy.title}</p>
-      <p className="mt-0.5 font-mono text-[10px] text-text-secondary">{copy.detail}</p>
+      <p className="mt-0.5 text-[10px] text-text-secondary">{copy.detail}</p>
     </>
   )
 }

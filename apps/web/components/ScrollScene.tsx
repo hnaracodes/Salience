@@ -7,55 +7,67 @@ import ScrollTrigger from 'gsap/ScrollTrigger'
 gsap.registerPlugin(ScrollTrigger)
 
 /**
- * ScrollScene — mounts once on the landing page and drives all
- * scroll-triggered reveal animations via [data-reveal] attributes.
- * Runs no animations if the user prefers reduced motion.
+ * ScrollScene — scroll-triggered reveals for [data-reveal] elements
+ * and smooth section entrance for [data-section] blocks.
  */
 export function ScrollScene() {
   useGSAP(() => {
     document.documentElement.classList.add('has-scroll-scene')
 
-    const reducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)'
-    ).matches
-
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const revealEls = document.querySelectorAll<HTMLElement>('[data-reveal]')
+    const sections = document.querySelectorAll<HTMLElement>('[data-section]')
 
     if (reducedMotion) {
-      // Immediately surface all elements — no animation
-      revealEls.forEach((el) => {
-        gsap.set(el, { opacity: 1, y: 0 })
-      })
+      revealEls.forEach((el) => gsap.set(el, { opacity: 1, y: 0 }))
+      sections.forEach((el) => gsap.set(el, { opacity: 1 }))
       return () => {
         document.documentElement.classList.remove('has-scroll-scene')
       }
     }
+
+    sections.forEach((section) => {
+      if (section.id === 'hero') return
+      gsap.fromTo(
+        section,
+        { opacity: 0.72 },
+        {
+          opacity: 1,
+          duration: 1.4,
+          ease: 'power2.inOut',
+          scrollTrigger: {
+            trigger: section,
+            start: 'top 92%',
+            end: 'top 55%',
+            scrub: 1.2,
+          },
+        }
+      )
+    })
 
     revealEls.forEach((el) => {
       const delay = parseFloat(el.dataset.revealDelay ?? '0')
 
       gsap.fromTo(
         el,
-        { opacity: 0, y: 40 },
+        { opacity: 0, y: 32 },
         {
           opacity: 1,
           y: 0,
-          duration: 0.7,
+          duration: 1.15,
           delay,
-          ease: 'power2.out',
+          ease: 'power4.out',
           scrollTrigger: {
             trigger: el,
-            start: 'top 85%',
+            start: 'top 90%',
             once: true,
           },
         }
       )
     })
 
-    // Hero / above-fold content: reveal immediately if already in view
     ScrollTrigger.refresh()
 
-    // Counter animations
     const counterEls = document.querySelectorAll<HTMLElement>('[data-counter]')
     counterEls.forEach((el) => {
       const target = parseFloat(el.dataset.counter ?? '0')
@@ -63,11 +75,11 @@ export function ScrollScene() {
 
       gsap.to(obj, {
         val: target,
-        duration: 1.4,
-        ease: 'power2.out',
+        duration: 2,
+        ease: 'power3.out',
         scrollTrigger: {
           trigger: el,
-          start: 'top 85%',
+          start: 'top 90%',
           once: true,
         },
         onUpdate() {

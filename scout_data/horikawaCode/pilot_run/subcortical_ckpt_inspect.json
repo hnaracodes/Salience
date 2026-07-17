@@ -1,0 +1,26 @@
+{
+  "cortical": {
+    "repo_id": "facebook/tribev2",
+    "ckpt_path": "/root/.cache/huggingface/hub/models--facebook--tribev2/snapshots/f894e783020944dcd96e5568550afe2aa9743f9f/best.ckpt",
+    "keys": [
+      "state_dict",
+      "model_build_args"
+    ],
+    "model_build_args_keys": [
+      "feature_dims",
+      "n_outputs",
+      "n_output_timesteps"
+    ],
+    "state_dict_n": 108,
+    "state_dict_sample": "model.time_pos_embed"
+  },
+  "subcortical": {
+    "repo_id": "facebook/tribev2-subcortical",
+    "ckpt_path": "/root/.cache/huggingface/hub/models--facebook--tribev2-subcortical/snapshots/214a5d939573b09772fdb47415585201e94e2e15/best.ckpt",
+    "keys": [
+      "state_dict"
+    ],
+    "state_dict_n": 108,
+    "state_dict_sample": "model.time_pos_embed"
+  }
+}

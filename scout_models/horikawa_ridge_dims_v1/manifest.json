@@ -1,0 +1,34 @@
+{
+  "model_id": "horikawa_ridge_dims_v1",
+  "model_type": "ridge",
+  "train_npz": "scout_data\\horikawaCode\\tribev2_fused\\train_dims.npz",
+  "n_features": 808,
+  "n_targets": 14,
+  "label_names": [
+    "approach",
+    "arousal",
+    "attention",
+    "certainty",
+    "commitment",
+    "control",
+    "dominance",
+    "effort",
+    "fairness",
+    "identity",
+    "obstruction",
+    "safety",
+    "upswing",
+    "valence"
+  ],
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "atlas_sha256": "8b7ca359c65e507da281673bd48cfa190682a71c4833f673ecf92feb5b623a80",
+  "data_hash": "8d7014389a023294a12fa4364aeba8939be8ecfa77b880216f9c87da6263461f",
+  "corpus": "ready_all",
+  "cv_scheme": "leave_one_video_out",
+  "cv_mean_r": 0.23628237531064192,
+  "training_argv": [
+    "scripts\\horikawaCode\\train_horikawa_ridge_decoder.py",
+    "--config",
+    "configs\\horikawa_decoding_dims.yaml"
+  ]
+}

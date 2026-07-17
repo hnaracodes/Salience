@@ -11,59 +11,67 @@ const features: {
   {
     visual: 'neural',
     title: 'Neural Scoring',
-    body: "TRIBE v2 predicts cortical engagement from walkthrough video — not eye-tracking, actual brain-response modeling.",
-    metric: 'VAN−DMN Z tracked per TR',
+    body: 'TRIBE v2 models cortical engagement from walkthrough video — VAN−DMN Z-scores tracked per timeline frame, not eye-tracking proxies.',
+    metric: 'VAN−DMN Z per TR',
   },
   {
     visual: 'crawl',
     title: 'Multi-page Crawl',
-    body: 'Scroll-then-nav exploration hits every same-origin page. DOM text and video captured per timeline frame.',
+    body: 'Playwright scrolls each route, follows nav links, and captures DOM text plus video for every page in the same-origin journey.',
     metric: 'Up to 8 pages per scan',
   },
   {
     visual: 'copy',
     title: 'Copy Analysis',
-    body: 'Clarity, urgency, and goal-fit scores from visible page text — fused into the final neural compound score.',
-    metric: '20% copy weight in score',
+    body: 'Clarity, urgency, and goal-fit scores from visible page text — fused at 20% weight into the final neural compound score.',
+    metric: 'Per-element copy chips',
   },
   {
     visual: 'heatmap',
-    title: 'Live Heatmaps',
-    body: 'DINOv2 attention maps overlaid on every captured frame. See exactly which pixels drive neural response.',
-    metric: 'Warm ramp · yellow→red',
+    title: 'Attention Heatmaps',
+    body: 'DINOv2 attention maps overlaid on every captured frame. Warm regions show exactly which pixels drive cortical spikes.',
+    metric: 'Yellow → red saliency ramp',
   },
 ]
 
 export function FeaturesSection() {
   return (
-    <section className="border-t border-ink-700 bg-ink-900 px-6 py-28">
+    <section data-section className="border-t border-line bg-surface px-6 py-28">
       <div className="mx-auto max-w-6xl">
-        <p className="mb-4 text-xs font-mono uppercase tracking-widest text-text-secondary" data-reveal>
+        <p className="section-eyebrow" data-reveal>
           What you get
         </p>
-        <h2
-          className="mb-16 text-3xl font-display font-semibold tracking-tight text-text-primary md:text-4xl"
-          style={{ letterSpacing: '-0.02em' }}
-          data-reveal
-          data-reveal-delay="0.05"
-        >
-          Four systems. One score.
+        <h2 className="section-heading mb-4" data-reveal data-reveal-delay="0.05">
+          Four analysis layers. One actionable score.
         </h2>
+        <p
+          className="mb-16 max-w-xl text-base text-text-secondary"
+          data-reveal
+          data-reveal-delay="0.08"
+        >
+          Every scan produces cortical ratings, attention heatmaps, copy signals, and
+          per-element inspection — all in a single interactive viewer.
+        </p>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {features.map((feature, i) => (
             <article
               key={feature.title}
-              className="group overflow-hidden rounded-lg border border-ink-700 bg-ink-950 transition-colors hover:border-ink-600"
+              className="group marketing-card hover:-translate-y-0.5 hover:shadow-card-lg"
               data-reveal
               data-reveal-delay={String(i * 0.08)}
             >
-              <FeatureVisual type={feature.visual} />
+              <div className="overflow-hidden rounded-t-card border-b border-line">
+                <FeatureVisual type={feature.visual} />
+              </div>
 
               <div className="relative p-6">
-                <div className="absolute left-0 top-0 h-full w-0.5 bg-signal opacity-60 group-hover:opacity-100" aria-hidden="true" />
+                <div
+                  className="absolute left-0 top-0 h-full w-0.5 bg-signal opacity-40 transition-opacity duration-500 group-hover:opacity-100"
+                  aria-hidden="true"
+                />
 
-                <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-signal">
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-signal">
                   {feature.metric}
                 </p>
                 <h3 className="mb-2 text-lg font-semibold text-text-primary">{feature.title}</h3>

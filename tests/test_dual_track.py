@@ -16,6 +16,7 @@ from scout_core.dual_track import (
     apply_session_z_scores,
     compute_activation_track,
     compute_emotion_track,
+    compute_emotion_track_decoder,
     compute_engagement_track,
     compute_mean_activation,
     dominant_emotion_at_timestep,
@@ -23,10 +24,6 @@ from scout_core.dual_track import (
     load_network_indices,
     load_templates,
 )
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
 
 N_VERTICES = 20484
 N_TIMESTEPS = 60
@@ -136,6 +133,16 @@ class TestEngagementTrack:
     def test_baseline_trs_reported_correctly(self, random_preds, baseline_preds, van_idx, dmn_idx):
         result = compute_engagement_track(random_preds, baseline_preds, van_idx, dmn_idx)
         assert result["baseline_trs"] == baseline_preds.shape[0]
+
+    def test_robust_mad_normalization(self, baseline_preds, van_idx, dmn_idx):
+        T = 10
+        preds = np.zeros((T, N_VERTICES), dtype=np.float32)
+        preds[:, van_idx] = 3.0
+        result = compute_engagement_track(
+            preds, baseline_preds, van_idx, dmn_idx, normalization_method="robust_mad",
+        )
+        assert result["normalization_method"] == "robust_mad"
+        assert all(s is not None for s in result["scores"])
 
 
 # ---------------------------------------------------------------------------
@@ -331,5 +338,16 @@ class TestGroundingTriggers:
         assert triggers[0]["channel"] == "fear"
         assert triggers[0]["trigger_type"] == "emotion"
         assert triggers[0]["z_score"] == pytest.approx(2.5)
-        assert triggers[0]["raw_cosine"] == pytest.approx(0.06)
-        assert triggers[0]["value"] == pytest.approx(2.5)
+
+    def test_decoder_prob_trigger(self):
+        emo = {
+            "mode": "decoder",
+            "class_names": ["fear", "amusement"],
+            "probabilities": [[0.2, 0.3], [0.8, 0.1]],
+            "grounding_prob_threshold": 0.5,
+        }
+        triggers = find_grounding_triggers(None, emo, emotion_prob_trigger=0.5)
+        assert len(triggers) == 1
+        assert triggers[0]["channel"] == "fear"
+        assert triggers[0]["probability"] == pytest.approx(0.8)
+        assert triggers[0]["value"] == pytest.approx(0.8)

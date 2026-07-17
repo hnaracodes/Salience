@@ -79,7 +79,7 @@ function ScanDetailView({ scanId }: { scanId: string }) {
           <h2 className="text-sm font-mono text-text-secondary uppercase tracking-widest mb-4">
             Neural viewer
           </h2>
-          <ViewerFrame src={scan.viewer_url} />
+          <ViewerFrame src={scan.viewer_url} scanId={scanId} />
         </section>
       )}
     </div>

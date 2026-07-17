@@ -1,0 +1,24 @@
+{
+  "corpus": "pilot_275",
+  "n_requested": 275,
+  "n_ready": 264,
+  "n_missing": 11,
+  "n_stale": 0,
+  "n_invalid": 0,
+  "max_stimulus_id": 275,
+  "missing_stimulus_ids": [
+    "188",
+    "189",
+    "190",
+    "205",
+    "210",
+    "211",
+    "212",
+    "213",
+    "214",
+    "215",
+    "216"
+  ],
+  "stale_stimulus_ids": [],
+  "invalid_stimulus_ids": []
+}

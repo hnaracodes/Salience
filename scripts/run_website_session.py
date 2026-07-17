@@ -71,6 +71,8 @@ def _stage_capture(args: argparse.Namespace) -> str:
     ]
     if args.session_id:
         cmd.extend(["--session-id", args.session_id])
+    if args.url:
+        cmd.extend(["--url", args.url])
     _run(cmd)
     if args.session_id:
         return args.session_id
@@ -155,6 +157,7 @@ def main() -> None:
     parser.add_argument("--stage", choices=STAGES, default="all")
     parser.add_argument("--session-id", default=None)
     parser.add_argument("--script", type=Path, default=None)
+    parser.add_argument("--url", default=None, help="Target URL for an explore-only capture profile")
     parser.add_argument("--norm-id", default=None)
     parser.add_argument("--baseline-session-id", default=None)
     parser.add_argument("--baseline-preds", type=Path, default=None)
@@ -170,7 +173,7 @@ def main() -> None:
     parser.add_argument(
         "--create-baseline",
         action="store_true",
-        help="Before dual_track: modal run tribe.py::record_baseline (gray video → preds_baseline.npz)",
+        help="Before dual_track: modal run tribe.py::record_baseline (gray video -> preds_baseline.npz)",
     )
     parser.add_argument(
         "--inspect",
@@ -188,13 +191,13 @@ def main() -> None:
     stages = all_stages if args.stage == "all" else [args.stage]
 
     if args.create_baseline and "dual_track" in stages:
-        print("create-baseline → tribe.py::record_baseline")
+        print("create-baseline -> tribe.py::record_baseline")
         _stage_baseline()
 
     for stage in stages:
         if stage == "capture":
             session_id = _stage_capture(args)
-            print(f"capture → session_id={session_id}")
+            print(f"capture -> session_id={session_id}")
             continue
         if not session_id:
             raise SystemExit("--session-id required for stages after capture")

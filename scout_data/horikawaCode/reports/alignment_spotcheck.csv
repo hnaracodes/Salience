@@ -1,0 +1,11 @@
+stimulus_id,video_filename,n_trs,argmax_category,top3_categories,valence_norm,arousal_norm
+32,0032.mp4,16,amusement,amusement:0.400;admiration:0.300;awe:0.300,0.611,0.611
+33,0033.mp4,9,interest,interest:0.500;boredom:0.300;aesthetic_appreciation:0.100,0.667,0.611
+35,0035.mp4,3,adoration,adoration:0.700;joy:0.600;awe:0.300,0.750,0.611
+75,0075.mp4,6,romance,romance:0.389;sadness:0.222;relief:0.167,0.639,0.528
+159,0159.mp4,7,amusement,amusement:0.385;surprise:0.308;confusion:0.154,0.306,0.556
+161,0161.mp4,12,amusement,amusement:0.385;joy:0.385;surprise:0.308,0.889,0.611
+250,0250.mp4,13,interest,interest:0.429;surprise:0.393;amusement:0.357,0.444,0.569
+269,0269.mp4,9,fear,fear:0.500;relief:0.464;excitement:0.250,0.319,0.847
+292,0292.mp4,4,amusement,amusement:0.750;awe:0.333;joy:0.333,0.903,0.611
+333,0333.mp4,5,sadness,sadness:0.615;sympathy:0.538;awe:0.154,0.431,0.569

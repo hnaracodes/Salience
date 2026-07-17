@@ -1,0 +1,34 @@
+{
+  "model_id": "horikawa_mlp_dims_v1",
+  "model_type": "mlp",
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "target_type": "dimensions_14",
+  "n_classes": 14,
+  "class_names": [
+    "approach",
+    "arousal",
+    "attention",
+    "certainty",
+    "commitment",
+    "control",
+    "dominance",
+    "effort",
+    "fairness",
+    "identity",
+    "obstruction",
+    "safety",
+    "upswing",
+    "valence"
+  ],
+  "cv_scheme": "group_kfold",
+  "cv_metrics": {
+    "mean_r": 0.07094063926268306
+  },
+  "cv_mean_r": 0.07094063926268306,
+  "n_samples": 264,
+  "n_features": 808,
+  "status": "pilot",
+  "corpus": "pilot_275",
+  "data_hash": "270967c498086fcf3530b815cfb2faa66b3f61d7b62e488b248bff88016dc906",
+  "atlas_sha256": "1770f7c8ef7179a387df992e3de4a3ae51d373274596468f1d4c89075b6e3e87"
+}

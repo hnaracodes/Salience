@@ -15,7 +15,7 @@ interface ScanResponse {
 export function ScanForm() {
   if (!clerkEnabled) {
     return (
-      <p className="rounded-md border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-text-secondary">
+      <p className="rounded-card border border-line bg-surface-muted px-4 py-3 text-sm text-text-secondary">
         Authentication is not configured. Add Clerk keys to start scans, or{' '}
         <Link href="/" className="text-signal hover:underline">
           return home
@@ -83,7 +83,7 @@ function ScanFormAuthed() {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com"
           required
-          className="w-full rounded-md border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-text-primary placeholder-text-secondary outline-none transition-colors focus:border-signal focus:ring-1 focus:ring-signal"
+          className="w-full rounded-card border border-line bg-surface px-4 py-3 text-sm text-text-primary placeholder-text-tertiary outline-none transition-colors duration-300 focus:border-signal focus:ring-1 focus:ring-signal"
           disabled={loading}
           autoFocus
         />
@@ -104,7 +104,7 @@ function ScanFormAuthed() {
           onChange={(e) => setGoal(e.target.value)}
           placeholder="e.g. Drive sign-ups for our SaaS trial. Reduce bounce on the pricing page."
           rows={3}
-          className="w-full resize-none rounded-md border border-ink-700 bg-ink-900 px-4 py-3 text-sm text-text-primary placeholder-text-secondary outline-none transition-colors focus:border-signal focus:ring-1 focus:ring-signal"
+          className="w-full resize-none rounded-card border border-line bg-surface px-4 py-3 text-sm text-text-primary placeholder-text-tertiary outline-none transition-colors duration-300 focus:border-signal focus:ring-1 focus:ring-signal"
           disabled={loading}
         />
         <p className="mt-1 text-xs text-text-secondary">
@@ -123,7 +123,7 @@ function ScanFormAuthed() {
       <button
         type="submit"
         disabled={loading}
-        className="inline-flex h-12 w-full items-center justify-center rounded-md bg-signal text-sm font-medium text-white transition-colors hover:bg-signal-dim disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-signal"
+        className="inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-pill bg-ink-950 text-sm font-medium text-white transition-all duration-300 ease-premium hover:bg-ink-900 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-950"
       >
         {loading ? (
           <span className="flex items-center gap-2">

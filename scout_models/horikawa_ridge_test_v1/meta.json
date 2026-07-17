@@ -1,0 +1,35 @@
+{
+  "model_id": "horikawa_ridge_test_v1",
+  "model_type": "ridge",
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "target_type": "product_8",
+  "n_classes": 8,
+  "class_names": [
+    "amusement",
+    "awe",
+    "contentment",
+    "excitement",
+    "fear",
+    "anger",
+    "sadness",
+    "confusion"
+  ],
+  "cv_scheme": "leave_one_video_out",
+  "cv_metrics": {
+    "class_0": -0.4895956778435282,
+    "class_1": -0.8955752213985024,
+    "class_2": 0.3379624217581656,
+    "class_3": -0.9313152569632518,
+    "class_4": 0.30670536857730896,
+    "class_5": 0.5458032726980844,
+    "class_6": -0.9288143297225552,
+    "class_7": 0.5441972694105288
+  },
+  "cv_mean_r": -0.18882901918546874,
+  "n_samples": 3,
+  "n_features": 808,
+  "status": "pilot",
+  "corpus": "pilot_150",
+  "data_hash": "e0802267ea3847041ae0dfa06ce1682d8b5c77fff81c0cd1c8ebc41850f3345f",
+  "atlas_sha256": "8b7ca359c65e507da281673bd48cfa190682a71c4833f673ecf92feb5b623a80"
+}

@@ -1,0 +1,36 @@
+{
+  "model_id": "horikawa_mlp_dims_v1",
+  "model_type": "mlp",
+  "train_npz": "scout_data\\horikawaCode\\tribev2_fused\\train_dims.npz",
+  "n_features": 808,
+  "n_targets": 14,
+  "label_names": [
+    "approach",
+    "arousal",
+    "attention",
+    "certainty",
+    "commitment",
+    "control",
+    "dominance",
+    "effort",
+    "fairness",
+    "identity",
+    "obstruction",
+    "safety",
+    "upswing",
+    "valence"
+  ],
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "atlas_sha256": "1770f7c8ef7179a387df992e3de4a3ae51d373274596468f1d4c89075b6e3e87",
+  "data_hash": "270967c498086fcf3530b815cfb2faa66b3f61d7b62e488b248bff88016dc906",
+  "corpus": "pilot_275",
+  "cv_scheme": "group_kfold",
+  "cv_mean_r": 0.07094063926268306,
+  "training_argv": [
+    "scripts/horikawaCode/train_horikawa_ridge_decoder.py",
+    "--config",
+    "configs/horikawa_decoding_dims.yaml",
+    "--model",
+    "mlp"
+  ]
+}

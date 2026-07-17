@@ -1,0 +1,52 @@
+{
+  "classes": [
+    {
+      "class_id": 0,
+      "horikawa_name": "amusement",
+      "product_label": "amusement",
+      "bundle_column": "amusement"
+    },
+    {
+      "class_id": 1,
+      "horikawa_name": "awe",
+      "product_label": "awe",
+      "bundle_column": "awe"
+    },
+    {
+      "class_id": 2,
+      "horikawa_name": "contentment",
+      "product_label": "contentment",
+      "bundle_column": "contentment"
+    },
+    {
+      "class_id": 3,
+      "horikawa_name": "excitement",
+      "product_label": "excitement",
+      "bundle_column": "excitement"
+    },
+    {
+      "class_id": 4,
+      "horikawa_name": "fear",
+      "product_label": "fear",
+      "bundle_column": "fear"
+    },
+    {
+      "class_id": 5,
+      "horikawa_name": "anger",
+      "product_label": "anger",
+      "bundle_column": "anger"
+    },
+    {
+      "class_id": 6,
+      "horikawa_name": "sadness",
+      "product_label": "sadness",
+      "bundle_column": "sadness"
+    },
+    {
+      "class_id": 7,
+      "horikawa_name": "confusion",
+      "product_label": "confusion",
+      "bundle_column": "confusion"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+[2026-07-01T08:08:29.241759+00:00] === Horikawa pilot training start ===
+[2026-07-01T08:08:29.241759+00:00] Budget cap: $20.00  A100 rate: $2.50/hr
+[2026-07-01T08:08:29.250258+00:00] Phase 0: downloading figshare labels (no Modal cost)
+[2026-07-01T08:08:29.250258+00:00] RUN C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\.venv311\Scripts\python.exe C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scripts\horikawaCode\download_horikawa_labels.py
+[2026-07-01T13:16:54.278392+00:00] === Horikawa pilot training start ===
+[2026-07-01T13:16:54.278392+00:00] Budget cap: $20.00  A100 rate: $2.50/hr
+[2026-07-01T13:16:54.279392+00:00] Phase 0: labels cache present (C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\labels\ratings_cache.npz)
+[2026-07-01T13:16:54.280393+00:00] Phase 1: building pilot manifest
+[2026-07-01T13:16:54.280393+00:00] RUN C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\.venv311\Scripts\python.exe C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scripts\horikawaCode\build_clip_manifest.py --pilot-n 150 --corpus pilot_150 --videos-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\videos --output C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\manifests\pilot_150.json
+[2026-07-01T13:16:54.585778+00:00] Manifest: 118 clips, 0 with resolved paths, 0 mp4 in videos dir
+[2026-07-01T13:16:54.585778+00:00] STOP before Modal Phase 2 (no MP4s in videos dir). Zero GPU spend.
+[2026-07-01T13:16:54.588778+00:00] Cost tracker -> C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\pilot_run\cost_estimate.json
+[2026-07-02T09:10:08.658562+00:00] === Horikawa pilot training start ===
+[2026-07-02T09:10:08.672557+00:00] Budget cap: $20.00  A100 rate: $2.50/hr
+[2026-07-02T09:10:08.673052+00:00] Phase 0: labels cache present (C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\labels\ratings_cache.npz)
+[2026-07-02T09:10:08.673052+00:00] Phase 1: building pilot manifest
+[2026-07-02T09:10:08.676122+00:00] RUN C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\.venv311\Scripts\python.exe C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scripts\horikawaCode\build_clip_manifest.py --pilot-n 150 --corpus pilot_150 --videos-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\videos --output C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\manifests\pilot_150.json
+[2026-07-02T09:10:09.226079+00:00] Manifest: 118 clips, 118 with resolved paths, 2196 mp4 in videos dir
+[2026-07-02T09:10:09.227004+00:00] Phase 2a: Modal probe (3 clips)
+[2026-07-02T09:10:09.227004+00:00] RUN C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\.venv311\Scripts\python.exe C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scripts\horikawaCode\generate_tribev2_features.py --manifest C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\manifests\pilot_150.json --videos-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\videos --output-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\intermediates_modal --execute-tribe --skip-existing --limit 3
+[2026-07-02T09:13:52.416795+00:00] Probe: 3/3 ok, 208.7s GPU, ~$0.14 spent, projected full pilot ~$5.70
+[2026-07-02T09:13:52.419406+00:00] Within budget: proceeding with up to 118 clips
+[2026-07-02T09:13:52.421093+00:00] Phase 2b: Modal scale-up (limit 118, skip-existing)
+[2026-07-02T09:13:52.421549+00:00] RUN C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\.venv311\Scripts\python.exe C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scripts\horikawaCode\generate_tribev2_features.py --manifest C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\manifests\pilot_150.json --videos-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\videos --output-dir C:\Users\kragh\OneDrive\Documents\HrudayCodingProjects\TribeV2WebAnalyzer\TribeV2\scout_data\horikawaCode\intermediates_modal --execute-tribe --skip-existing --limit 118

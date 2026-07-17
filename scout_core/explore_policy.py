@@ -51,11 +51,19 @@ class ExploreBudget:
         self.visited_actions.add(action_key)
 
     def at_limit(self) -> bool:
-        return (
-            self.t_idx >= self.max_tr
-            or self.clicks >= self.max_clicks
-            or len(self.pages_visited) >= self.max_pages
-        )
+        """True when the TR clock is exhausted.
+
+        Click and page budgets constrain *actions* (see next_action / scoring),
+        not whether the capture loop may still sample the current page. Otherwise
+        max_clicks=0 or max_pages=1 would stop the session before any snapshots.
+        """
+        return self.t_idx >= self.max_tr
+
+    def clicks_exhausted(self) -> bool:
+        return self.clicks >= self.max_clicks
+
+    def pages_exhausted(self) -> bool:
+        return len(self.pages_visited) >= self.max_pages
 
 
 @dataclass
@@ -255,11 +263,21 @@ def score_actionable_elements(
         if tag == "A" and href:
             if not is_same_origin(href, initial_url, cfg) or _href_denied(href, cfg):
                 continue
+            path = _href_path(href, initial_url)
+            current_path = urlparse(page_url).path or "/"
+            # When the page budget is exhausted, keep capturing the current page
+            # but do not propose navigation to new paths.
+            if (
+                budget.pages_exhausted()
+                and path
+                and path not in budget.pages_visited
+                and path != current_path
+            ):
+                continue
             score += 0.55
             if "nav" in dom_id.lower() or role == "navigation":
                 score += 0.15
             if cfg.get("prioritize_unvisited_nav", True):
-                path = _href_path(href, initial_url)
                 if path and path not in budget.pages_visited:
                     score += float(cfg.get("unvisited_page_bonus", 0.4))
             action_kind = "click"
@@ -320,7 +338,7 @@ def next_action(
 
     allow_role = bool(cfg.get("allow_role_locators", True))
 
-    if ranked and budget.clicks < budget.max_clicks:
+    if ranked and not budget.clicks_exhausted():
         score, el, kind = ranked[0]
         dom_id = str(el.get("dom_id") or "")
         selector = element_selector(el, initial_url=initial_url)
@@ -354,7 +372,7 @@ def next_action(
             metadata={"scroll_px": scroll_px, "scroll_y": scroll_y},
         )
 
-    if ranked and budget.clicks < budget.max_clicks:
+    if ranked and not budget.clicks_exhausted():
         score, el, kind = ranked[0]
         dom_id = str(el.get("dom_id") or "")
         selector = element_selector(el, initial_url=initial_url)

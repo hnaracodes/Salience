@@ -1,0 +1,3 @@
+# Pin TRIBE commit hash after R1 hidden-state spike verification.
+# Update this file when tribev2 is pinned in Modal image build.
+main

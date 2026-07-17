@@ -1,0 +1,28 @@
+{
+  "model_id": "horikawa_mlp_v1",
+  "model_type": "mlp",
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "target_type": "product_8",
+  "n_classes": 8,
+  "class_names": [
+    "amusement",
+    "awe",
+    "contentment",
+    "excitement",
+    "fear",
+    "anger",
+    "sadness",
+    "confusion"
+  ],
+  "cv_scheme": "group_kfold",
+  "cv_metrics": {
+    "mean_r": 0.016601664186376784
+  },
+  "cv_mean_r": 0.016601664186376784,
+  "n_samples": 264,
+  "n_features": 808,
+  "status": "pilot",
+  "corpus": "pilot_275",
+  "data_hash": "3b794f02afdc2f5775ea1b781962dec66f093df228914a95641efb06c22b4e0b",
+  "atlas_sha256": "1770f7c8ef7179a387df992e3de4a3ae51d373274596468f1d4c89075b6e3e87"
+}

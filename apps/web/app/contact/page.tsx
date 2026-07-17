@@ -6,15 +6,46 @@ import { SITE } from '@/lib/site'
 
 export const metadata: Metadata = {
   title: `Contact — ${SITE.name}`,
-  description: `Contact ${SITE.name} for support, legal, and privacy inquiries.`,
+  description: `Get in touch with ${SITE.name} for support, legal, privacy, and security inquiries.`,
 }
+
+const CONTACT_CHANNELS = [
+  {
+    label: 'Support',
+    email: SITE.supportEmail,
+    description: 'Product help, billing questions, and account issues.',
+  },
+  {
+    label: 'Legal',
+    email: SITE.contactEmail,
+    description: 'Terms, contracts, DMCA notices, and general legal inquiries.',
+  },
+  {
+    label: 'Privacy',
+    email: SITE.privacyEmail,
+    description: 'Data access, deletion, and privacy rights requests.',
+  },
+  {
+    label: 'Security',
+    email: SITE.securityEmail,
+    description: 'Vulnerability reports, abuse, and unauthorized scan complaints.',
+  },
+] as const
+
+const RESOURCE_LINKS = [
+  { href: '/security', label: 'Security practices' },
+  { href: '/data-processing', label: 'Data processing' },
+  { href: '/privacy', label: 'Privacy Policy' },
+  { href: '/acceptable-use', label: 'Acceptable Use' },
+  { href: '/anti-theft', label: 'IP & Anti-Theft' },
+] as const
 
 export default function ContactPage() {
   return (
     <>
       <NavBar variant="app" />
-      <main className="min-h-screen bg-ink-950 pt-14">
-        <div className="mx-auto max-w-2xl px-6 py-16">
+      <main className="min-h-screen bg-canvas pt-14">
+        <div className="mx-auto max-w-3xl px-6 py-16">
           <Link
             href="/"
             className="mb-8 inline-block font-mono text-xs text-text-secondary transition-colors hover:text-signal"
@@ -22,47 +53,76 @@ export default function ContactPage() {
             ← Back to {SITE.name}
           </Link>
 
-          <h1 className="mb-4 text-3xl font-display font-semibold text-text-primary">Contact</h1>
-          <p className="mb-10 text-text-secondary">
-            We typically respond within two business days.
+          <p className="mb-2 font-mono text-xs uppercase tracking-widest text-text-secondary">
+            Contact
+          </p>
+          <h1 className="mb-3 text-3xl font-display font-semibold tracking-tight text-text-primary">
+            Get in touch
+          </h1>
+          <p className="mb-10 max-w-xl text-sm text-text-secondary">
+            Reach the right team for support, legal, privacy, or security. We typically respond
+            within a few business days.
           </p>
 
-          <div className="space-y-6">
-            {[
-              {
-                title: 'Product support',
-                email: SITE.supportEmail,
-                detail: 'Scan issues, billing questions, account access',
-              },
-              {
-                title: 'Privacy requests',
-                email: SITE.privacyEmail,
-                detail: 'Data access, deletion, and GDPR/CCPA inquiries',
-              },
-              {
-                title: 'Legal',
-                email: SITE.contactEmail,
-                detail: 'Terms, contracts, enterprise DPAs',
-              },
-            ].map((row) => (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {CONTACT_CHANNELS.map((channel) => (
               <div
-                key={row.title}
-                className="rounded-lg border border-ink-700 bg-ink-900 p-6"
+                key={channel.label}
+                className="marketing-card p-5 transition-all duration-300 hover:shadow-card-lg"
               >
-                <h2 className="text-lg font-semibold text-text-primary">{row.title}</h2>
-                <p className="mt-1 text-sm text-text-secondary">{row.detail}</p>
+                <h2 className="mb-1 text-sm font-medium text-text-primary">{channel.label}</h2>
                 <a
-                  href={`mailto:${row.email}`}
-                  className="mt-3 inline-block font-mono text-sm text-signal hover:underline"
+                  href={`mailto:${channel.email}`}
+                  className="font-mono text-sm text-signal hover:underline"
                 >
-                  {row.email}
+                  {channel.email}
                 </a>
+                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                  {channel.description}
+                </p>
               </div>
             ))}
           </div>
 
-          <p className="mt-10 text-sm text-text-secondary">
-            {SITE.legalEntity} · {SITE.address}
+          <section className="mt-12 marketing-card p-6">
+            <h2 className="mb-2 text-sm font-medium text-text-primary">Company</h2>
+            <p className="text-sm text-text-secondary">
+              {SITE.legalEntity}
+              <br />
+              {SITE.address}
+            </p>
+            <p className="mt-4 text-sm text-text-secondary">
+              {SITE.founder.name}, {SITE.founder.title}
+              <br />
+              {SITE.founder.location}
+            </p>
+          </section>
+
+          <section className="mt-10">
+            <h2 className="mb-4 font-mono text-xs uppercase tracking-widest text-text-secondary">
+              Resources
+            </h2>
+            <ul className="flex flex-wrap gap-x-6 gap-y-2">
+              {RESOURCE_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-text-secondary transition-colors hover:text-signal"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          <p className="mt-12 marketing-card p-4 text-xs text-text-secondary">
+            For enterprise DPAs, security questionnaires, or regulated-industry deployments, email{' '}
+            <a href={`mailto:${SITE.contactEmail}`} className="text-signal hover:underline">
+              {SITE.contactEmail}
+            </a>{' '}
+            with &quot;Enterprise&quot; in the subject line. Legal documents should be reviewed by
+            counsel before reliance in regulated contexts.
           </p>
         </div>
       </main>

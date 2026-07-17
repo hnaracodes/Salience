@@ -1,0 +1,25 @@
+{
+  "n_voxels": 8802,
+  "region_labels": [
+    "hippocampus",
+    "lateral_ventricles",
+    "amygdala",
+    "thalamus",
+    "caudate",
+    "putamen",
+    "pallidum",
+    "accumbens"
+  ],
+  "region_voxel_counts": {
+    "hippocampus": 1049,
+    "lateral_ventricles": 1926,
+    "amygdala": 520,
+    "thalamus": 2268,
+    "caudate": 901,
+    "putamen": 1517,
+    "pallidum": 495,
+    "accumbens": 126
+  },
+  "source": "tribev2.plotting.subcortical.get_subcortical_mask",
+  "csv_path": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\configs\\subcortical_voxel_regions.csv"
+}

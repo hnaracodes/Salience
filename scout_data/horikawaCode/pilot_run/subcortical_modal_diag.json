@@ -1,0 +1,51 @@
+{
+  "mode": "clip",
+  "steps": [
+    {
+      "step": "clip",
+      "mode": "modal_live",
+      "stimulus_id": "1",
+      "video_path": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\videos\\0001.mp4",
+      "elapsed_s": 108.98,
+      "artifact": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\intermediates_modal\\verify_1_both.npz",
+      "sub_meta": {
+        "tribe_checkpoint": "facebook/tribev2-subcortical",
+        "prediction_source": "tribev2_subcortical_checkpoint"
+      },
+      "analysis": {
+        "cortical_shape": [
+          4,
+          20484
+        ],
+        "subcortical_shape": [
+          4,
+          8802
+        ],
+        "expected_subcortical_voxels": 8802,
+        "checkpoint": "facebook/tribev2-subcortical",
+        "prediction_source": "tribev2_subcortical_checkpoint",
+        "max_abs_sub_minus_proxy": 0.2673916220664978,
+        "mean_abs_sub_minus_proxy": 0.053588517010211945,
+        "corr_sub_vs_proxy": 0.014238393846882004,
+        "sub_mean": 0.00013318774290382862,
+        "sub_std": 0.0592857301235199,
+        "mean_within_roi_std": 0.056641058064997196,
+        "min_within_roi_std": 0.04958842694759369,
+        "max_within_roi_std": 0.06486709415912628,
+        "per_roi": {
+          "roi_0": 0.05182452127337456,
+          "roi_1": 0.05408753082156181,
+          "roi_2": 0.058025844395160675,
+          "roi_3": 0.06486709415912628,
+          "roi_4": 0.05821472778916359,
+          "roi_5": 0.05389966443181038,
+          "roi_6": 0.06262065470218658,
+          "roi_7": 0.04958842694759369
+        },
+        "verdict": "real_subcortical_model",
+        "pass": true
+      }
+    }
+  ],
+  "ok": true
+}
