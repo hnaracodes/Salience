@@ -1,0 +1,91 @@
+{
+  "schema_version": 2,
+  "passed": true,
+  "is_synthetic": false,
+  "multi_site_validated": false,
+  "n_sites": 1,
+  "data_source": "cloud_s3:hcp_camcan:HCP_1200",
+  "n_subjects": 50,
+  "n_permutations": 1000,
+  "networks": [
+    {
+      "network_name": "Cont",
+      "network_id": 6,
+      "r2_demographic_given_site": 0.1424226999972965,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.1424226999972965,
+      "permutation_p": 0.00999000999000999,
+      "permutation_null_95": 0.09150682802488337,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "Default",
+      "network_id": 7,
+      "r2_demographic_given_site": 0.144906649367192,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.144906649367192,
+      "permutation_p": 0.003996003996003996,
+      "permutation_null_95": 0.07694134080647194,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "DorsAttn",
+      "network_id": 3,
+      "r2_demographic_given_site": 0.1356148268569336,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.1356148268569336,
+      "permutation_p": 0.007992007992007992,
+      "permutation_null_95": 0.07143627322479212,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "Limbic",
+      "network_id": 5,
+      "r2_demographic_given_site": 0.139538472779156,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.139538472779156,
+      "permutation_p": 0.007992007992007992,
+      "permutation_null_95": 0.0746096449964417,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "SalVentAttn",
+      "network_id": 4,
+      "r2_demographic_given_site": 0.1363526430008507,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.1363526430008507,
+      "permutation_p": 0.005994005994005994,
+      "permutation_null_95": 0.0753810409013122,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "SomMot",
+      "network_id": 2,
+      "r2_demographic_given_site": 0.1389234640059578,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.1389234640059578,
+      "permutation_p": 0.01098901098901099,
+      "permutation_null_95": 0.08579260460701069,
+      "n_subjects": 50
+    },
+    {
+      "network_name": "Vis",
+      "network_id": 1,
+      "r2_demographic_given_site": 0.14690735678400213,
+      "r2_site_only": 0.0,
+      "r2_demographic_only": 0.14690735678400213,
+      "permutation_p": 0.003996003996003996,
+      "permutation_null_95": 0.07252623472576554,
+      "n_subjects": 50
+    }
+  ],
+  "go_criteria": {
+    "variance_in_two_priority_networks": true,
+    "permutation_significant_in_two_networks": true,
+    "demographic_beats_site_in_one_network": true
+  },
+  "notes": [
+    "OLS incremental R² on subject-level network aggregates (not mixed model).",
+    "single_site — not a production M0 gate; add Cam-CAN or second dataset."
+  ]
+}

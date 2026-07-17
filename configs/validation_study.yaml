@@ -1,0 +1,18 @@
+protocol_id: ux_affect_v1
+pilot:
+  min_participants: 10
+full_study:
+  min_participants: 20
+explore_script: configs/explore_production.yaml
+sam:
+  dimensions:
+    - valence
+    - arousal
+    - dominance
+ux_items:
+  - confusion
+  - frustration
+  - trust
+product_gate:
+  min_transfer_r_valence: 0.25
+  decoder_default_if_below: false

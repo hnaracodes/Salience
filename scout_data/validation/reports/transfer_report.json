@@ -1,0 +1,8 @@
+{
+  "n_sessions": 0,
+  "sessions": [],
+  "transfer_r_valence": null,
+  "threshold": 0.25,
+  "decoder_default_recommended": false,
+  "status": "pilot"
+}

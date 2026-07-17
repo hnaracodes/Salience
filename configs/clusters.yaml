@@ -1,0 +1,26 @@
+schema_version: 2
+min_subjects_per_cluster: 20
+require_site_covariate: true
+clusters:
+  - cluster_id: 0
+    label: young_adult_female
+    where:
+      age_band: young_adult
+      sex: female
+    min_datasets: 1
+  - cluster_id: 1
+    label: young_adult_male
+    where:
+      age_band: young_adult
+      sex: male
+    min_datasets: 1
+  - cluster_id: 2
+    label: middle_adult_pooled
+    where:
+      age_band: middle_adult
+    notes: "Sex pooled — insufficient N when split"
+  - cluster_id: 3
+    label: older_adult_pooled
+    where:
+      age_band: older_adult
+    notes: "Cam-CAN only; sex pooled"

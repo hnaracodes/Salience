@@ -124,6 +124,33 @@ def load_templates(
 # Track 1 — Visual Engagement
 # ---------------------------------------------------------------------------
 
+def _robust_vertex_stats(
+    baseline: np.ndarray,
+    *,
+    min_scale_eps: float = 1e-6,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-vertex median and MAD-based scale from baseline TRs, shape (V,)."""
+    med = np.median(baseline, axis=0).astype(np.float32)
+    mad = np.median(np.abs(baseline - med), axis=0).astype(np.float32)
+    scale = np.maximum(mad * 1.4826, min_scale_eps).astype(np.float32)
+    return med, scale
+
+
+def _network_engagement_from_vertex_z(
+    preds: np.ndarray,
+    van_idx: np.ndarray,
+    dmn_idx: np.ndarray,
+    van_center: np.ndarray,
+    van_scale: np.ndarray,
+    dmn_center: np.ndarray,
+    dmn_scale: np.ndarray,
+) -> np.ndarray:
+    """Z-score each vertex vs baseline stats, then mean within network and subtract."""
+    z_van = (preds[:, van_idx] - van_center[van_idx]) / van_scale[van_idx]
+    z_dmn = (preds[:, dmn_idx] - dmn_center[dmn_idx]) / dmn_scale[dmn_idx]
+    return (z_van.mean(axis=1) - z_dmn.mean(axis=1)).astype(np.float32)
+
+
 def compute_engagement_track(
     preds: np.ndarray,
     preds_baseline: np.ndarray | None,
@@ -133,6 +160,9 @@ def compute_engagement_track(
     threshold_high: float = 1.5,
     threshold_low: float = -1.5,
     min_baseline_trs: int = 30,
+    normalization_method: str = "robust_mad",
+    min_scale_eps: float = 1e-6,
+    baseline_corpus_id: str | None = None,
 ) -> dict[str, Any]:
     """Compute VAN/DMN engagement Z-score per timestep.
 
@@ -172,18 +202,35 @@ def compute_engagement_track(
             "thresholds": {"high": threshold_high, "low": threshold_low},
         }
 
-    # Baseline statistics (estimated once; never updated with live data)
-    van_base = preds_baseline[:, van_idx].mean(axis=1)   # (T_base,)
-    dmn_base = preds_baseline[:, dmn_idx].mean(axis=1)   # (T_base,)
-    mu_van, sigma_van = float(van_base.mean()), float(van_base.std())
-    mu_dmn, sigma_dmn = float(dmn_base.mean()), float(dmn_base.std())
-
-    # Live scoring
-    van_live = preds[:, van_idx].mean(axis=1)   # (T,)
-    dmn_live = preds[:, dmn_idx].mean(axis=1)   # (T,)
-    z_van = (van_live - mu_van) / (sigma_van + 1e-8)
-    z_dmn = (dmn_live - mu_dmn) / (sigma_dmn + 1e-8)
-    scores = (z_van - z_dmn).astype(np.float32)   # (T,)
+    norm_method = (normalization_method or "robust_mad").strip().lower()
+    if norm_method == "robust_mad":
+        van_med, van_scale = _robust_vertex_stats(preds_baseline[:, van_idx], min_scale_eps=min_scale_eps)
+        dmn_med, dmn_scale = _robust_vertex_stats(preds_baseline[:, dmn_idx], min_scale_eps=min_scale_eps)
+        # Expand per-network vertex stats to full vertex axis for helper
+        V = preds.shape[1]
+        van_center = np.zeros(V, dtype=np.float32)
+        van_scale_full = np.full(V, min_scale_eps, dtype=np.float32)
+        dmn_center = np.zeros(V, dtype=np.float32)
+        dmn_scale_full = np.full(V, min_scale_eps, dtype=np.float32)
+        van_center[van_idx] = van_med
+        van_scale_full[van_idx] = van_scale
+        dmn_center[dmn_idx] = dmn_med
+        dmn_scale_full[dmn_idx] = dmn_scale
+        scores = _network_engagement_from_vertex_z(
+            preds, van_idx, dmn_idx,
+            van_center, van_scale_full, dmn_center, dmn_scale_full,
+        )
+    else:
+        # Legacy mean-then-Z path
+        van_base = preds_baseline[:, van_idx].mean(axis=1)
+        dmn_base = preds_baseline[:, dmn_idx].mean(axis=1)
+        mu_van, sigma_van = float(van_base.mean()), float(van_base.std())
+        mu_dmn, sigma_dmn = float(dmn_base.mean()), float(dmn_base.std())
+        van_live = preds[:, van_idx].mean(axis=1)
+        dmn_live = preds[:, dmn_idx].mean(axis=1)
+        z_van = (van_live - mu_van) / (sigma_van + 1e-8)
+        z_dmn = (dmn_live - mu_dmn) / (sigma_dmn + 1e-8)
+        scores = (z_van - z_dmn).astype(np.float32)
 
     labels: list[str | None] = []
     for s in scores.tolist():
@@ -194,13 +241,18 @@ def compute_engagement_track(
         else:
             labels.append(None)
 
-    return {
+    result: dict[str, Any] = {
         "scores": scores.tolist(),
         "labels": labels,
         "baseline_trs": int(T_base),
         "baseline_flag": None,
         "thresholds": {"high": threshold_high, "low": threshold_low},
+        "normalization_method": norm_method,
+        "source": "van_dmn_baseline_z",
     }
+    if baseline_corpus_id:
+        result["baseline_corpus_id"] = baseline_corpus_id
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -323,11 +375,27 @@ def apply_session_z_scores(
 
 
 def dominant_emotion_at_timestep(
-    cosine_row: list[float] | np.ndarray,
-    z_row: list[float] | np.ndarray,
+    cosine_row: list[float] | np.ndarray | None,
+    z_row: list[float] | np.ndarray | None,
     template_names: list[str],
+    *,
+    prob_row: list[float] | np.ndarray | None = None,
+    class_names: list[str] | None = None,
+    mode: str = "template",
 ) -> dict[str, Any]:
-    """Return dominant emotion by max session-relative Z at one timestep."""
+    """Return dominant emotion at one timestep (template Z or decoder probability)."""
+    if mode == "decoder" and prob_row is not None:
+        names = class_names or template_names
+        prob_arr = np.asarray(prob_row, dtype=np.float32)
+        idx = int(np.argmax(prob_arr))
+        name = names[idx] if idx < len(names) else f"class_{idx}"
+        return {
+            "dominant": name,
+            "probability": float(prob_arr[idx]),
+            "score": float(prob_arr[idx]),
+            "mode": "decoder",
+        }
+
     z_arr = np.asarray(z_row, dtype=np.float32)
     cos_arr = np.asarray(cosine_row, dtype=np.float32)
     idx = int(np.argmax(z_arr))
@@ -336,6 +404,7 @@ def dominant_emotion_at_timestep(
         "dominant": name,
         "raw_cosine": float(cos_arr[idx]),
         "z_score": float(z_arr[idx]),
+        "mode": "template",
     }
 
 
@@ -381,7 +450,80 @@ def compute_emotion_track(
         "grounding_z_threshold": float(grounding_z_threshold),
         "template_source": "neurovault",
         "template_collection_ids": ["12383"],
+        "mode": "template",
     }
+
+
+def compute_emotion_track_decoder(
+    cortical_preds: np.ndarray,
+    subcortical_preds: np.ndarray | None,
+    *,
+    model_id: str = "horikawa_ridge_v1",
+    window_trs: int = 1,
+    feature_spec: str | None = None,
+    prob_grounding_threshold: float = 0.5,
+) -> dict[str, Any]:
+    """Supervised Horikawa ridge decoder track (requires scout_models bundle)."""
+    from scout_core.mvpa_engine import predict_emotion_track
+
+    result = predict_emotion_track(
+        cortical_preds,
+        subcortical_preds,
+        model_id=model_id,
+        window_trs=window_trs,
+        feature_spec_name=feature_spec,
+    )
+    result["grounding_prob_threshold"] = float(prob_grounding_threshold)
+    result["template_source"] = f"decoder:{model_id}"
+    return result
+
+
+def compute_emotion_track_auto(
+    cortical_preds: np.ndarray,
+    *,
+    mode: str = "template",
+    templates: np.ndarray | None = None,
+    template_names: list[str] | None = None,
+    subcortical_preds: np.ndarray | None = None,
+    model_id: str = "horikawa_ridge_v1",
+    window_trs: int = 1,
+    feature_spec: str | None = None,
+    require_subcortical: bool = True,
+    grounding_z_threshold: float = 2.0,
+    prob_grounding_threshold: float = 0.5,
+) -> tuple[dict[str, Any] | None, str]:
+    """Return (emotion_track, effective_mode). Falls back to template when decoder unavailable."""
+    mode = (mode or "template").strip().lower()
+    if mode == "decoder":
+        if require_subcortical and subcortical_preds is None:
+            mode = "template"
+        else:
+            try:
+                return (
+                    compute_emotion_track_decoder(
+                        cortical_preds,
+                        subcortical_preds,
+                        model_id=model_id,
+                        window_trs=window_trs,
+                        feature_spec=feature_spec,
+                        prob_grounding_threshold=prob_grounding_threshold,
+                    ),
+                    "decoder",
+                )
+            except (FileNotFoundError, ValueError, OSError):
+                mode = "template"
+
+    if templates is None or template_names is None:
+        return None, mode
+    return (
+        compute_emotion_track(
+            cortical_preds,
+            templates,
+            template_names,
+            grounding_z_threshold=grounding_z_threshold,
+        ),
+        "template",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -393,11 +535,13 @@ def find_grounding_triggers(
     emotion_result: dict[str, Any] | None,
     engagement_trigger: float = 2.0,
     emotion_z_trigger: float = 2.0,
+    *,
+    emotion_prob_trigger: float | None = None,
 ) -> list[dict[str, Any]]:
     """Return a list of timestep-indexed grounding trigger events.
 
-    Engagement uses baseline-relative Z; emotion uses session-relative Z per channel.
-    Each emotion event includes raw_cosine and z_score; value is the Z for filtering.
+    Engagement uses baseline-relative Z; template emotion uses session-relative Z;
+    decoder emotion uses class probability thresholds.
     """
     triggers: list[dict[str, Any]] = []
 
@@ -408,21 +552,42 @@ def find_grounding_triggers(
                 triggers.append({"t_idx": t, "trigger_type": "engagement", "value": float(s), "channel": "engagement"})
 
     if emotion_result:
-        names = emotion_result.get("template_names", [])
-        cosine_scores = emotion_result.get("cosine_scores", [])
-        z_scores = emotion_result.get("z_scores", [])
-        for t, (cos_row, z_row) in enumerate(zip(cosine_scores, z_scores)):
-            for i, z in enumerate(z_row):
-                if z > emotion_z_trigger:
-                    channel = names[i] if i < len(names) else f"channel_{i}"
-                    raw = float(cos_row[i]) if i < len(cos_row) else 0.0
-                    triggers.append({
-                        "t_idx": t,
-                        "trigger_type": "emotion",
-                        "channel": channel,
-                        "value": float(z),
-                        "raw_cosine": raw,
-                        "z_score": float(z),
-                    })
+        emo_mode = emotion_result.get("mode", "template")
+        if emo_mode == "decoder":
+            names = emotion_result.get("class_names", [])
+            probabilities = emotion_result.get("probabilities") or []
+            prob_thr = emotion_prob_trigger
+            if prob_thr is None:
+                prob_thr = float(emotion_result.get("grounding_prob_threshold", 0.5))
+            for t, prob_row in enumerate(probabilities):
+                for i, p in enumerate(prob_row):
+                    if float(p) >= prob_thr:
+                        channel = names[i] if i < len(names) else f"class_{i}"
+                        triggers.append({
+                            "t_idx": t,
+                            "trigger_type": "emotion",
+                            "channel": channel,
+                            "value": float(p),
+                            "probability": float(p),
+                            "mode": "decoder",
+                        })
+        else:
+            names = emotion_result.get("template_names", [])
+            cosine_scores = emotion_result.get("cosine_scores", [])
+            z_scores = emotion_result.get("z_scores", [])
+            for t, (cos_row, z_row) in enumerate(zip(cosine_scores, z_scores)):
+                for i, z in enumerate(z_row):
+                    if z > emotion_z_trigger:
+                        channel = names[i] if i < len(names) else f"channel_{i}"
+                        raw = float(cos_row[i]) if i < len(cos_row) else 0.0
+                        triggers.append({
+                            "t_idx": t,
+                            "trigger_type": "emotion",
+                            "channel": channel,
+                            "value": float(z),
+                            "raw_cosine": raw,
+                            "z_score": float(z),
+                            "mode": "template",
+                        })
 
     return triggers

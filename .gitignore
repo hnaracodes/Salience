@@ -21,6 +21,10 @@ node_modules
 # Large neuroimaging / ML artifacts (download or generate locally)
 *.nii.gz
 *.joblib
+# Keep committed decoder / conversion bundles (diagnostics + scores)
+!scout_models/**/*.joblib
+!scout_models/**/*.npz
+!scout_models/**/*.json
 
 # Session and baseline outputs (Modal + Playwright)
 scout_data/sessions/
@@ -68,6 +72,63 @@ scout_data/eevCode/manifests/*.log
 scout_data/eevCode/manifests/*.err.log
 # Keep tracked: pilot_50.json, trial_1.json, full_split.json (small ID lists only)
 
+# Cursor skills (local skill packs with large CSVs; reinstall/copy separately)
+.cursor/skills/
+
+# Horikawa — stimulus videos + redownloadable figshare cache (keep reports / models / train.npz)
+scout_data/horikawaCode/videos/
+scout_data/horikawaCode/labels/features.zip
+scout_data/horikawaCode/labels/*.zip
+scout_data/horikawaCode/labels/*.zip.part
+scout_data/horikawaCode/intermediates_modal/
+scout_data/horikawaCode/pilot_run/**/*.mp4
+scout_data/horikawaCode/pilot_run/**/*.webm
+
+# Clarity / validation exports (local CSV dumps; not claim evidence in git)
+scout_data/validation/**/exports/
+scout_data/validation/**/*.csv
+scout_data/**/clarity*.csv
+scout_data/**/*_clicks.csv
+scout_data/**/*heatmap*.csv
+
+# Other bulky regenerable runtime artifacts under scout_data
+# Keep: horikawa reports/, fused train.npz, manifests, label caches
+scout_data/**/*.parquet
+scout_data/**/*.h5
+scout_data/**/*.hdf5
+scout_data/**/*.pkl
+scout_data/**/*.pickle
+scout_data/**/*.png
+scout_data/**/*.jpg
+scout_data/**/*.jpeg
+scout_data/**/*.gif
+scout_data/**/*.wav
+scout_data/**/*.zip
+scout_data/**/*.pt
+scout_data/**/*.pth
+scout_data/**/*.onnx
+scout_data/**/*.ckpt
+scout_data/**/*.safetensors
+
+# Explicit keep — Horikawa diagnostics / scores / fused features
+!scout_data/horikawaCode/reports/
+!scout_data/horikawaCode/reports/**
+!scout_data/horikawaCode/tribev2_fused/
+!scout_data/horikawaCode/tribev2_fused/**
+!scout_data/horikawaCode/manifests/
+!scout_data/horikawaCode/manifests/**
+!scout_data/horikawaCode/labels/label_manifest.json
+!scout_data/horikawaCode/labels/ratings_cache.npz
+
+# Playwright browser cache (reinstall: playwright install)
+.ms-playwright/
+playwright-report/
+test-results/
+
 # Editor / OS
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

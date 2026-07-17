@@ -1,0 +1,28 @@
+# Harvard-Oxford subcortical targets for TRIBE v2 subcortical head.
+# Voxel order matches facebook/tribev2-subcortical (BOLD Moments / Lahner2024).
+
+atlas_id: harvard_oxford_subcortical_tribev2
+n_voxels: 8802
+n_regions: 8
+voxel_regions_csv: configs/subcortical_voxel_regions.csv
+tribe_cortical_checkpoint: facebook/tribev2
+tribe_subcortical_checkpoint: facebook/tribev2-subcortical
+region_labels:
+  - hippocampus
+  - lateral_ventricles
+  - amygdala
+  - thalamus
+  - caudate
+  - putamen
+  - pallidum
+  - accumbens
+# Legacy equal-split counts (fake baseline only; real map in subcortical_voxel_regions.csv).
+region_voxel_counts:
+  hippocampus: 1100
+  lateral_ventricles: 1100
+  amygdala: 1100
+  thalamus: 1100
+  caudate: 1100
+  putamen: 1100
+  pallidum: 1100
+  accumbens: 1102

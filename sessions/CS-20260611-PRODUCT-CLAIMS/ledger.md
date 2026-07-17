@@ -42,3 +42,30 @@ python scripts/build_naturalistic_norms.py --min-clips 1
 ```
 
 - Signature: `composer-2.5@CS-20260611-PRODUCT-CLAIMS`
+
+## Step 3 — Claim audit + T2/T3 readiness (2026-07-16)
+
+### Governance
+- Downgraded premature T2/T3 language in `docs/validation/CLAIMS.md`
+- Clarified Clarity is MIT open-source instrumentation; hosted telemetry is private
+- Added `docs/validation/HUMAN_INTERVENTION_CLARITY.md` for owned-site CSV collection
+
+### Website corpus (preliminary TRIBE / norms only)
+- `configs/validation_site_corpus.yaml` — 8 public archetypes × 3 planned repeats
+- `configs/explore_public_smoke.yaml` — zero-click read-only explore profile
+- `scripts/run_validation_site_corpus.py` — batch capture/TRIBE runner + run log
+
+### Attention harness hardening
+- NaN Spearman fails; average ranks for ties; reject Clarity-leaked bundles
+- Property-grouped train/validation/holdout fit (`--fit-weights --evaluate-holdout`)
+- `build_naturalistic_norms.py` default `--min-clips 15` hard fail; `compute_norms.py --exclude`
+
+### Blocked on human
+- Owned Clarity properties + heatmap CSVs required for Attention T2
+- Conversion labels (real outcomes) required for T3
+
+### Handoff
+- Full day protocol + tomorrow steps: [`../CS-20260716-DAILY-HANDOFF/ledger.md`](../CS-20260716-DAILY-HANDOFF/ledger.md)
+- Local captures OK (threadmind/aurora ×2); **no preds.npz yet** — next: tribe+analyze then norms
+
+- Signature: `cursor-grok-4.5@CS-20260611-PRODUCT-CLAIMS`

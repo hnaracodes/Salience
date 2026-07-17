@@ -22,6 +22,9 @@ This is the unified registry for Ledger Protocol sessions. Future agents should 
 | `CS-20260616-CI-REQUIREMENTS` | 2026-06-16 | completed | infra | `composer-2.5@CS-20260616-CI-REQUIREMENTS` | [sessions/CS-20260616-CI-REQUIREMENTS](./CS-20260616-CI-REQUIREMENTS/session.md) | PR #3 CI: missing deps in requirements.txt, integration test filter |
 | `CS-20260616-DOCKER-RUNTIME-FIXES` | 2026-06-16 | completed | saas | `composer-2.5@CS-20260616-DOCKER-RUNTIME-FIXES` | [sessions/CS-20260616-DOCKER-RUNTIME-FIXES](./CS-20260616-DOCKER-RUNTIME-FIXES/session.md) | Norm path portability, MinIO bucket init, .dockerignore, FAKE_TRIBE docs |
 | `CS-20260616-README-CURRENT-STATE` | 2026-06-16 | completed | docs | `composer-2.5@CS-20260616-README-CURRENT-STATE` | [sessions/CS-20260616-README-CURRENT-STATE](./CS-20260616-README-CURRENT-STATE/session.md) | Consolidated README; transcript ledger backfill |
+| `CS-20260618-DEMOGRAPHIC-MUX-PLAN` | 2026-06-18 | completed | neuroemo | `composer-2.5@CS-20260618-DEMOGRAPHIC-MUX-PLAN` | [sessions/CS-20260618-DEMOGRAPHIC-MUX-PLAN](./CS-20260618-DEMOGRAPHIC-MUX-PLAN/session.md) | Demographic multiplexer plan rework; M0 gate; eval kill switch; ledger feature log |
+| `CS-20260620-EMOTION-ACCURACY-ADR7` | 2026-06-20 | in_progress | website | `claude-sonnet-4-5@CS-20260620-EMOTION-ACCURACY-ADR7` | [sessions/CS-20260620-EMOTION-ACCURACY-ADR7](./CS-20260620-EMOTION-ACCURACY-ADR7/session.md) | Subcortical TRIBE, Horikawa decoder, shadow Track 2b, UX validation gate |
+| `CS-20260716-DAILY-HANDOFF` | 2026-07-16 | in_progress | website | `cursor-grok-4.5@CS-20260716-DAILY-HANDOFF` | [sessions/CS-20260716-DAILY-HANDOFF](./CS-20260716-DAILY-HANDOFF/session.md) | Dual-track daily handoff: T2/T3 claims corpus + Horikawa Phase 0 / tomorrow protocol |
 
 ## Archived NeuroEmo Sessions
 

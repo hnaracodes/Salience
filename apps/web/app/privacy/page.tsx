@@ -36,6 +36,10 @@ export default function PrivacyPage() {
           <li>Captured page content, DOM snapshots, walkthrough video, and derived UX scores</li>
           <li>Technical logs (IP address, browser type, API request metadata)</li>
         </ul>
+        <p>
+          See <a href="/data-processing">Data Processing</a> for how scan artifacts are stored,
+          analyzed, and displayed.
+        </p>
         <h3>Cookies and similar technologies</h3>
         <p>
           We use essential cookies for authentication and session management. See our{' '}
@@ -63,7 +67,7 @@ export default function PrivacyPage() {
         <p>We do not sell your personal information. We share data only with:</p>
         <ul>
           <li>
-            <strong>Infrastructure providers</strong> — hosting (Vercel, Railway/Render),
+            <strong>Infrastructure providers</strong> — hosting (Vercel, Railway),
             storage (Cloudflare R2), database (PostgreSQL), queue (Redis), GPU inference (Modal)
           </li>
           <li>
@@ -86,16 +90,20 @@ export default function PrivacyPage() {
           Scan metadata and artifacts are retained for up to <strong>30 days</strong> from scan
           creation unless you delete them sooner or a longer period is required by law or your
           agreement. Account data is retained while your account is active and for a reasonable
-          period thereafter.
+          period thereafter. For a detailed breakdown of what is stored, processed, and deleted,
+          see our <a href="/data-processing">Data Processing</a> page.
         </p>
       </section>
 
       <section>
         <h2>6. Security</h2>
         <p>
-          We use industry-standard measures including TLS in transit, access controls, SSRF
-          protections on URL intake, and isolated storage for scan artifacts. No method is 100%
-          secure; report concerns to {SITE.supportEmail}.
+          We use industry-standard measures including TLS in transit, Clerk JWT authentication
+          (RS256 via JWKS), access controls, SSRF protections on URL intake, rate limiting, and
+          isolated object storage (Cloudflare R2) for scan artifacts. No method is 100% secure;
+          report concerns to{' '}
+          <a href={`mailto:${SITE.securityEmail}`}>{SITE.securityEmail}</a>. Full details:{' '}
+          <a href="/security">Security</a>.
         </p>
       </section>
 
@@ -136,6 +144,15 @@ export default function PrivacyPage() {
         <p>
           We may update this policy. Material changes will be posted on this page with an updated
           date. Continued use after changes constitutes acceptance where permitted by law.
+        </p>
+      </section>
+
+      <section>
+        <h2>11. Related pages</h2>
+        <p>
+          <a href="/data-processing">Data Processing</a> · <a href="/security">Security</a> ·{' '}
+          <a href="/cookies">Cookie Policy</a> · <a href="/terms">Terms of Service</a> ·{' '}
+          <a href="/contact">Contact</a>
         </p>
       </section>
     </LegalPageLayout>

@@ -1,0 +1,21 @@
+{
+  "budget_usd": 20.0,
+  "a100_usd_per_hr": 2.5,
+  "probe_n": 3,
+  "pilot_n": 150,
+  "n_clips_manifest": 118,
+  "n_videos_on_disk": 2196,
+  "modal_gpu_seconds": 0.0,
+  "estimated_modal_usd": 0.0,
+  "phases_completed": [
+    "labels",
+    "manifest"
+  ],
+  "probe_ok": 3,
+  "probe_gpu_seconds": 208.71,
+  "probe_estimated_usd": 0.1449,
+  "per_clip_gpu_seconds": 69.57,
+  "per_clip_estimated_usd": 0.0483,
+  "projected_full_pilot_usd": 5.7,
+  "clip_limit": 118
+}

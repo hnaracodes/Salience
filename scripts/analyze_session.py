@@ -102,14 +102,16 @@ def _select_spikes(
     combine: str,
     cooldown_trs: int,
     max_spikes: int,
+    *,
+    emotion_prob_min: float = 0.5,
 ) -> list[dict[str, Any]]:
     """Filter dual-track trigger events against isolation thresholds.
 
     Track 1 (engagement): any trigger with channel=="engagement" and
     |value| >= eng_min passes.
 
-    Track 2 (emotion): EVERY emotion channel with value >= emotion_z_min at
-    the same timestep gets its own spike entry (no single-channel winner).
+    Track 2 (emotion template): EVERY emotion channel with value >= emotion_z_min.
+    Track 2 (emotion decoder): EVERY class with probability >= emotion_prob_min.
     Each spike carries ``emotion_channel`` + ``emotion_z``. For backward
     compatibility, anger spikes also include ``kragel_anger_z``.
 
@@ -120,6 +122,9 @@ def _select_spikes(
     raw_triggers = bundle.get("grounding_triggers", [])
     if not raw_triggers:
         return []
+
+    emotion_track = bundle.get("emotion_track") or {}
+    emo_mode = emotion_track.get("mode", bundle.get("emotion_mode", "template"))
 
     # Group triggers by timestep so we can evaluate both conditions at once.
     by_t: dict[int, dict[str, float]] = {}
@@ -144,7 +149,10 @@ def _select_spikes(
         qualifying_emotions = {
             ch: float(v)
             for ch, v in vals.items()
-            if ch != "engagement" and float(v) >= emotion_z_min
+            if ch != "engagement" and (
+                (emo_mode == "decoder" and float(v) >= emotion_prob_min)
+                or (emo_mode != "decoder" and float(v) >= emotion_z_min)
+            )
         }
 
         eng_ok = eng_val is not None and abs(float(eng_val)) >= eng_min
@@ -170,10 +178,13 @@ def _select_spikes(
         for channel in sorted(qualifying_emotions, key=lambda c: -qualifying_emotions[c]):
             payload: dict[str, Any] = {
                 "emotion_channel": channel,
-                "emotion_z": round(qualifying_emotions[channel], 4),
             }
+            if emo_mode == "decoder":
+                payload["emotion_prob"] = round(qualifying_emotions[channel], 4)
+            else:
+                payload["emotion_z"] = round(qualifying_emotions[channel], 4)
             if channel == "anger":
-                payload["kragel_anger_z"] = payload["emotion_z"]
+                payload["kragel_anger_z"] = payload.get("emotion_z", payload.get("emotion_prob"))
             spikes_at_t.append({"t_idx": t, "triggers": payload})
 
         added_any = False
@@ -229,6 +240,7 @@ def _run_grounding_step(
         emotion_z_min = 2.0
     else:
         emotion_z_min = 2.0
+    emotion_prob_min = float(trigger_cfg.get("emotion_prob_min", 0.5))
     combine = str(trigger_cfg.get("combine", "or"))
 
     spike_policy = iso_cfg.get("spike_policy", {})
@@ -247,7 +259,15 @@ def _run_grounding_step(
         except json.JSONDecodeError:
             print(f"WARNING: session_manifest.json is malformed — DOM grounding skipped.", file=sys.stderr)
 
-    spikes = _select_spikes(existing_bundle, eng_min, emotion_z_min, combine, cooldown_trs, max_spikes)
+    spikes = _select_spikes(
+        existing_bundle,
+        eng_min,
+        emotion_z_min,
+        combine,
+        cooldown_trs,
+        max_spikes,
+        emotion_prob_min=emotion_prob_min,
+    )
     print(f"  Grounding: {len(spikes)} spike(s) selected after cooldown / cap filter.")
 
     # Load heatmap manifest for provenance (source / placeholder fields).
@@ -311,6 +331,8 @@ def _run_grounding_step(
                         }
 
         cached = spatial_cache[t]
+        neural_moments_by_t = existing_bundle.get("neural_moments_by_t") or {}
+        neural_context = neural_moments_by_t.get(str(t)) or neural_moments_by_t.get(t)
         events.append(
             GroundingEvent(
                 t_spike=t,
@@ -318,6 +340,7 @@ def _run_grounding_step(
                 grounding=cached["grounding"],
                 grounding_skip_reason=cached["skip_reason"],
                 heatmap_provenance=cached["provenance"],
+                neural_context=neural_context,
             ).model_dump()
         )
         if cached["grounding"] is not None:
@@ -470,6 +493,27 @@ def main() -> None:
     norms_yeo7 = aggregate_subnetwork_norms_to_yeo7(net_norms, sub_id_to_coarse)
     z_n = zscore_network(net_ts, norms_yeo7, net_ids)
 
+    from scout_core.neural_moments import (
+        build_neural_moments_by_t,
+        engagement_scores_from_network_z,
+    )
+
+    parcel_labels = table.parcel_labels_by_id
+    eng_cfg_path = ROOT / "configs" / "dual_track.yaml"
+    eng_threshold_high, eng_threshold_low = 1.5, -1.5
+    if eng_cfg_path.is_file():
+        _dt_cfg = yaml.safe_load(eng_cfg_path.read_text(encoding="utf-8")) or {}
+        _eng = _dt_cfg.get("engagement") or {}
+        eng_threshold_high = float(_eng.get("threshold_high", 1.5))
+        eng_threshold_low = float(_eng.get("threshold_low", -1.5))
+
+    engagement_from_norms = engagement_scores_from_network_z(
+        z_n,
+        names,
+        threshold_high=eng_threshold_high,
+        threshold_low=eng_threshold_low,
+    )
+
     clear_session_neuro_rows(conn, args.session_id, args.norm_id)
     insert_roi_timeseries_batch(
         conn,
@@ -542,6 +586,40 @@ def main() -> None:
     for key in _DUAL_TRACK_PASSTHROUGH_KEYS:
         if key in existing_bundle:
             bundle_dict[key] = existing_bundle[key]
+
+    emotion_track = bundle_dict.get("emotion_track") or existing_bundle.get("emotion_track")
+    T_moments = int(z_n.shape[0])
+    if T_moments <= 120:
+        moment_t_indices = list(range(T_moments))
+    else:
+        step = max(1, T_moments // 60)
+        moment_t_indices = list(range(0, T_moments, step))
+    for tr in existing_bundle.get("grounding_triggers") or []:
+        try:
+            moment_t_indices.append(int(tr["t_idx"]))
+        except (KeyError, TypeError, ValueError):
+            pass
+    moment_t_indices = sorted(set(moment_t_indices))
+
+    neural_moments_by_t = build_neural_moments_by_t(
+        z_p,
+        parcel_ids,
+        parcel_labels,
+        z_n,
+        names,
+        emotion_track=emotion_track,
+        t_indices=moment_t_indices,
+    )
+    bundle_dict["neural_moments_by_t"] = neural_moments_by_t
+
+    if engagement_from_norms.get("baseline_flag") != "network_indices_missing":
+        if bundle_dict.get("engagement_track"):
+            bundle_dict["engagement_track_legacy"] = bundle_dict["engagement_track"]
+        bundle_dict["engagement_track"] = engagement_from_norms
+        print(
+            f"  Engagement from parcel/network norms ({engagement_from_norms.get('source')}); "
+            f"legacy track preserved as engagement_track_legacy."
+        )
 
     # -----------------------------------------------------------------------
     # Website session capture metadata (--website)

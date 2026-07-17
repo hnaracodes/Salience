@@ -10,10 +10,10 @@ This guide walks through deploying **Salience** so it is available to clients: s
 |-------|---------|------|
 | Frontend | **Vercel** | Next.js 14 app, marketing + dashboard |
 | Auth | **Clerk** | Sign-up, sign-in, JWT for API |
-| API | **Railway** or **Render** | FastAPI — enqueue scans, list status |
-| Worker | **Railway** or **Render** | Arq worker — Playwright crawl + full pipeline |
-| Queue | **Redis** | Arq job broker (Upstash, Railway, or Render) |
-| Database | **PostgreSQL** | Scan metadata, users (Neon, Supabase, Railway, or Render) |
+| API | **Railway** | FastAPI — enqueue scans, list status |
+| Worker | **Railway** | Arq worker — Playwright crawl + full pipeline |
+| Queue | **Redis** | Arq job broker (Upstash or Railway Redis) |
+| Database | **PostgreSQL** | Scan metadata, users (Neon, Supabase, or Railway Postgres) |
 | GPU | **Modal** | TRIBE v2 inference + DINOv2 heatmaps |
 | Artifacts | **Cloudflare R2** | Viewer HTML, assets, session outputs |
 
@@ -118,7 +118,7 @@ Create these **before** deploying API/worker. Use managed services for productio
 
 ### 3.1 PostgreSQL
 
-**Options**: [Neon](https://neon.tech), [Supabase](https://supabase.com), Railway Postgres, Render Postgres.
+**Options**: [Neon](https://neon.tech), [Supabase](https://supabase.com), Railway Postgres.
 
 1. Create a database named `scout` (or any name).
 2. Copy the connection string.
@@ -132,7 +132,7 @@ The API strips `+asyncpg` internally for synchronous SQLAlchemy.
 
 ### 3.2 Redis
 
-**Options**: [Upstash Redis](https://upstash.com), Railway Redis, Render Key Value.
+**Options**: [Upstash Redis](https://upstash.com), Railway Redis.
 
 1. Create a Redis instance in the **same region** as your worker when possible.
 2. Copy the connection URL:
@@ -210,7 +210,7 @@ This publishes app `tribe-v2-brain-sim` with class `TribeInference`. The worker 
 
 ### 4.5 Create worker token
 
-On the machine or CI that runs the worker (or copy into Railway/Render secrets):
+On the machine or CI that runs the worker (or copy into Railway secrets):
 
 ```bash
 modal token new --name scout-worker-prod
@@ -235,11 +235,11 @@ First real scan will download TRIBE weights to the Modal volume (`tribe-weights-
 
 The API is a Docker web service exposing port **8000**.
 
-### 5.1 Railway (recommended in original build)
+### 5.1 Railway
 
 1. [railway.app](https://railway.app) → New Project → **Deploy from GitHub** → select repo.
 2. Add service → **Dockerfile** path: `Dockerfile.api` (repo root = TribeV2).
-3. Add **PostgreSQL** and **Redis** plugins, or paste external URLs.
+3. Add **PostgreSQL** and **Redis** plugins, or paste external URLs (e.g. Supabase + Upstash).
 4. Set environment variables (see [environment-variables.md](./environment-variables.md)):
 
    | Variable | Value |
@@ -254,18 +254,9 @@ The API is a Docker web service exposing port **8000**.
 5. **Networking** → Generate domain → e.g. `scout-api-production.up.railway.app`
 6. Health check: path `/health`, port 8000.
 
-### 5.2 Render (alternative)
+### 5.2 Schema on first API boot
 
-1. [render.com](https://render.com) → New → **Web Service** → connect repo.
-2. **Environment**: Docker
-3. **Dockerfile path**: `./Dockerfile.api`
-4. **Instance type**: Starter (512 MB) is enough for API-only; scale if needed.
-5. Add env vars (same as Railway table above).
-6. Health check path: `/health`
-
-### 5.3 API does not run migrations automatically in production
-
-Tables are created via `Base.metadata.create_all` on startup for dev. **Production should use Alembic** (§10).
+The API runs `Base.metadata.create_all()` on startup (see `services/api/main.py`), which creates `users`, `scans`, and `scan_artifacts` if they do not exist. **You do not need Alembic for the initial deploy** unless you prefer explicit migrations (§10).
 
 ---
 
@@ -287,21 +278,13 @@ The worker is a **long-running background process** (not an HTTP server). It mus
 5. **Do not set `FAKE_TRIBE=1`** in production.
 6. Resources: minimum **4 GB RAM / 2 vCPU**; increase for large multi-page crawls.
 
-### 6.2 Render
-
-1. New → **Background Worker** (not Web Service).
-2. Dockerfile: `./Dockerfile.worker`
-3. Docker command: `python -m arq services.api.jobs.WorkerSettings`
-4. Plan: at least **Standard** (2 GB RAM); Playwright + video often needs more.
-5. Same env vars as §6.1.
-
-### 6.3 Why two services?
+### 6.2 Why two services?
 
 - API stays lightweight and scales on HTTP traffic.
 - Worker runs CPU/RAM-heavy Playwright + pipeline; scale workers independently.
 - Both must share **Redis** (queue) and **Postgres** (status).
 
-### 6.4 Scaling workers
+### 6.3 Scaling workers
 
 Arq processes one job per worker instance by default. To increase throughput:
 
@@ -376,7 +359,7 @@ Dashboard → **Configure** → **Domains**:
 - `CLERK_ISSUER` = `https://<your-clerk-frontend-api>` (no trailing path)
 - `CLERK_JWKS_URL` = `https://<your-clerk-frontend-api>/.well-known/jwks.json`
 
-Set both on the **API** service (Railway/Render).
+Set both on the **API** Railway service.
 
 ### 8.4 Allowed origins
 
@@ -436,11 +419,13 @@ curl -H "Authorization: Bearer <clerk_jwt>" https://your-api/v1/scans
 
 ---
 
-## 10. Database migrations
+## 10. Database migrations (Alembic — optional)
 
-For production, run Alembic before accepting traffic.
+Alembic is **not required** for your first production deploy. The API already calls `Base.metadata.create_all(engine)` on every startup, which creates the three core tables (`users`, `scans`, `scan_artifacts`) when missing.
 
-From TribeV2 root with `DATABASE_URL` set to production (sync URL without `+asyncpg` is fine for Alembic):
+**Verify in Supabase** → Table Editor: if those tables exist and scans work, you can skip Alembic entirely.
+
+Use Alembic only when you need **controlled schema changes** later (new columns, indexes) without relying on `create_all`:
 
 ```bash
 pip install alembic psycopg2-binary
@@ -448,9 +433,9 @@ cd services/api
 alembic upgrade head
 ```
 
-Migration file: `services/api/alembic/versions/001_initial.py` creates `users`, `scans`, `scan_artifacts`.
+Migration file: `services/api/alembic/versions/001_initial.py` mirrors the same schema as `services/api/models.py`.
 
-**Railway/Render one-off job**: run the same command in a release phase or manual shell with production `DATABASE_URL`.
+**Railway one-off shell**: run the same command with production `DATABASE_URL` set if you ever need it.
 
 ---
 
@@ -499,7 +484,7 @@ curl https://your-api/health
 | Scan `failed` at `capture` | Playwright timeout, site blocked bot, or RAM |
 | No `viewer_url` | R2 credentials or missing `ux_viewer/` export |
 
-Check worker logs in Railway/Render for stage stderr (runner logs last 2000 chars on failure).
+Check worker logs in Railway for stage stderr (runner logs last 2000 chars on failure).
 
 ---
 
@@ -573,7 +558,7 @@ Staging worker may use `FAKE_TRIBE=1` to avoid GPU cost; production must not.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs pytest and Docker builds on `main` / `improved`. Extend with:
 
-- Deploy hooks to Railway/Render on tag
+- Deploy hooks to Railway on tag
 - Vercel Git integration for frontend (automatic)
 
 ### 15.4 Security
@@ -605,7 +590,7 @@ API `CORS_ORIGINS` must be a JSON array string including exact Vercel origin (sc
 
 Run `modal deploy tribe.py` from repo root. App name must match `runner.py`.
 
-### Playwright OOM on Render
+### Playwright OOM on Railway worker
 
 Upgrade worker plan or reduce `configs/explore_production.yaml` page limits.
 
@@ -621,8 +606,8 @@ Upgrade worker plan or reduce `configs/explore_production.yaml` page limits.
 | Service | Cost driver |
 |---------|-------------|
 | Vercel | Bandwidth, serverless invocations (low for dashboard) |
-| Railway/Render API | Always-on instance hours |
-| Railway/Render Worker | RAM/CPU hours; dominant cost for crawl volume |
+| Railway API | Always-on instance hours |
+| Railway Worker | RAM/CPU hours; dominant cost for crawl volume |
 | Modal | A100 GPU seconds per scan (TRIBE + heatmaps) |
 | R2 | Storage + egress (custom domain egress may incur fees) |
 | Clerk | MAU pricing |
@@ -642,8 +627,8 @@ Upgrade worker plan or reduce `configs/explore_production.yaml` page limits.
 ```
 1. Postgres + Redis + R2
 2. modal deploy tribe.py + Modal token
-3. API (Railway/Render) + alembic upgrade
-4. Worker (Railway/Render)
+3. API (Railway) — tables auto-create on first boot
+4. Worker (Railway)
 5. Vercel (apps/web)
 6. Clerk keys → Vercel + API JWT vars
 7. CORS + smoke test scan
@@ -660,4 +645,4 @@ Upgrade worker plan or reduce `configs/explore_production.yaml` page limits.
 
 ---
 
-*Last updated: 2026-06-12 — matches `improved` branch SaaS architecture (Vercel + Railway/Render + Modal + Clerk + R2).*
+*Last updated: 2026-07-16 — Vercel + Railway + Modal + Clerk + B2/Upstash/Supabase.*

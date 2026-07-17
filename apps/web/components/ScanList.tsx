@@ -44,7 +44,7 @@ export function ScanList() {
     return (
       <div className="space-y-3 animate-pulse">
         {[1, 2, 3].map((n) => (
-          <div key={n} className="h-16 rounded bg-ink-800" />
+          <div key={n} className="h-16 rounded-card bg-line" />
         ))}
       </div>
     )
@@ -52,14 +52,14 @@ export function ScanList() {
 
   if (scans.length === 0) {
     return (
-      <p className="text-sm text-text-secondary py-8 text-center border border-dashed border-ink-700 rounded-md">
+      <p className="rounded-card border border-dashed border-line py-8 text-center text-sm text-text-secondary">
         No scans yet. Start your first scan above.
       </p>
     )
   }
 
   return (
-    <ul className="divide-y divide-ink-700 border border-ink-700 rounded-md overflow-hidden">
+    <ul className="marketing-card divide-y divide-line overflow-hidden">
       {scans.map((scan) => (
         <li key={scan.id}>
           <ScanCard scan={scan} />

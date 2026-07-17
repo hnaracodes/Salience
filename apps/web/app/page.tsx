@@ -2,6 +2,8 @@ import { NavBar } from '@/components/NavBar'
 
 import { HeroSection } from '@/components/HeroSection'
 
+import { UseCaseSection } from '@/components/marketing/UseCaseSection'
+
 import { ScrollProductJourney } from '@/components/marketing/ScrollProductJourney'
 
 import { HowItWorksSection } from '@/components/HowItWorksSection'
@@ -26,9 +28,11 @@ export default function HomePage() {
 
       <NavBar />
 
-      <main>
+      <main className="bg-canvas">
 
         <HeroSection />
+
+        <UseCaseSection />
 
         <ScrollProductJourney />
 

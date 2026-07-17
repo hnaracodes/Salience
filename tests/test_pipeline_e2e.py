@@ -103,6 +103,7 @@ def test_full_pipeline_fake_tribe_localhost_fixture(
     session_dir = SESSIONS_DIR / session_id
     assert (session_dir / "session_manifest.json").is_file()
     assert (session_dir / "preds.npz").is_file()
+    assert (session_dir / "preds_subcortical.npz").is_file()
     assert (session_dir / "ux_viewer" / "index.html").is_file()
 
     completed = [s for s, st in stages if st == "done"]

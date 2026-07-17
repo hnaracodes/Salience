@@ -1,100 +1,129 @@
 # Demographic Subagent Multiplexer Implementation Plan
 
+**Revision:** 2026-06-18 (CS-20260618-DEMOGRAPHIC-MUX-PLAN)  
+**Status:** Planning — gated on M0 viability experiment before any Modal training infra.
+
 ## Intent
 
-This plan implements the Salience demographic multiplexer as a late-stage feature branching system on top of Meta TRIBE v2. The design freezes the expensive universal stimulus encoder and trains only a demographic prototype embedding table plus a shared readout head.
+This plan implements the Salience demographic multiplexer as a late-stage feature branching system on top of Meta TRIBE v2. The design freezes the expensive universal stimulus encoder and trains only a demographic prototype embedding table plus a **low-rank cluster-conditional readout delta** on TRIBE's existing population ("unseen-subject") head.
+
+**Critical constraint:** The app is already inaccurate (TRIBE on UI walkthrough video is out-of-distribution vs. naturalistic movie training). The multiplexer must not pretend to fix that. It can only learn **demographic deltas relative to the population average**, and only if those deltas are detectable above noise in available fMRI movie datasets — a hypothesis that must be validated in **M0** before building training infra.
 
 The target production path is:
 
 ```text
 UI walkthrough video
-  -> frozen TRIBE universal encoders
-  -> X_univ[T, D_hidden]
+  -> frozen TRIBE universal encoders (once per video)
+  -> X_univ[T, 1152]   # Transformer output after 2Hz->1Hz pool (R0 measurement)
   -> demographic embedding lookup C[K, D_emb]
-  -> shared multiplexed readout MLP
-  -> vertex_ts[K, T, 20484]
+  -> low-rank cluster-conditional readout delta on population head
+  -> parcel_ts[K, T, 400] or network_ts[K, T, 7]   # primary training target
+  -> optional upsample to vertex_ts[K, T, 20484] for viewer compatibility
   -> existing Yeo-7 parcellation / norms / threshold mapper
-  -> per-demographic cognitive and UX analysis
+  -> per-cluster cognitive and UX analysis (with explicit uncertainty provenance)
 ```
 
-This must not fork TRIBE into separate demographic models. The only trainable demographic state is the cluster embedding matrix and readout head.
+This must not fork TRIBE into separate demographic models. The only trainable demographic state is the cluster embedding matrix and readout delta parameters.
+
+**No-hidden-state fallback:** If R0 cannot cleanly expose `X_univ`, use TRIBE `preds[T, 20484]` (average-subject output from the public demo) as input features and learn only the demographic delta on top. This is lower-confidence but unblocks experimentation.
+
+## Scientific Preconditions (Read First)
+
+| Fact | Implication |
+|------|-------------|
+| TRIBE Transformer hidden dim is **1152** (3 × 384 modality streams), not 4096 | All configs must use `hidden_dim=1152` until R0 confirms otherwise |
+| TRIBE public demo predicts the **average/unseen subject** via subject dropout during training | Demographic branch is a delta on population readout, not a from-scratch vertex regressor |
+| TRIBE subject block is a **low-rank conditional linear** layer `(S, D_model, N_targets)` | Mirror this structure for clusters; do not use a 53M-param from-scratch MLP |
+| TRIBE preds are offset **5 s into the past** (hemodynamic lag) | Temporal alignment in data prep must respect this |
+| Available movie-fMRI datasets are **small, demographically skewed, and site-confounded** | The marketed age×sex×ethnicity grid is not achievable at N≥20 per cell |
+| Subjects watched **Hollywood movies**, not **UI screen-capture** | Demographic deltas learned on movies are double-extrapolated when applied to Salience walkthroughs |
 
 ## Directory Structure
 
 The current repo has root-level `tribe.py`, `scout_core/`, `scripts/`, `configs/`, and `tests/`. Add the demographic multiplexer under a new `salience/` package while keeping the existing baseline code stable.
 
 ```text
-TribeV2Application/
+TribeV2/
   docs/implementation-plans/demographic-multiplexer-implementation-plan.md
-  tribe.py
+  tribe.py                              # existing Modal TRIBE integration
   activation_store.py
   configs/
-    calibrated_rules.yaml
     cluster_schema.yaml                 # new: allowed demographic fields, min-n policy
     clusters.yaml                       # new: cluster_id -> label, rule, n_subjects
     parcellation_manifest.yaml
     vertex_regions.csv
   data_prep/
-    __init__.py                         # new
-    metadata_harmonize.py               # new: ingest HCP/CNeuroMod/Algonauts metadata
-    segment_clusters.py                 # new: rule-based age/sex/dataset cluster assignment
-    align_timeseries.py                 # new: temporal + surface-space alignment
-    aggregate_centroids.py              # new: group subject tensors into Y_target[K,T,V]
-    package_webdataset.py               # new: video + centroid tensor tar sharding
-    schemas.py                          # new: pydantic contracts for subject/video/cluster rows
+    __init__.py
+    metadata_harmonize.py               # ingest HCP/CNeuroMod/NNDb metadata
+    segment_clusters.py                 # rule-based age/sex cluster assignment
+    align_timeseries.py                 # temporal + surface-space alignment
+    aggregate_centroids.py              # group subject tensors into Y_target
+    package_webdataset.py               # video + centroid tensor tar sharding
+    schemas.py                          # pydantic contracts
+    viability_partition.py              # new: M0 variance-partition / permutation null
   salience/
-    __init__.py                         # new
+    __init__.py
     mux/
-      __init__.py                       # new
-      tribe_mux.py                      # new: TribeDemographicMux nn.Module
-      losses.py                         # new: MSE + optional smoothness/cluster regularizers
-      checkpoints.py                    # new: save/load mux-only state_dict
-      inference.py                      # new: infer_mux contract + K_chunk streaming
+      __init__.py
+      tribe_mux.py                      # TribeDemographicMux (low-rank delta readout)
+      losses.py                         # correlation + noise-ceiling loss
+      checkpoints.py
+      inference.py
     modal_app/
-      __init__.py                       # new
-      image_defs.py                     # new: shared Modal image with TRIBE/WebDataset deps
-      train_clusters.py                 # new: Modal A100 training loop
-      inference_mux.py                  # new: Modal inference API returning K,T,V chunks
-      stream_protocol.py                # new: chunked vertex_ts / Yeo-7 payload framing
+      __init__.py
+      image_defs.py
+      train_clusters.py                 # Modal A100 training loop (after M0 pass)
+      inference_mux.py
+      stream_protocol.py
   scout_core/
-    aggregate.py
-    norms.py
-    parcellation.py
-    threshold_engine.py
-    storage_migrations.py
+    aggregate.py, norms.py, parcellation.py, threshold_engine.py, ...
   scout_data/
     demographic/
-      metadata_harmonized.parquet       # generated
-      cluster_members.parquet           # generated
-      aligned_subject_ts/               # generated: subject/video tensors
-      centroids/                        # generated: Y_target per video
+      metadata_harmonized.parquet
+      cluster_members.parquet
+      aligned_subject_ts/
+      centroids/                        # Y_target in parcel or network space
+      viability/                        # M0 reports and permutation nulls
       webdataset/
-        train-000000.tar                # generated
-        val-000000.tar                  # generated
-        test-000000.tar                 # generated
   scripts/
-    analyze_session.py
-    build_vertex_regions_csv.py
-    compute_norms.py
-    run_demographic_data_prep.py        # new: orchestrates 5-step centroid build
+    run_demographic_data_prep.py
+    run_demographic_viability.py        # new: M0 entry point
   tests/
-    test_scout_core.py
-    test_tribe_mux.py                   # new: tensor-shape and gradient-freeze tests
-    test_demographic_data_prep.py       # new: metadata/cluster leakage checks
+    test_tribe_mux.py
+    test_demographic_data_prep.py
+    test_demographic_viability.py       # new
 ```
 
 ## Architecture
+
+### TRIBE v2 Internal Geometry (from paper + R0 targets)
+
+TRIBE v2 pipeline (relevant stages):
+
+```text
+Video/Audio/Text -> frozen encoders (384-dim each)
+  -> concat -> [T_2hz, 1152]
+  -> Transformer encoder (8 layers, 100s context)
+  -> adaptive average pool 2Hz -> 1Hz
+  -> X_univ[T, 1152]                    # hook point for multiplexer
+  -> subject block OR unseen-subject layer
+  -> preds[T, 20484] fsaverage5
+```
+
+The public `TribeModel.predict(events=df)` in [tribe.py](../../tribe.py) returns only final `preds[T, 20484]`. R0 must locate and expose `X_univ` from the pinned TRIBE commit.
 
 ### Frozen Universal Encoder
 
 The frozen path should be isolated behind an adapter because TRIBE's public demo API currently exposes `predict(events=df)` rather than a clean "return universal hidden state" function.
 
-Required R0 spike:
+Required R1 spike (was "R0" in v1 plan; M0 runs first without this):
 
-1. Locate TRIBE's internal module that produces the final pre-subject or pre-readout hidden state.
-2. Confirm tensor rank and meaning, expected as `X_univ: FloatTensor[T, D_hidden]` or `FloatTensor[B, T, D_hidden]`.
-3. Prove that calling this path once per video is equivalent to the baseline public `predict()` path for `K=1` after attaching a compatible readout.
-4. Freeze all upstream TRIBE parameters:
+1. Pin TRIBE commit hash in `salience/mux/tribe_commit.txt`.
+2. Locate the Transformer output tensor after the 2Hz→1Hz adaptive pool in `tribev2/model.py` / `demo_utils.py`.
+3. Confirm tensor rank: `X_univ: FloatTensor[T, 1152]` or `FloatTensor[B, T, 1152]`.
+4. Prove that `population_readout(X_univ) ≈ predict(events=df)` for K=1 within tolerance.
+5. Record hemodynamic offset (5 s) and TR alignment behavior.
+6. Freeze all upstream TRIBE parameters:
 
 ```python
 for p in tribe_backbone.parameters():
@@ -102,53 +131,114 @@ for p in tribe_backbone.parameters():
 tribe_backbone.eval()
 ```
 
-Do not call the video/audio/text encoders once per cluster. The encoders run exactly once per video; only the small demographic branch scales with `K`.
+Do not call the video/audio/text encoders once per cluster. Encoders run exactly once per video; only the small demographic branch scales with `K`.
 
 ### Demographic Prototypes
 
-Represent demographic segments as integer cluster ids:
+Represent demographic segments as integer cluster ids. **Rescoped cluster labels** (ethnicity removed — not achievable at N≥20 without confounding):
 
 ```text
 cluster_id: int64 in [0, num_clusters)
-cluster label examples:
-  genz_female
-  millennial_male
-  genx_female
-  boomer_male
+cluster label examples (only if N >= min_subjects_per_cluster):
+  young_adult_female      # 22-35, pooled across datasets with site covariate
+  young_adult_male
+  middle_adult_female     # 36-55, Cam-CAN / NNDb only
+  middle_adult_male
+  older_adult_pooled      # 56+, Cam-CAN only; sex may need pooling
 ```
 
 Each cluster id indexes a trainable embedding table:
 
 ```text
-C = Embedding(num_clusters=K_total, embedding_dim=D_emb)
+C = Embedding(num_clusters=K_total, embedding_dim=D_emb)   # D_emb default 64-128
 ```
 
-The embedding vector is not a demographic claim by itself. It is a learned prototype coordinate optimized to match cluster-average fMRI targets.
+The embedding vector is not a demographic claim by itself. It is a learned prototype coordinate optimized to match cluster-average fMRI targets **in parcel/network space**.
 
-### Multiplexed Readout
+Clusters that fail M0 power analysis or eval gate are marked `suppressed=true` and never shown in the product UI.
 
-For selected `K` cluster ids:
+### Multiplexed Readout — Recommended: Low-Rank Delta on Population Head
+
+**Do not** train a from-scratch 3-layer MLP to 20484 vertices (~53M parameters). Instead mirror TRIBE's subject block:
 
 ```text
-X_univ:      [T, D_hidden]
-C(ids):     [K, D_emb]
-X_broadcast [K, T, D_hidden]
-C_broadcast [K, T, D_emb]
-concat:     [K, T, D_hidden + D_emb]
-MLP:        [K, T, 20484]
+W_pop:     [1152, N_out]           # frozen copy of unseen-subject readout (R1)
+Delta_k:   low-rank factorization  # U_k @ V_k, rank r << min(1152, N_out)
+y_k(t)  =  W_pop @ x_univ(t)  +  Delta_k @ x_univ(t)     # per cluster k
+
+N_out primary:   400 (Schaefer parcels) or 7 (Yeo networks)
+N_out optional:  20484 (vertices, lower confidence, viewer only)
 ```
 
-Output:
+Alternative: **FiLM modulation** — cluster embedding generates `(gamma_k, beta_k)` to modulate `W_pop @ x` before output. Simpler, fewer params, good baseline.
+
+For selected `K` cluster ids at inference:
 
 ```text
-vertex_ts: FloatTensor[K, T, V]
+X_univ:           [T, 1152]
+cluster_ids:      [K]
+y_base:           [T, N_out]              # population readout, computed once
+y_delta:          [K, T, N_out]           # cluster-conditional delta
+y_cluster:        [K, T, N_out]           # y_base broadcast + y_delta
 ```
 
-Where `V = 20484` for TRIBE's `fsaverage5` surface output.
+Output shapes:
+
+```text
+parcel_ts:   FloatTensor[K, T, 400]   # primary training/inference target
+network_ts:  FloatTensor[K, T, 7]      # derived via scout_core parcellation
+vertex_ts:   FloatTensor[K, T, 20484] # optional, via fixed vertex projection matrix
+```
+
+### Legacy MLP Variant (Not Recommended)
+
+The v1 plan's concat+MLP design is retained only as a **synthetic smoke-test baseline** for unit tests. Do not use it for real fMRI training — it overfits, ignores TRIBE readout structure, and optimizes the wrong metric at 20484 dimensions.
+
+## Loss and Metrics
+
+### Primary Training Loss
+
+Replace raw MSE on vertices with **temporal Pearson correlation loss** in parcel/network space:
+
+```python
+def correlation_loss(y_pred, y_target, dim=-1, eps=1e-8):
+    """Mean Pearson r across parcels/networks, negated for minimization."""
+    pred_c = y_pred - y_pred.mean(dim=dim, keepdim=True)
+    targ_c = y_target - y_target.mean(dim=dim, keepdim=True)
+    r = (pred_c * targ_c).sum(dim=dim) / (
+        pred_c.pow(2).sum(dim=dim).sqrt() * targ_c.pow(2).sum(dim=dim).sqrt() + eps
+    )
+    return 1.0 - r.mean()
+```
+
+Add optional terms:
+
+- **Noise-ceiling weighting:** down-weight parcels where split-half reliability `< 0.3`.
+- **Delta regularization:** `lambda * ||Delta_k||_F` to keep cluster deltas small relative to population.
+- **Temporal smoothness:** penalize `||y(t) - y(t-1)||` on delta channel only (not base).
+
+### Evaluation Metrics (Eval Gate)
+
+Report on held-out subjects and leave-one-dataset-out folds:
+
+| Metric | Definition | Notes |
+|--------|------------|-------|
+| `r_pop` | Pearson r, population readout vs. held-out subject | TRIBE baseline ceiling |
+| `r_cluster` | Pearson r, cluster readout vs. held-out subject in assigned cluster | Primary |
+| `delta_r` | `r_cluster - r_pop` | Must be positive and significant |
+| `r_norm` | `delta_r / noise_ceiling` | Normalized gain |
+| `p_perm` | Demographic-shuffle permutation null | Cluster labels permuted within site |
+
+**Eval gate (go/no-go after M3):**
+
+- `delta_r > 0.02` mean across held-out subjects (parcel space, network-aggregated).
+- `p_perm < 0.01` (demographic label explains variance beyond site/scanner).
+- Cluster readout beats single-cluster baseline on LOVO (leave-one-video-out) for ≥ 2 of 3 held-out datasets.
+- If gate fails: **kill feature** or ship population-only mode with explicit "demographic comparison unavailable" in UI.
 
 ## `tribe_mux.py`
 
-Place this file at `salience/mux/tribe_mux.py`.
+Place at `salience/mux/tribe_mux.py`. Recommended implementation:
 
 ```python
 from __future__ import annotations
@@ -161,89 +251,52 @@ from torch import nn
 
 @dataclass(frozen=True)
 class TribeMuxConfig:
-    hidden_dim: int
-    num_clusters: int
-    cluster_emb_dim: int = 128
-    readout_hidden_dim: int = 2048
-    n_vertices: int = 20484
-    dropout: float = 0.1
-    layer_norm: bool = True
+    hidden_dim: int = 1152          # TRIBE Transformer output dim (R1 confirm)
+    num_clusters: int = 8
+    cluster_emb_dim: int = 64
+    readout_rank: int = 16          # low-rank delta rank
+    n_parcels: int = 400            # primary output (Schaefer @ fsaverage5)
+    n_networks: int = 7             # optional derived target
+    n_vertices: int = 20484         # optional vertex projection
+    use_film: bool = False          # if True, FiLM instead of low-rank delta
+    target_space: str = "parcel"    # "parcel" | "network" | "vertex"
 
 
 class TribeDemographicMux(nn.Module):
     """
-    Late-stage demographic multiplexer for TRIBE universal hidden states.
+    Late-stage demographic multiplexer: population readout + cluster delta.
 
-    The module expects TRIBE's expensive multimodal encoders to be run outside
-    this class exactly once per video. This class only performs demographic
-    branching from a universal hidden tensor X_univ and selected cluster ids.
-
-    Shapes
-    ------
-    x_univ:
-        [T, D_hidden] or [B, T, D_hidden]
-    cluster_ids:
-        [K] for unbatched x_univ, or [B, K] / [K] for batched x_univ
-    returns:
-        [K, T, V] for unbatched input, or [B, K, T, V] for batched input
+    Expects TRIBE encoders to run outside this class exactly once per video.
     """
 
     def __init__(self, config: TribeMuxConfig) -> None:
         super().__init__()
         self.config = config
+        n_out = {"parcel": config.n_parcels, "network": config.n_networks, "vertex": config.n_vertices}[config.target_space]
 
-        self.cluster_embedding = nn.Embedding(
-            num_embeddings=config.num_clusters,
-            embedding_dim=config.cluster_emb_dim,
-        )
+        self.cluster_embedding = nn.Embedding(config.num_clusters, config.cluster_emb_dim)
 
-        in_dim = config.hidden_dim + config.cluster_emb_dim
-        layers: list[nn.Module] = []
-        if config.layer_norm:
-            layers.append(nn.LayerNorm(in_dim))
-        layers.extend(
-            [
-                nn.Linear(in_dim, config.readout_hidden_dim),
-                nn.GELU(),
-                nn.Dropout(config.dropout),
-                nn.Linear(config.readout_hidden_dim, config.readout_hidden_dim),
-                nn.GELU(),
-                nn.Dropout(config.dropout),
-                nn.Linear(config.readout_hidden_dim, config.n_vertices),
-            ]
-        )
-        self.readout = nn.Sequential(*layers)
+        # Frozen population readout — loaded from TRIBE unseen-subject weights (R1)
+        self.pop_weight = nn.Linear(config.hidden_dim, n_out, bias=True)
+        self.pop_weight.weight.requires_grad_(False)
+        self.pop_weight.bias.requires_grad_(False)
+
+        # Low-rank cluster delta: for each cluster k, Delta_k = U_k @ V_k
+        self.delta_u = nn.Parameter(torch.zeros(config.num_clusters, config.hidden_dim, config.readout_rank))
+        self.delta_v = nn.Parameter(torch.zeros(config.num_clusters, config.readout_rank, n_out))
 
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        nn.init.normal_(self.cluster_embedding.weight, mean=0.0, std=0.02)
-        for module in self.readout.modules():
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+        nn.init.normal_(self.cluster_embedding.weight, std=0.02)
+        nn.init.normal_(self.delta_u, std=0.01)
+        nn.init.normal_(self.delta_v, std=0.01)
 
-    def forward(
-        self,
-        x_univ: torch.Tensor,
-        cluster_ids: torch.Tensor,
-    ) -> torch.Tensor:
+    def forward(self, x_univ: torch.Tensor, cluster_ids: torch.Tensor) -> torch.Tensor:
         """
-        Broadcast universal stimulus features over demographic prototypes.
-
-        Parameters
-        ----------
-        x_univ:
-            Universal TRIBE latent, shape [T, D] or [B, T, D].
-        cluster_ids:
-            Cluster ids. For [T, D], pass [K]. For [B, T, D], pass [K] to
-            share clusters across batch or [B, K] for per-example cluster sets.
-
-        Returns
-        -------
-        torch.Tensor
-            Vertex activations shaped [K, T, V] or [B, K, T, V].
+        x_univ: [T, D] or [B, T, D]
+        cluster_ids: [K] or [B, K]
+        returns: [K, T, N_out] or [B, K, T, N_out]
         """
         if x_univ.ndim == 2:
             return self._forward_single(x_univ, cluster_ids)
@@ -251,672 +304,276 @@ class TribeDemographicMux(nn.Module):
             return self._forward_batched(x_univ, cluster_ids)
         raise ValueError(f"x_univ must be [T,D] or [B,T,D], got {tuple(x_univ.shape)}")
 
-    def _forward_single(
-        self,
-        x_univ: torch.Tensor,
-        cluster_ids: torch.Tensor,
-    ) -> torch.Tensor:
-        if cluster_ids.ndim != 1:
-            raise ValueError(f"cluster_ids must be [K] for single input, got {tuple(cluster_ids.shape)}")
-
+    def _forward_single(self, x_univ: torch.Tensor, cluster_ids: torch.Tensor) -> torch.Tensor:
         T, D = x_univ.shape
-        if D != self.config.hidden_dim:
-            raise ValueError(f"Expected hidden_dim={self.config.hidden_dim}, got {D}")
-
         cluster_ids = cluster_ids.to(device=x_univ.device, dtype=torch.long)
-        cluster_emb = self.cluster_embedding(cluster_ids)  # [K, D_emb]
-        K = cluster_emb.shape[0]
+        K = cluster_ids.shape[0]
 
-        x_k = x_univ.unsqueeze(0).expand(K, T, D)  # [K, T, D_hidden]
-        c_k = cluster_emb[:, None, :].expand(K, T, self.config.cluster_emb_dim)
-        mux_in = torch.cat([x_k, c_k], dim=-1)  # [K, T, D_hidden + D_emb]
+        y_base = self.pop_weight(x_univ)  # [T, N_out]
 
-        flat = mux_in.reshape(K * T, -1)
-        pred = self.readout(flat)
-        return pred.reshape(K, T, self.config.n_vertices)
+        u = self.delta_u[cluster_ids]     # [K, D, r]
+        v = self.delta_v[cluster_ids]     # [K, r, N_out]
+        # delta: [K, T, N_out] = einsum over D,r
+        y_delta = torch.einsum("ktd,kdr,kro->kto", x_univ.unsqueeze(0).expand(K, -1, -1), u, v)
 
-    def _forward_batched(
-        self,
-        x_univ: torch.Tensor,
-        cluster_ids: torch.Tensor,
-    ) -> torch.Tensor:
+        return y_base.unsqueeze(0) + y_delta  # [K, T, N_out]
+
+    def _forward_batched(self, x_univ: torch.Tensor, cluster_ids: torch.Tensor) -> torch.Tensor:
         B, T, D = x_univ.shape
-        if D != self.config.hidden_dim:
-            raise ValueError(f"Expected hidden_dim={self.config.hidden_dim}, got {D}")
-
-        cluster_ids = cluster_ids.to(device=x_univ.device, dtype=torch.long)
         if cluster_ids.ndim == 1:
             cluster_ids = cluster_ids.unsqueeze(0).expand(B, -1)
-        if cluster_ids.ndim != 2 or cluster_ids.shape[0] != B:
-            raise ValueError(
-                "For batched input, cluster_ids must be [K] or [B,K], "
-                f"got {tuple(cluster_ids.shape)} for B={B}"
-            )
+        K = cluster_ids.shape[1]
+        outs = []
+        for b in range(B):
+            outs.append(self._forward_single(x_univ[b], cluster_ids[b]))
+        return torch.stack(outs, dim=0)  # [B, K, T, N_out]
 
-        cluster_emb = self.cluster_embedding(cluster_ids)  # [B, K, D_emb]
-        K = cluster_emb.shape[1]
-
-        x_k = x_univ[:, None, :, :].expand(B, K, T, D)
-        c_k = cluster_emb[:, :, None, :].expand(B, K, T, self.config.cluster_emb_dim)
-        mux_in = torch.cat([x_k, c_k], dim=-1)  # [B, K, T, D_hidden + D_emb]
-
-        flat = mux_in.reshape(B * K * T, -1)
-        pred = self.readout(flat)
-        return pred.reshape(B, K, T, self.config.n_vertices)
-
-    def trainable_parameter_groups(
-        self,
-        *,
-        embedding_weight_decay: float = 0.1,
-        readout_weight_decay: float = 0.01,
-    ) -> list[dict]:
-        """
-        Optimizer groups with stronger regularization on demographic embeddings.
-        """
-        readout_params = [p for p in self.readout.parameters() if p.requires_grad]
-        emb_params = [p for p in self.cluster_embedding.parameters() if p.requires_grad]
+    def trainable_parameter_groups(self, *, emb_wd: float = 0.1, delta_wd: float = 0.01) -> list[dict]:
         return [
-            {
-                "params": emb_params,
-                "weight_decay": embedding_weight_decay,
-                "name": "cluster_embedding",
-            },
-            {
-                "params": readout_params,
-                "weight_decay": readout_weight_decay,
-                "name": "readout",
-            },
+            {"params": [self.cluster_embedding.weight], "weight_decay": emb_wd, "name": "cluster_embedding"},
+            {"params": [self.delta_u, self.delta_v], "weight_decay": delta_wd, "name": "delta_readout"},
         ]
 ```
 
 ## Data Extraction Plan
 
+### Dataset Reality Check
+
+**Brutally honest inventory** of candidate naturalistic movie-fMRI datasets:
+
+| Dataset | N subjects | Age range | Sex balance | Stimulus | Surface space | TR | Demographic cells at N≥20? |
+|---------|-----------|-----------|-------------|----------|---------------|-----|---------------------------|
+| **CNeuroMod** | 6 (4-6 with DUA) | ~25-35 | mixed | Hollywood movies (movie10) | fsLR → fsaverage5 | 1.49s | **No** — entire dataset < 20 |
+| **HCP 7T Movie** | 184 | 22-36 only | ~balanced | Movie clips (Wolf/Mario/etc.) | fsLR_32k | 1.0s | **Age×sex partially** — all "young adult"; no genx/boomer |
+| **NNDb** (OpenNeuro ds002837) | 86 | 18-58 | 42F/44M | 10 full-length movies | MNI vol → surf | 2.0s | **~8 per movie**; age bands poolable but site=single |
+| **StudyForrest 7T** | 20 | 21-38 | 12M/8F | Forrest Gump | fsLR | 2.0s | **No** per cell |
+| **Narratives** (OpenNeuro) | 345 | 18-53 | 204F/141M | Audio stories (no video) | MNI vol | 1.5s | Audio-only; **not valid for TRIBE video path** |
+| **Cam-CAN** | ~650 | 18-88 | balanced | Single 8-min movie clip | MNI vol | 0.74s | **Age bands yes, sex yes** — but one short clip, single site |
+
+**Conclusions:**
+
+1. **Ethnicity is cut** from `cluster_schema.yaml` and `clusters.yaml`. No public movie-fMRI dataset provides ethnicity at scale with matched stimuli.
+2. The v1 marketing grid (`genz_female`, `millennial_male`, …) is **not achievable**. Rescope to coarse age bands with sex, accepting that "young adult" ≈ HCP/NNDb young subjects only.
+3. **Site/scanner confound** is unavoidable: HCP ≠ Cam-CAN ≠ CNeuroMod. Mandate leave-one-dataset-out (LODO) in all eval.
+4. **Access gates:** CNeuroMod requires registered access + DTA; HCP requires ConnectomeDB credentials; NNDb and Cam-CAN are more open.
+
+### Recommended Data Strategy (Phased)
+
+**Phase A — M0 only (no video, no TRIBE training):**
+
+- Download HCP 7T movie or Cam-CAN preprocessed parcellated timeseries (public derivatives).
+- Run variance partition: `response ~ age + sex + site + (1|subject)` on network timeseries.
+- Permutation null: shuffle age/sex labels within site, recompute explained variance.
+- **Decision:** proceed only if demographic variance exceeds permutation null at p < 0.01 and is > site variance for ≥ 1 network.
+
+**Phase B — Centroid build (if M0 passes):**
+
+- Primary: HCP 7T movie (N=184, young adult, best-powered).
+- Secondary: Cam-CAN (age diversity, single clip — age effects only).
+- Tertiary: NNDb (movie diversity, small N per movie).
+- CNeuroMod: use for TRIBE-native validation only (N=6, not for cluster centroids).
+
 ### Dependencies
 
-Add the following dependencies once implementation begins:
-
 ```text
-torch
-webdataset
-nilearn
-nibabel
-pandas
-pyarrow
-numpy
-scipy
-scikit-learn
-pydantic
-pyyaml
-tqdm
+torch, webdataset, nilearn, nibabel, pandas, pyarrow, numpy, scipy,
+scikit-learn, pydantic, pyyaml, tqdm, statsmodels
 ```
 
-Optional but likely required for serious surface conversion:
-
-```text
-neuromaps
-templateflow
-```
-
-Workbench is usually installed as a system binary, not a Python package:
-
-```text
-wb_command
-```
+Optional: `neuromaps`, `templateflow`, `wb_command` (system binary).
 
 ### 1. Metadata Harmonization
 
-New script: `data_prep/metadata_harmonize.py`
+Script: `data_prep/metadata_harmonize.py`
 
-Input examples:
-
-```text
-raw_metadata/
-  hcp_subjects.csv
-  cneuromod_participants.tsv
-  algonauts_subjects.tsv
-```
-
-Unified schema:
+Unified schema (**ethnicity removed**):
 
 ```text
 subject_id: str
 source_subject_id: str
-dataset: Literal["hcp", "cneuromod", "algonauts"]
+dataset: Literal["hcp_7t", "cneuromod", "nndb", "camcan", "forrest"]
 age: float | null
-age_band: str
+age_band: str          # young_adult | middle_adult | older_adult
 sex: Literal["female", "male", "unknown"]
-race_ethnicity: str | null
+site_id: str           # scanner/site identifier (critical covariate)
 handedness: str | null
 metadata_quality: str
 consent_scope: str | null
+dua_version: str | null
 ```
 
-Implementation details:
-
-1. Use `pandas.read_csv()` with `sep="\t"` for TSV datasets.
-2. Normalize column names through dataset-specific mapping dictionaries.
-3. Convert age ranges to midpoint or controlled band:
+Age bands (rescaled):
 
 ```text
-18-24 -> genz
-25-40 -> millennial
-41-56 -> genx
-57+   -> boomer_plus
+18-35 -> young_adult
+36-55 -> middle_adult
+56+   -> older_adult
 ```
 
-4. Normalize sex values to `female`, `male`, `unknown`.
-5. Persist:
-
-```text
-scout_data/demographic/metadata_harmonized.parquet
-```
-
-6. Validate:
-
-```python
-assert df["subject_id"].is_unique
-assert {"subject_id", "age_band", "sex", "dataset"}.issubset(df.columns)
-```
+Output: `scout_data/demographic/metadata_harmonized.parquet`
 
 ### 2. Rule-Based Segmentation
-
-New script: `data_prep/segment_clusters.py`
 
 Config: `configs/clusters.yaml`
 
 ```yaml
-schema_version: 1
+schema_version: 2
 min_subjects_per_cluster: 20
+require_site_covariate: true
 clusters:
   - cluster_id: 0
-    label: genz_female
+    label: young_adult_female
     where:
-      age_band: genz
+      age_band: young_adult
       sex: female
+    min_datasets: 1          # at least 1 dataset contributes
   - cluster_id: 1
-    label: genz_male
+    label: young_adult_male
     where:
-      age_band: genz
+      age_band: young_adult
       sex: male
   - cluster_id: 2
-    label: millennial_female
+    label: middle_adult_pooled
     where:
-      age_band: millennial
-      sex: female
+      age_band: middle_adult
+    notes: "Sex pooled — insufficient N when split"
+  - cluster_id: 3
+    label: older_adult_pooled
+    where:
+      age_band: older_adult
+    notes: "Cam-CAN only; sex pooled"
 ```
 
-Implementation details:
-
-1. Load harmonized metadata with `pandas.read_parquet()`.
-2. Apply exact-match rules from YAML.
-3. Enforce `N >= 20` before allowing a cluster into training.
-4. Mark underpowered clusters as `suppressed=true`, never as trainable labels.
-5. Persist:
-
-```text
-scout_data/demographic/cluster_members.parquet
-scout_data/demographic/cluster_demographics.json
-```
-
-Leakage guard:
+Leakage guards:
 
 ```python
 from sklearn.model_selection import GroupShuffleSplit
 
+# Subject-held-out
 splitter = GroupShuffleSplit(test_size=0.2, random_state=42)
-# group by source subject id so the same person never crosses train/val/test
+# groups = source_subject_id
+
+# Leave-one-dataset-out (mandatory secondary eval)
+for held_out_dataset in datasets:
+    train = df[df["dataset"] != held_out_dataset]
+    test = df[df["dataset"] == held_out_dataset]
 ```
 
 ### 3. Spatiotemporal Alignment
 
-New script: `data_prep/align_timeseries.py`
+Script: `data_prep/align_timeseries.py`
 
-Goal:
+Primary target shape (preferred):
 
 ```text
-raw subject fMRI/video tensor
-  -> aligned subject response tensor [T_1hz, 20484]
+aligned subject response: float32 [T_1hz, 400]   # Schaefer parcels
+derived network:        float32 [T_1hz, 7]      # Yeo-7 aggregation
+optional vertex:        float32 [T_1hz, 20484]  # lower confidence
 ```
 
 Temporal alignment:
 
-1. Load subject response time series as `float32`.
-2. Read dataset TR:
-
-```text
-HCP       TR = 0.72s
-CNeuroMod TR = 1.49s
-Algonauts dataset-specific TR
-```
-
-3. Convert source sample index to seconds:
-
-```python
-source_t = np.arange(n_source_t) * source_tr
-target_t = np.arange(0.0, video_duration_s, 1.0)
-```
-
-4. Use SciPy interpolation:
-
-```python
-from scipy.interpolate import interp1d
-
-interp = interp1d(
-    source_t,
-    y_source,
-    axis=0,
-    kind="linear",
-    bounds_error=False,
-    fill_value="extrapolate",
-)
-y_1hz = interp(target_t).astype("float32")
-```
-
-Use `scipy.signal.resample_poly()` only when the ratio is clean and the series is long enough. For variable TR and explicit video-duration alignment, `interp1d()` is easier to audit.
+- Respect dataset TR (HCP 0.72s/1.0s, CNeuroMod 1.49s, NNDb 2.0s, Cam-CAN 0.74s).
+- Apply **5 s hemodynamic shift** when aligning video events to fMRI (match TRIBE convention).
+- Interpolate to 1 Hz with `scipy.interpolate.interp1d` (auditable).
 
 Spatial alignment:
 
-Preferred path:
-
-1. Convert all subjects to a known surface space with dataset-provided preprocessing when available.
-2. If input is `fsLR_32k`, transform to `fsaverage5`.
-3. Use Workbench for surface resampling where surfaces/spheres are available:
-
-```text
-wb_command -metric-resample \
-  input.func.gii \
-  source.sphere.gii \
-  target.fsaverage5.sphere.gii \
-  ADAP_BARY_AREA \
-  output.fsaverage5.func.gii \
-  -area-surfs source.midthickness.surf.gii target.midthickness.surf.gii
-```
-
-4. Use `nibabel.load()` to read GIFTI:
-
-```python
-import nibabel as nib
-arr = np.asarray(nib.load(path).agg_data(), dtype=np.float32)
-```
-
-5. Concatenate hemispheres into TRIBE order:
-
-```text
-lh vertices first, rh vertices second
-```
-
-6. Validate exact target shape:
-
-```python
-assert y_aligned.shape == (T_1hz, 20484)
-```
-
-Nilearn functions to use:
-
-```python
-from nilearn import datasets, surface
-
-fsaverage = datasets.load_fsaverage(mesh="fsaverage5")
-surface.load_surf_data(...)
-surface.vol_to_surf(...)  # only if starting from volumetric NIfTI
-```
-
-If starting from MNI volumetric NIfTI, use `nilearn.surface.vol_to_surf()` onto fsaverage5 pial surfaces, but treat this as a lower-confidence path because interpolation can blur cortical signals.
+- Prefer dataset-provided fsLR/fsaverage5 derivatives.
+- Use `wb_command -metric-resample` for fsLR_32k → fsaverage5 when needed.
+- Parcellate early via `configs/vertex_regions.csv` — do not train on raw 20484 unless necessary.
 
 Output:
 
 ```text
 scout_data/demographic/aligned_subject_ts/
-  <dataset>/<video_id>/<subject_id>.npy   # float32 [T, 20484]
+  <dataset>/<video_id>/<subject_id>.npz
+    parcel_ts: [T, 400]
+    network_ts: [T, 7]       # optional pre-aggregated
+    vertex_ts: [T, 20484]    # optional
 ```
 
 ### 4. Centroid Aggregation
 
-New script: `data_prep/aggregate_centroids.py`
+Script: `data_prep/aggregate_centroids.py`
 
 For each `video_id` and cluster:
 
 ```python
-stack = np.stack(subject_tensors, axis=0)  # [N_cluster, T, V]
-centroid = stack.mean(axis=0).astype("float32")  # [T, V]
+stack = np.stack(subject_tensors, axis=0)  # [N_cluster, T, P]
+centroid = stack.mean(axis=0).astype("float32")  # [T, P]
 ```
 
-Robust alternative:
+Recommended:
 
-```python
-centroid = np.median(stack, axis=0).astype("float32")
-```
-
-Recommended baseline:
-
-1. Z-score each subject per vertex before averaging if datasets have incompatible response scales.
-2. Average within dataset first, then across datasets to prevent a larger dataset from dominating:
-
-```text
-subject -> dataset_cluster_mean -> cross_dataset_cluster_mean
-```
-
-3. Smooth over time with a small rolling window only after preserving the raw centroid:
-
-```python
-from scipy.ndimage import uniform_filter1d
-centroid_smooth = uniform_filter1d(centroid, size=3, axis=0, mode="nearest")
-```
+1. Z-score each subject per parcel before averaging (cross-dataset scale compatibility).
+2. Average within dataset first, then across datasets (prevent HCP dominance).
+3. Store `n_subjects`, `dataset_ids`, and `site_ids` in centroid metadata.
 
 Output:
 
 ```text
-scout_data/demographic/centroids/
-  <video_id>.npz
-    y_target: float32 [K_trainable, T, 20484]
-    cluster_ids: int64 [K_trainable]
-    fps: float32 scalar = 1.0
+scout_data/demographic/centroids/<video_id>.npz
+  y_target: float32 [K_trainable, T, P]     # P=400 parcels (primary)
+  cluster_ids: int64 [K_trainable]
+  fps: 1.0
+  provenance_json: {...}
 ```
 
 ### 5. WebDataset Packaging
 
-New script: `data_prep/package_webdataset.py`
+Script: `data_prep/package_webdataset.py`
 
-Shard structure:
+Shard keys include `y_target.npy` (parcel space), `cluster_ids.npy`, and provenance JSON. Store on Modal Volume or object storage.
 
-```text
-train-000000.tar
-  000000.json
-  000000.mp4
-  000000.y_target.npy
-  000000.cluster_ids.npy
-  000001.json
-  000001.mp4
-  000001.y_target.npy
-  000001.cluster_ids.npy
-```
+## M0 Viability Experiment (Gating — Run Before Any Modal Infra)
 
-Use:
+Script: `scripts/run_demographic_viability.py`  
+Core logic: `data_prep/viability_partition.py`
 
-```python
-import webdataset as wds
+**Goal:** Determine whether demographic group explains any variance in network-level movie-fMRI responses above a site-confound and permutation null — **without TRIBE, without Modal, without WebDataset**.
 
-with wds.TarWriter("train-000000.tar") as sink:
-    sink.write({
-        "__key__": sample_id,
-        "mp4": video_bytes,
-        "y_target.npy": y_target.astype("float32"),
-        "cluster_ids.npy": cluster_ids.astype("int64"),
-        "json": {
-            "video_id": video_id,
-            "duration_s": float(duration_s),
-            "fps": 1.0,
-            "mesh": "fsaverage5",
-            "n_vertices": 20484,
-        },
-    })
-```
+**Procedure:**
 
-Training loader:
+1. Load public parcellated timeseries from HCP 7T movie and/or Cam-CAN (whichever is faster to obtain).
+2. Aggregate vertices → Yeo-7 network timeseries per subject per run.
+3. Fit mixed model or variance partition per network:
+   `network_ts ~ age_band + sex + site + (1|subject)`
+4. Permutation null (1000 shuffles): shuffle `age_band` and `sex` within `site_id`, recompute demographic explained variance.
+5. Compare demographic variance to site variance and to permutation distribution.
 
-```python
-dataset = (
-    wds.WebDataset(shard_urls)
-    .decode()
-    .to_tuple("mp4", "y_target.npy", "cluster_ids.npy", "json")
-)
-```
+**Go criterion (all required):**
 
-For Modal, store shards on a `modal.Volume` or external object storage. Keep sample-level metadata in each tar to make training reproducible even after re-sharding.
+- Demographic factors explain ≥ 1% unique variance in ≥ 2 Yeo-7 networks (Vis, Default, or SalVentAttn).
+- Demographic explained variance exceeds 95th percentile of permutation null (p < 0.05) in those networks.
+- Demographic variance is not entirely explained by site (partial R² age/sex > partial R² site alone for at least one network).
+
+**No-go:** Kill or rescope feature to "population-only + explicit disclaimer." Do not build `salience/modal_app/train_clusters.py` until M0 passes.
+
+Output: `scout_data/demographic/viability/m0_report.json`
 
 ## `train_clusters.py`
 
-Place this file at `salience/modal_app/train_clusters.py`.
+Place at `salience/modal_app/train_clusters.py`. **Build only after M0 pass and R1 hidden-state spike.**
 
-This is a skeletal script. The `TribeLatentExtractor` adapter must be implemented after the R0 source-code spike finds TRIBE's internal universal hidden state.
+Key changes from v1:
+
+- `hidden_dim=1152` (not 4096).
+- `TribeDemographicMux` with low-rank delta readout.
+- Loss: `correlation_loss` in parcel space (not `F.mse_loss` on vertices).
+- Eval hook: compute `delta_r` on val split each epoch; early-stop if `delta_r` plateaus below 0.
 
 ```python
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Iterable
-
-import modal
-
-
-app = modal.App("tribe-demographic-mux-train")
-
-volume = modal.Volume.from_name("tribe-demographic-mux-vol", create_if_missing=True)
-
-image = (
-    modal.Image.debian_slim(python_version="3.12")
-    .apt_install(
-        "git",
-        "ffmpeg",
-        "libgl1-mesa-glx",
-        "libegl1-mesa",
-        "libosmesa6",
-    )
-    .pip_install(
-        "torch",
-        "torchvision",
-        "torchaudio",
-        "numpy",
-        "pandas",
-        "pyarrow",
-        "webdataset",
-        "scipy",
-        "nilearn",
-        "nibabel",
-        "pyyaml",
-        "tqdm",
-        "modal",
-    )
-    .run_commands(
-        "git clone https://github.com/facebookresearch/tribev2.git /root/tribev2",
-        'pip install -e "/root/tribev2[plotting]"',
-    )
+config = TribeMuxConfig(
+    hidden_dim=1152,
+    num_clusters=8,
+    cluster_emb_dim=64,
+    readout_rank=16,
+    n_parcels=400,
+    target_space="parcel",
 )
-
-
-class TribeLatentExtractor:
-    """
-    Adapter around TRIBE v2 internals.
-
-    TODO after R0:
-    - locate universal hidden-state function/module
-    - return X_univ as [B, T, D_hidden]
-    - guarantee frozen encoder path and no cluster-dependent compute
-    """
-
-    def __init__(self, cache_folder: str) -> None:
-        from tribev2.demo_utils import TribeModel
-
-        self.model = TribeModel.from_pretrained(
-            "facebook/tribev2",
-            cache_folder=cache_folder,
-        )
-
-        # If TribeModel exposes a torch module, freeze it here. The exact
-        # attribute must be verified against the pinned TRIBE commit.
-        for maybe_name in ("model", "net", "module"):
-            module = getattr(self.model, maybe_name, None)
-            if module is not None and hasattr(module, "parameters"):
-                for p in module.parameters():
-                    p.requires_grad_(False)
-                module.eval()
-
-    def encode_video_batch(self, video_batch: list[bytes]):
-        """
-        Return universal hidden states [B, T, D_hidden].
-
-        This placeholder intentionally raises until TRIBE internals are pinned.
-        The baseline public API returns final predictions, not the required
-        pre-readout X_univ.
-        """
-        raise NotImplementedError("Implement after TRIBE R0 hidden-state spike.")
-
-
-def make_loader(shard_urls: Iterable[str], batch_size: int):
-    import webdataset as wds
-
-    return (
-        wds.WebDataset(list(shard_urls), shardshuffle=True)
-        .shuffle(512)
-        .to_tuple("mp4", "y_target.npy", "cluster_ids.npy", "json")
-        .batched(batch_size, partial=False)
-    )
-
-
-@app.cls(
-    gpu="A100",
-    image=image,
-    volumes={"/mnt/mux": volume},
-    secrets=[modal.Secret.from_name("huggingface-secret")],
-    timeout=60 * 60 * 8,
-)
-class DemographicMuxTrainer:
-    @modal.enter()
-    def setup(self) -> None:
-        import torch
-
-        from salience.mux.tribe_mux import TribeDemographicMux, TribeMuxConfig
-
-        self.device = torch.device("cuda")
-        self.latent_extractor = TribeLatentExtractor(cache_folder="/mnt/mux/hf_cache")
-
-        # TODO: set hidden_dim from R0 measurement, not a guessed constant.
-        config = TribeMuxConfig(
-            hidden_dim=4096,
-            num_clusters=16,
-            cluster_emb_dim=128,
-            readout_hidden_dim=2048,
-            n_vertices=20484,
-            dropout=0.1,
-        )
-        self.mux = TribeDemographicMux(config).to(self.device)
-
-        # Strict trainable surface: only the demographic embedding and readout.
-        for p in self.mux.parameters():
-            p.requires_grad_(True)
-
-        self.scaler = torch.amp.GradScaler("cuda")
-
-    @modal.method()
-    def train(
-        self,
-        shard_urls: list[str],
-        *,
-        epochs: int = 5,
-        batch_size: int = 1,
-        lr: float = 3e-4,
-        embedding_weight_decay: float = 0.2,
-        readout_weight_decay: float = 0.01,
-        grad_clip_norm: float = 1.0,
-        checkpoint_every_steps: int = 500,
-    ) -> str:
-        import json
-        import time
-
-        import torch
-        import torch.nn.functional as F
-
-        loader = make_loader(shard_urls, batch_size=batch_size)
-
-        optimizer = torch.optim.AdamW(
-            self.mux.trainable_parameter_groups(
-                embedding_weight_decay=embedding_weight_decay,
-                readout_weight_decay=readout_weight_decay,
-            ),
-            lr=lr,
-            betas=(0.9, 0.95),
-            eps=1e-8,
-        )
-
-        global_step = 0
-        losses: list[float] = []
-        self.mux.train()
-
-        for epoch in range(epochs):
-            for video_bytes_batch, y_target_np, cluster_ids_np, meta in loader:
-                optimizer.zero_grad(set_to_none=True)
-
-                # Frozen TRIBE path. No gradients should flow into the encoder.
-                with torch.no_grad():
-                    x_univ = self.latent_extractor.encode_video_batch(video_bytes_batch)
-                    x_univ = x_univ.to(self.device, dtype=torch.float32, non_blocking=True)
-
-                y_target = torch.as_tensor(
-                    y_target_np,
-                    device=self.device,
-                    dtype=torch.float32,
-                )
-                cluster_ids = torch.as_tensor(
-                    cluster_ids_np,
-                    device=self.device,
-                    dtype=torch.long,
-                )
-
-                # Expected y_target: [B, K, T, V].
-                # If WebDataset emits [K,T,V] for B=1, normalize it here.
-                if y_target.ndim == 3:
-                    y_target = y_target.unsqueeze(0)
-                if cluster_ids.ndim == 1:
-                    cluster_ids = cluster_ids.unsqueeze(0)
-
-                with torch.amp.autocast("cuda", dtype=torch.bfloat16):
-                    y_pred = self.mux(x_univ, cluster_ids)
-                    if y_pred.shape != y_target.shape:
-                        raise RuntimeError(
-                            f"prediction shape {tuple(y_pred.shape)} != "
-                            f"target shape {tuple(y_target.shape)}"
-                        )
-                    loss = F.mse_loss(y_pred, y_target)
-
-                self.scaler.scale(loss).backward()
-                self.scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(self.mux.parameters(), grad_clip_norm)
-                self.scaler.step(optimizer)
-                self.scaler.update()
-
-                global_step += 1
-                loss_value = float(loss.detach().cpu())
-                losses.append(loss_value)
-
-                if global_step % checkpoint_every_steps == 0:
-                    self._save_checkpoint(global_step, epoch, optimizer, losses)
-
-        ckpt_path = self._save_checkpoint(global_step, epochs - 1, optimizer, losses)
-        metrics_path = Path("/mnt/mux/checkpoints") / f"metrics_{int(time.time())}.json"
-        metrics_path.parent.mkdir(parents=True, exist_ok=True)
-        metrics_path.write_text(
-            json.dumps(
-                {
-                    "final_checkpoint": ckpt_path,
-                    "global_step": global_step,
-                    "epochs": epochs,
-                    "loss_tail": losses[-100:],
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        volume.commit()
-        return str(metrics_path)
-
-    def _save_checkpoint(self, step: int, epoch: int, optimizer, losses: list[float]) -> str:
-        import torch
-
-        out_dir = Path("/mnt/mux/checkpoints")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"mux_step_{step:08d}.pt"
-        torch.save(
-            {
-                "step": step,
-                "epoch": epoch,
-                "mux_state_dict": self.mux.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss_tail": losses[-100:],
-            },
-            path,
-        )
-        volume.commit()
-        return str(path)
+# ...
+loss = correlation_loss(y_pred, y_target, dim=-1)  # not F.mse_loss
 ```
 
 ## Inference Contract
@@ -931,37 +588,30 @@ def infer_mux(
     cluster_ids: list[int],
     *,
     k_chunk: int = 8,
+    target_space: str = "parcel",
     return_format: str = "npz",
 ) -> dict:
     ...
-```
-
-### Input
-
-```text
-video_bytes: raw mp4 bytes
-cluster_ids: selected demographic prototypes
-k_chunk: max clusters per readout pass
 ```
 
 ### Output
 
 ```text
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "mesh": "fsaverage5",
-  "n_vertices": 20484,
+  "target_space": "parcel",
+  "n_parcels": 400,
   "fps": 1.0,
-  "cluster_ids": [0, 1, 2, ...],
-  "vertex_ts_uri": "scout_data/sessions/<id>/mux_vertex_ts.npz",
-  "chunks": [
-    {
-      "cluster_start": 0,
-      "cluster_end": 8,
-      "shape": [8, T, 20484],
-      "dtype": "float32"
-    }
-  ]
+  "cluster_ids": [0, 1, ...],
+  "provenance": {
+    "mux_checkpoint": "...",
+    "m0_passed": true,
+    "eval_gate_passed": true,
+    "disclaimer": "Model-relative demographic prototypes; not measured emotion."
+  },
+  "parcel_ts_uri": "scout_data/sessions/<id>/mux_parcel_ts.npz",
+  "chunks": [...]
 }
 ```
 
@@ -969,127 +619,128 @@ k_chunk: max clusters per readout pass
 
 ```text
 video_bytes
-  -> TRIBE preprocessing / get_events_dataframe
-  -> frozen latent extractor returns X_univ[T,D]
+  -> TRIBE get_events_dataframe (once)
+  -> frozen latent extractor -> X_univ[T, 1152]
+  -> y_base = pop_readout(X_univ)                    # population, once
   -> for cluster_ids chunks:
-       y_chunk = mux(X_univ, cluster_ids_chunk)
-       persist y_chunk or stream to Yeo-7 mapper
-  -> concatenate logical output as [K,T,V]
+       y_delta = mux_delta(X_univ, cluster_ids_chunk)
+       y_cluster = y_base + y_delta
+       persist parcel_ts chunk
+  -> scout_core parcellation/network aggregation if needed
+  -> per-cluster analysis_bundle sections
 ```
 
 ### Integration With Existing Yeo-7 Mapper
 
-For each cluster `k`:
+For each cluster `k` (parcel_ts already `[T, 400]` or derive network_ts):
 
 ```python
-parcel_ts, parcel_ids = parcel_timeseries(vertex_ts[k], vertex_parcel)
-net_ts, net_ids = network_timeseries(parcel_ts, parcel_ids, parcel_to_net)
+net_ts, net_ids = network_timeseries(parcel_ts[k], parcel_ids, parcel_to_net)
 z_net = zscore_network(net_ts, network_norms, net_ids)
 hits = evaluate_rules(ctx, rules_path, insight_catalog_path)
 ```
 
-Add cluster-aware storage later:
-
-```text
-session_cluster_network_timeseries
-  session_id
-  cluster_id
-  t_idx
-  yeo_network_id
-  value
-  z_vs_norm
-  norm_id
-
-session_cluster_threshold_hit
-  session_id
-  cluster_id
-  rule_id
-  t_start
-  t_end
-  evidence_json
-  confidence
-```
-
-Until then, write cluster outputs as file-backed arrays and generate one `analysis_bundle` section per cluster.
-
 ## Training Validation
 
-### Unit Tests
+### Unit Tests (`tests/test_tribe_mux.py`)
 
-`tests/test_tribe_mux.py`:
-
-1. `x_univ[T,D] + cluster_ids[K] -> [K,T,V]`.
-2. `x_univ[B,T,D] + cluster_ids[K] -> [B,K,T,V]`.
-3. `x_univ[B,T,D] + cluster_ids[B,K] -> [B,K,T,V]`.
-4. Backward pass produces gradients for `cluster_embedding` and `readout`.
-5. No gradients are required for the frozen TRIBE adapter parameters.
+1. `x_univ[T,1152] + cluster_ids[K] -> [K,T,P]`.
+2. Batched shapes and gradient flow to `delta_u`, `delta_v`, `cluster_embedding` only.
+3. `pop_weight` gradients are zero (frozen).
+4. K=1 output equals `pop_readout + delta_0` within tolerance.
 
 ### Training Checks
 
-1. Train on a synthetic WebDataset shard where `Y_target` is generated by a known linear map from `X_univ` and cluster ids.
-2. Verify loss decreases in <100 steps.
-3. Verify `K=1` inference fits a single centroid without changing encoder weights.
-4. Log GPU memory:
-
-```python
-torch.cuda.reset_peak_memory_stats()
-...
-peak_gb = torch.cuda.max_memory_allocated() / 1e9
-```
-
-5. Test `K in {4, 16, 32}` with `k_chunk in {4, 8, 16}`.
+1. Synthetic shard: known linear delta from cluster ids; correlation loss decreases in < 100 steps.
+2. M0 report exists and `passed: true` before Modal training run.
+3. Eval gate metrics logged each epoch.
 
 ## Milestones
+
+### M0: Viability Experiment (GATING — must pass first)
+
+- Run `scripts/run_demographic_viability.py` on HCP 7T or Cam-CAN parcellated data.
+- Produce `scout_data/demographic/viability/m0_report.json`.
+- **Go/no-go decision documented in ledger.**
+- If no-go: stop; do not proceed to M1-M5.
 
 ### M1: TRIBE Hidden-State Spike
 
 - Pin TRIBE commit.
-- Locate universal hidden-state tensor.
-- Record `D_hidden`, `T` behavior, dtype, and frame alignment.
-- Prove frozen encoder is called once per video.
+- Locate `X_univ[T, 1152]` after 2Hz→1Hz pool.
+- Confirm `pop_readout(X_univ) ≈ predict(events=df)`.
+- Document 5 s hemodynamic offset.
+- Implement no-hidden-state fallback path if hook is blocked.
 
 ### M2: Data Prep Dry Run
 
-- Harmonize a small metadata sample.
-- Build 2-4 synthetic clusters with `N >= 20` or explicit suppressed status.
-- Align one small subject/video sample to `[T, 20484]`.
-- Package one WebDataset shard.
+- Harmonize metadata for HCP 7T + Cam-CAN (skip ethnicity).
+- Build clusters with `N >= 20` or explicit `suppressed=true`.
+- Align one subject/video to `[T, 400]` parcel space.
+- Package one WebDataset shard with provenance.
 
-### M3: Mux Training Smoke Test
+### M3: Mux Training Smoke Test + Eval Gate
 
-- Train `TribeDemographicMux` with synthetic `X_univ`.
-- Train through the Modal skeleton after `TribeLatentExtractor` is implemented.
-- Save and reload mux-only checkpoints.
+- Train `TribeDemographicMux` with correlation loss on real centroids.
+- Subject-held-out + LODO eval.
+- **Eval gate:** `delta_r > 0.02`, `p_perm < 0.01`, beats single-cluster baseline.
+- If gate fails: **kill switch** — do not proceed to M4.
 
 ### M4: End-to-End Demographic Inference
 
-- `infer_mux(video, cluster_ids)` emits `[K,T,V]`.
-- Existing `scout_core` parcellation produces `network_ts[K,T,7]`.
-- Analysis bundle contains per-cluster network traces and threshold hits.
+- `infer_mux(video, cluster_ids)` emits `[K,T,P]` parcel timeseries.
+- `scout_core` produces per-cluster `network_ts[K,T,7]`.
+- `analysis_bundle` contains per-cluster traces with provenance disclaimer.
+- Integrate into `services/pipeline/runner.py` as optional stage (behind feature flag).
 
 ### M5: Neural Barrier Layer
 
 - Compare cluster pairs over network z-scores.
 - Detect divergence windows.
-- Link divergence windows to DOM/video timeline once Playwright traces are available.
+- Link to DOM/video timeline.
+- Only ship if M3 eval gate passed.
 
 ## Risks And Guardrails
 
-- Do not market clusters as measuring real demographic emotion. They are model-relative prototype predictions.
-- Suppress clusters below `N=20`.
-- Keep subject-level train/val/test splits leakage-free.
-- Preserve dataset provenance and consent scope in every centroid artifact.
+### Accuracy and Scientific Integrity
+
+- **Do not market clusters as measuring real demographic emotion.** They are model-relative prototype predictions trained on movie-watching fMRI, applied to UI walkthrough video.
+- **Population baseline is already OOD** for UI capture. Demographic deltas compound extrapolation (movie → UI, group average → individual segment).
+- **MSE on 20484 vertices** optimizes scale/variance, not demographic signal. Use correlation + noise-ceiling in parcel/network space only.
+
+### Data Risks
+
+- **Small N per cell:** Most age×sex cells cannot reach N≥20. Suppress underpowered clusters; never show in UI.
+- **Site/scanner confound:** HCP, Cam-CAN, CNeuroMod use different scanners. Age correlates with dataset. Mandate LODO and site covariate in M0 and eval.
+- **Ethnicity removed:** Do not re-add without a powered, consented dataset.
+
+### Domain Shift (Movie → UI)
+
+- Training data: subjects watched Hollywood movies / short clips.
+- Inference data: Playwright UI screen-capture walkthroughs.
+- **Validation:** Compare multiplexer delta magnitude on movie vs. UI sessions. If UI deltas are uncorrelated with movie-trained deltas or are larger than movie deltas (noise amplification), suppress demographic comparison in product.
+- **Product copy:** Always show `provenance.disclaimer` in viewer and API responses.
+
+### Engineering Guardrails
+
+- Suppress clusters below `N=20` or that fail eval gate.
+- Subject-held-out + LODO splits mandatory; no sample-level k-fold on windowed timeseries.
+- Preserve dataset provenance, DUA version, and consent scope in every centroid artifact.
 - Do not train or fine-tune DINOv2, V-JEPA2, LLaMA, or other TRIBE backbone components.
-- Keep `fsaverage5` vertex count fixed at `20484` until the optional volumetric phase.
-- Treat any surface-space conversion from volumetric data as lower-confidence unless validated against a known reference.
+- Keep `fsaverage5` vertex count at 20484 for optional viewer path; primary path is 400 parcels / 7 networks.
 
 ## Definition Of Done
 
-The demographic multiplexer is ready for the application when:
+The demographic multiplexer is ready for the application **only when all of the following hold**:
 
-1. One video produces `vertex_ts[K,T,20484]` for selected cluster ids.
-2. The frozen TRIBE encoder runs once per video, not once per cluster.
-3. Training optimizes only mux parameters.
-4. Cluster centroids are generated from aligned subject tensors with documented metadata provenance.
-5. The existing Yeo-7 analysis can run per cluster and generate per-demographic `analysis_bundle` entries.
-6. The viewer can show side-by-side cluster network traces and highlight divergence windows over the ad timeline.
+1. **M0 passed:** `m0_report.json` documents demographic variance above permutation null.
+2. **M3 eval gate passed:** `delta_r > 0.02`, `p_perm < 0.01`, LODO stable.
+3. One video produces `parcel_ts[K,T,400]` (or `network_ts[K,T,7]`) for selected, non-suppressed cluster ids.
+4. Frozen TRIBE encoder runs once per video, not once per cluster.
+5. Training optimizes only mux delta parameters (population readout frozen).
+6. Cluster centroids have documented metadata provenance including site and DUA.
+7. Existing Yeo-7 analysis runs per cluster with explicit uncertainty disclaimer in `analysis_bundle`.
+8. Viewer shows side-by-side cluster network traces only for eval-gate-passed clusters.
+9. Feature flag `DEMOGRAPHIC_MUX=1` defaults off until eval gate signed off in ledger.
+
+If M0 or M3 eval gate fails, Definition of Done is **not met** and the feature ships as population-only mode.

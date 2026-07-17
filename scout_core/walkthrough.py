@@ -450,7 +450,12 @@ async def _record_explore_async(
             record_video_size={"width": width, "height": height},
         )
         page = await context.new_page()
-        await page.goto(initial_url, wait_until="networkidle", timeout=120_000)
+        # Prefer load over networkidle: modern marketing SPAs often never reach
+        # networkidle (analytics/websockets), which aborts the whole capture.
+        try:
+            await page.goto(initial_url, wait_until="load", timeout=90_000)
+        except Exception:
+            await page.goto(initial_url, wait_until="domcontentloaded", timeout=60_000)
         await page.evaluate(VISIBILITY_TRACKER_JS)
         await asyncio.sleep(initial_settle_ms / 1000.0)
         budget.record_page(page.url)

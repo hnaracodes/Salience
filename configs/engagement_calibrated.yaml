@@ -1,0 +1,4 @@
+calibration_id: engagement_v1
+thresholds:
+  spearman_min: 0.35
+  legacy_vs_norms_delta_max: 2.0

@@ -639,6 +639,17 @@ def _engagement_array(bundle: dict[str, Any], preds: np.ndarray | None) -> tuple
     return np.zeros(n, dtype=np.float64), "unavailable", baseline_flag
 
 
+def _engagement_source_warning(source: str, baseline_flag: str | None) -> str | None:
+    if "fallback" in source or source == "unavailable":
+        return (
+            "Engagement trace is not norm-referenced VAN/DMN; "
+            "run analyze_session with norms and/or generate preds_baseline.npz."
+        )
+    if baseline_flag in ("no_baseline_provided", "insufficient_baseline"):
+        return f"Engagement baseline missing ({baseline_flag}); scores may use activation fallback."
+    return None
+
+
 def _blend_copy_signals(
     session_dir: Path,
     sections: list[dict[str, Any]],
@@ -819,6 +830,7 @@ def build_marketing_scores(
                 )
             ),
             "baseline_flag": baseline_flag,
+            "engagement_source_warning": _engagement_source_warning(activation_source, baseline_flag),
             "compound_weights": {
                 "engagement": float(weights.get("engagement", 0.7)),
                 "novelty": float(weights.get("novelty", 0.3)),

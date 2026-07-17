@@ -106,6 +106,18 @@ def validate_session_dir(session_dir: Path, *, tolerance: int = 1) -> dict[str, 
     n_preds = int(np.load(preds_path)["preds"].shape[0])
     report = validate_preds_manifest_alignment(n_preds, manifest, tolerance=tolerance)
     report["skipped"] = False
+
+    sub_path = session_dir / "preds_subcortical.npz"
+    if sub_path.is_file():
+        from scout_core.subcortical.io import validate_subcortical_alignment
+
+        sub_preds = np.load(sub_path)["preds"]
+        sub_report = validate_subcortical_alignment(n_preds, sub_preds)
+        report["subcortical"] = sub_report
+        if not sub_report["ok"]:
+            report["ok"] = False
+            report["message"] += f"; {sub_report['message']}"
+
     return report
 
 

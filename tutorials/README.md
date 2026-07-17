@@ -12,16 +12,16 @@ Guides for deploying and operating **Salience** in production. Open these files 
 ```
 ┌─────────────┐     JWT      ┌──────────────┐    enqueue    ┌─────────────┐
 │   Vercel    │ ───────────► │  API (FastAPI)│ ────────────► │    Redis    │
-│  Next.js    │              │  Railway/     │               │  (job queue)│
-│  + Clerk    │ ◄─────────── │  Render       │               └──────┬──────┘
+│  Next.js    │              │  Railway      │               │  (job queue)│
+│  + Clerk    │ ◄─────────── │  (API)        │               └──────┬──────┘
 └─────────────┘   scan status └───────┬───────┘                      │
                                       │                              ▼
                                       │ Postgres              ┌─────────────┐
                                       │                       │   Worker    │
                                       │                       │ Playwright  │
                                       │                       │ + pipeline  │
-                                      └──────────────────────►│ Railway/    │
-                                                              │ Render      │
+                                      └──────────────────────►│ Railway     │
+                                                              │ (worker)    │
                                                               └──────┬──────┘
                                                                      │
                               ┌────────────────────────────────────┼────────────────────┐

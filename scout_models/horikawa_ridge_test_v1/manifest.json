@@ -1,0 +1,28 @@
+{
+  "model_id": "horikawa_ridge_test_v1",
+  "model_type": "ridge",
+  "train_npz": "C:\\Users\\kragh\\AppData\\Local\\Temp\\pytest-of-kragh\\pytest-79\\test_train_exports_manifest0\\train.npz",
+  "n_features": 808,
+  "n_targets": 8,
+  "label_names": [
+    "amusement",
+    "awe",
+    "contentment",
+    "excitement",
+    "fear",
+    "anger",
+    "sadness",
+    "confusion"
+  ],
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "atlas_sha256": "8b7ca359c65e507da281673bd48cfa190682a71c4833f673ecf92feb5b623a80",
+  "data_hash": "e0802267ea3847041ae0dfa06ce1682d8b5c77fff81c0cd1c8ebc41850f3345f",
+  "corpus": "pilot_150",
+  "cv_scheme": "leave_one_video_out",
+  "cv_mean_r": -0.18882901918546874,
+  "training_argv": [
+    "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scripts\\horikawaCode\\train_horikawa_ridge_decoder.py",
+    "--config",
+    "C:\\Users\\kragh\\AppData\\Local\\Temp\\pytest-of-kragh\\pytest-79\\test_train_exports_manifest0\\cfg.yaml"
+  ]
+}

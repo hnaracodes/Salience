@@ -41,7 +41,7 @@ export function PageRouteIcon({
   return (
     <div
       className={clsx(
-        'flex shrink-0 items-center justify-center rounded border border-ink-600 bg-ink-800',
+        'flex shrink-0 items-center justify-center rounded-lg border border-line bg-surface-muted',
         s.box,
         className
       )}
@@ -75,7 +75,7 @@ export function MiniFeatureTile({
   return (
     <div
       className={clsx(
-        'flex h-14 flex-col items-center justify-center gap-1 rounded-md border bg-ink-900',
+        'flex h-14 flex-col items-center justify-center gap-1 rounded-lg border bg-surface',
         accentMap[accent],
         className
       )}

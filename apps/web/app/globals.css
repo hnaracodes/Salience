@@ -9,43 +9,178 @@
   }
 }
 
-/* Custom scrollbar — ink-themed */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #08090b; }
-::-webkit-scrollbar-thumb { background: #1c2028; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #2563ff; }
+/* Custom scrollbar — warm light theme */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f3f1ea;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d2ca;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #1d4ed8;
+}
 
 /* Selection */
-::selection { background: rgba(37,99,255,0.25); color: #f0f2f5; }
+::selection {
+  background: rgba(29, 78, 216, 0.15);
+  color: #0f0f0f;
+}
 
-/* Hero scan line — slow horizontal sweep */
+/* Hero ambient drift */
 @keyframes hero-scan {
-  0%, 100% { opacity: 0.15; transform: translateY(0); }
-  50% { opacity: 0.55; transform: translateY(120px); }
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.2;
+    transform: translateY(80px);
+  }
+}
+
+@keyframes float-gentle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .hero-scan-line {
-    animation: hero-scan 8s ease-in-out infinite;
+    animation: hero-scan 10s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+
+  .animate-float-gentle {
+    animation: float-gentle 6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-signal {
+  .animate-pulse-signal,
+  .animate-float-gentle {
     animation: none;
     opacity: 1;
   }
 
   .hero-scan-line {
     animation: none;
-    opacity: 0.35;
+    opacity: 0.12;
   }
 }
 
-/* Scroll reveals — only hide after ScrollScene mounts (avoids blank page if JS fails) */
+/* Scroll reveals — only hide after ScrollScene mounts */
 html.has-scroll-scene [data-reveal] {
   opacity: 0;
-  transform: translateY(40px);
+  transform: translateY(32px);
+}
+
+/* Smooth section flow */
+[data-section] {
+  transition: background-color 0.6s ease;
+}
+
+/* Shared marketing primitives — plain CSS to avoid @apply + custom token issues */
+@layer components {
+  .btn-primary {
+    display: inline-flex;
+    height: 3rem;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    background-color: #0f0f0f;
+    padding-left: 2rem;
+    padding-right: 2rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #ffffff;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 4px 24px -4px rgba(15, 15, 15, 0.08), 0 1px 3px rgba(15, 15, 15, 0.04);
+  }
+
+  .btn-primary:hover {
+    background-color: #1a1a1a;
+  }
+
+  .btn-primary:focus-visible {
+    outline: 2px solid #0f0f0f;
+    outline-offset: 2px;
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    height: 3rem;
+    cursor: pointer;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid #d4d2ca;
+    background-color: #ffffff;
+    padding-left: 1.75rem;
+    padding-right: 1.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #5c5c5c;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .btn-secondary:hover {
+    border-color: #2d2d2d;
+    color: #0f0f0f;
+  }
+
+  .btn-secondary:focus-visible {
+    outline: 2px solid #0f0f0f;
+    outline-offset: 2px;
+  }
+
+  .section-eyebrow {
+    margin-bottom: 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: #8a8a8a;
+  }
+
+  .section-heading {
+    font-family: var(--font-dm-sans), system-ui, sans-serif;
+    font-size: 1.875rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #0f0f0f;
+  }
+
+  @media (min-width: 768px) {
+    .section-heading {
+      font-size: 2.25rem;
+    }
+  }
+
+  .marketing-card {
+    overflow: hidden;
+    border-radius: 1.25rem;
+    border: 1px solid #e8e6df;
+    background-color: #ffffff;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 4px 24px -4px rgba(15, 15, 15, 0.08), 0 1px 3px rgba(15, 15, 15, 0.04);
+  }
+
+  .product-mock-shell {
+    overflow: hidden;
+    border-radius: 1.5rem;
+    border: 1px solid #e8e6df;
+    background-color: #ffffff;
+    box-shadow: 0 24px 48px -12px rgba(15, 15, 15, 0.22);
+  }
 }
 
 /* Legal page typography */
@@ -54,7 +189,7 @@ html.has-scroll-scene [data-reveal] {
   margin-bottom: 0.75rem;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #f0f2f5;
+  color: #0f0f0f;
 }
 
 .prose-legal h3 {
@@ -62,7 +197,7 @@ html.has-scroll-scene [data-reveal] {
   margin-bottom: 0.5rem;
   font-size: 1rem;
   font-weight: 600;
-  color: #f0f2f5;
+  color: #0f0f0f;
 }
 
 .prose-legal ul {
@@ -75,7 +210,7 @@ html.has-scroll-scene [data-reveal] {
 }
 
 .prose-legal a {
-  color: #2563ff;
+  color: #1d4ed8;
 }
 
 .prose-legal a:hover {
@@ -84,6 +219,6 @@ html.has-scroll-scene [data-reveal] {
 
 /* Firefox scrollbar */
 * {
-  scrollbar-color: #1c2028 #08090b;
+  scrollbar-color: #d4d2ca #f3f1ea;
   scrollbar-width: thin;
 }

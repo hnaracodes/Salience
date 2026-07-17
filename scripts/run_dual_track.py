@@ -43,14 +43,17 @@ from activation_store import DATA_DIR, DB_PATH, SESSIONS_DIR
 from scout_core.dual_track import (
     TEMPLATE_NAMES,
     compute_activation_track,
-    compute_emotion_track,
+    compute_emotion_track_auto,
+    compute_emotion_track_decoder,
     compute_engagement_track,
     find_grounding_triggers,
     load_network_indices,
     load_templates,
 )
+from scout_core.subcortical.io import load_subcortical_preds
 from scout_core.storage_migrations import (
     ensure_dual_track_schema,
+    insert_emotion_decoder_trace,
     insert_emotion_trace,
     insert_engagement_trace,
     upsert_dual_track_meta,
@@ -79,6 +82,7 @@ def _load_baseline(
     *,
     default_baseline_path: Path | None = None,
     session_dir: Path | None = None,
+    baseline_dir: Path | None = None,
 ) -> tuple[np.ndarray | None, str | None]:
     """Return (preds_baseline, source_session_id or path label)."""
     if baseline_path is not None:
@@ -98,6 +102,14 @@ def _load_baseline(
         local = session_dir / "preds_baseline.npz"
         if local.is_file():
             return np.load(local)["preds"].astype(np.float32), None
+
+    if baseline_dir is not None and baseline_dir.is_dir():
+        from scout_core.baseline_loader import load_baseline_from_config
+
+        preds, meta = load_baseline_from_config(baseline_dir)
+        if preds is not None:
+            label = meta.get("corpus_id") or meta.get("source")
+            return preds, str(label) if label else None
 
     if default_baseline_path is not None and default_baseline_path.is_file():
         return np.load(default_baseline_path)["preds"].astype(np.float32), None
@@ -162,13 +174,26 @@ def run(
     act_threshold_low = float(act_cfg.get("threshold_low", -1.0))
     act_min_base_trs = int(act_cfg.get("min_baseline_trs", min_base_trs))
 
+    norm_cfg = cfg.get("normalization") or {}
+    norm_method = str(norm_cfg.get("method", "robust_mad"))
+    min_scale_eps = float(norm_cfg.get("min_scale_eps", 1e-6))
+    baseline_corpus_id = base_cfg.get("corpus_id")
+
     default_baseline_raw = base_cfg.get("preds_path", "scout_data/baseline/preds_baseline.npz")
     default_baseline_path = PROJECT_ROOT / default_baseline_raw
+    baseline_dir = default_baseline_path.parent
 
     template_dir_raw = emo_cfg.get("template_dir", "configs/emotion_templates")
     template_dir = PROJECT_ROOT / template_dir_raw
     template_names = emo_cfg.get("template_names") or TEMPLATE_NAMES
     grounding_emo_z = float(emo_cfg.get("grounding_z_trigger", 2.0))
+    emotion_mode = str(emo_cfg.get("mode", "template")).strip().lower()
+    parallel_decoder = bool(emo_cfg.get("parallel_decoder", False))
+    model_id = str(emo_cfg.get("model_id", "horikawa_ridge_v1"))
+    window_trs = int(emo_cfg.get("window_trs", 1))
+    feature_spec = emo_cfg.get("feature_spec")
+    require_subcortical = bool(emo_cfg.get("require_subcortical", True))
+    prob_grounding = float(emo_cfg.get("prob_grounding_threshold", 0.5))
 
     bundle_filename = str(out_cfg.get("analysis_bundle_filename", "analysis_bundle.json"))
     merge_existing = bool(out_cfg.get("merge_existing", True))
@@ -190,6 +215,7 @@ def run(
         baseline_preds,
         default_baseline_path=default_baseline_path,
         session_dir=session_dir,
+        baseline_dir=baseline_dir,
     )
     if preds_baseline is not None:
         src = "path override" if baseline_preds else (baseline_src or str(default_baseline_path))
@@ -218,6 +244,9 @@ def run(
             threshold_high=threshold_high,
             threshold_low=threshold_low,
             min_baseline_trs=min_base_trs,
+            normalization_method=norm_method,
+            min_scale_eps=min_scale_eps,
+            baseline_corpus_id=str(baseline_corpus_id) if baseline_corpus_id else None,
         )
         flag = engagement_result.get("baseline_flag")
         if flag:
@@ -252,28 +281,85 @@ def run(
     # -----------------------------------------------------------------------
     # Track 2 — Discrete Emotion
     # -----------------------------------------------------------------------
-    print("\nTrack 2 — Discrete Emotion (Template Matching) …")
+    print(f"\nTrack 2 — Discrete Emotion ({emotion_mode}) …")
+    effective_mode = emotion_mode
+    subcortical_preds = load_subcortical_preds(session_dir)
+    if subcortical_preds is not None:
+        print(f"  subcortical preds: {subcortical_preds.shape[0]} TRs x {subcortical_preds.shape[1]} voxels")
+    elif require_subcortical and emotion_mode == "decoder":
+        print("  WARNING: preds_subcortical.npz missing — will fall back to template mode")
+
     templates, t_names, tmpl_err = load_templates(template_dir, template_names)
-    if tmpl_err:
+    if tmpl_err and emotion_mode == "template":
         print(f"  WARNING: {tmpl_err}")
         emotion_result = None
+        effective_mode = "template"
     else:
-        print(f"  Loaded {len(t_names)} templates from {template_dir.name}/")
-        emotion_result = compute_emotion_track(
-            preds, templates, t_names, grounding_z_threshold=grounding_emo_z,
+        if not tmpl_err:
+            print(f"  Loaded {len(t_names)} templates from {template_dir.name}/")
+        emotion_result, effective_mode = compute_emotion_track_auto(
+            preds,
+            mode=emotion_mode,
+            templates=templates,
+            template_names=t_names,
+            subcortical_preds=subcortical_preds,
+            model_id=model_id,
+            window_trs=window_trs,
+            feature_spec=feature_spec,
+            require_subcortical=require_subcortical,
+            grounding_z_threshold=grounding_emo_z,
+            prob_grounding_threshold=prob_grounding,
         )
-        scores_arr = np.array(emotion_result["cosine_scores"])
-        z_arr = np.array(emotion_result["z_scores"])
-        peak_means = scores_arr.mean(axis=0)
-        peak_z = z_arr.max(axis=0)
-        summary = "  Mean cosine: " + ", ".join(
-            f"{n}={v:.3f}" for n, v in zip(t_names, peak_means.tolist())
-        )
-        print(summary)
-        z_summary = "  Peak Z:      " + ", ".join(
-            f"{n}={v:.2f}" for n, v in zip(t_names, peak_z.tolist())
-        )
-        print(z_summary)
+        if emotion_result is None:
+            print("  WARNING: emotion track unavailable")
+        elif effective_mode == "decoder":
+            probs = np.array(emotion_result.get("probabilities") or [])
+            if probs.size:
+                peak = probs.max(axis=0)
+                names = emotion_result.get("class_names") or []
+                print(
+                    "  Peak prob: "
+                    + ", ".join(f"{n}={v:.3f}" for n, v in zip(names, peak.tolist()))
+                )
+        elif emotion_result.get("cosine_scores"):
+            scores_arr = np.array(emotion_result["cosine_scores"])
+            z_arr = np.array(emotion_result["z_scores"])
+            peak_means = scores_arr.mean(axis=0)
+            peak_z = z_arr.max(axis=0)
+            summary = "  Mean cosine: " + ", ".join(
+                f"{n}={v:.3f}" for n, v in zip(t_names, peak_means.tolist())
+            )
+            print(summary)
+            z_summary = "  Peak Z:      " + ", ".join(
+                f"{n}={v:.2f}" for n, v in zip(t_names, peak_z.tolist())
+            )
+            print(z_summary)
+
+    # -----------------------------------------------------------------------
+    # Parallel decoder track (shadow mode — does not replace production Track 2)
+    # -----------------------------------------------------------------------
+    emotion_decoder_result: dict | None = None
+    if parallel_decoder and effective_mode == "template":
+        print(f"\nTrack 2b — Horikawa decoder (parallel, shadow) …")
+        try:
+            emotion_decoder_result = compute_emotion_track_decoder(
+                preds,
+                subcortical_preds,
+                model_id=model_id,
+                window_trs=window_trs,
+                feature_spec=feature_spec,
+                prob_grounding_threshold=prob_grounding,
+            )
+            probs = np.array(emotion_decoder_result.get("probabilities") or [])
+            if probs.size:
+                peak = probs.max(axis=0)
+                names = emotion_decoder_result.get("class_names") or []
+                print(
+                    "  Peak prob: "
+                    + ", ".join(f"{n}={v:.3f}" for n, v in zip(names, peak.tolist()))
+                )
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            print(f"  WARNING: parallel decoder unavailable — {exc}")
 
     # -----------------------------------------------------------------------
     # Grounding triggers
@@ -282,6 +368,7 @@ def run(
         engagement_result, emotion_result,
         engagement_trigger=grounding_eng,
         emotion_z_trigger=grounding_emo_z,
+        emotion_prob_trigger=prob_grounding,
     )
     print(f"\nGrounding triggers: {len(triggers)}")
 
@@ -306,7 +393,10 @@ def run(
             baseline_session_id=baseline_src,
             baseline_trs=engagement_result.get("baseline_trs"),
             baseline_flag=engagement_result.get("baseline_flag"),
-            template_source="neurovault:collection:12383" if emotion_result else None,
+            template_source=(
+                f"decoder:{model_id}" if effective_mode == "decoder" and emotion_result else
+                ("neurovault:collection:12383" if emotion_result else None)
+            ),
             thresholds_json=thresholds_json,
         )
 
@@ -317,12 +407,18 @@ def run(
                 scores=engagement_result["scores"],
                 labels=engagement_result["labels"],
             )
-            if emotion_result:
+            if emotion_result and effective_mode == "template":
                 insert_emotion_trace(
                     conn,
                     session_id=session_id,
                     cosine_scores=emotion_result["cosine_scores"],
                     template_names=emotion_result["template_names"],
+                )
+            elif emotion_result and effective_mode == "decoder":
+                insert_emotion_decoder_trace(
+                    conn,
+                    session_id=session_id,
+                    emotion_result=emotion_result,
                 )
         conn.commit()
         print("  Done.")
@@ -337,8 +433,11 @@ def run(
         "engagement_track": engagement_result,
         "activation_track": activation_result,
         "emotion_track": emotion_result,
+        "emotion_decoder_track": emotion_decoder_result,
         "grounding_triggers": triggers,
-        "dual_track_schema_version": 3,
+        "dual_track_schema_version": 4,
+        "emotion_mode": effective_mode if emotion_result else emotion_mode,
+        "parallel_decoder_enabled": parallel_decoder,
     }
 
     if merge_existing:

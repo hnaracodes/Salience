@@ -83,6 +83,7 @@ class GroundingEvent(BaseModel):
     grounding: GroundingResult | None = None
     grounding_skip_reason: str | None = None
     heatmap_provenance: HeatmapProvenance | None = None
+    neural_context: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +158,7 @@ class AnalysisBundle(BaseModel):
         2 — adds ``events`` list with neural spike grounding (feature isolation).
         3 — website session: section_report, session_capture, marketing_narrative.
         4 — adds ``marketing_scores`` (0–100 display curve + session rubric).
+        5 — adds supervised ``emotion_track`` decoder fields (mode, probabilities).
     """
 
     schema_version: int = 1

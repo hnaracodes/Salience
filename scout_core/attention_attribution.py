@@ -33,10 +33,11 @@ def _as_float_list(values: list[Any]) -> list[float | None]:
     return out
 
 
-def _normal_positive(value: float | None) -> float:
+def _normal_positive(value: float | None, *, scale: float = 3.0) -> float:
+    """Map engagement/activation Z to [0,1] for attribution blending (|Z|/scale)."""
     if value is None or not np.isfinite(value):
         return 0.0
-    return float(np.clip((value + 0.5) / 3.0, 0.0, 1.0))
+    return float(np.clip(abs(value) / scale, 0.0, 1.0))
 
 
 def brain_weight_at_t(
@@ -46,11 +47,19 @@ def brain_weight_at_t(
     engagement_blend: float = 0.72,
 ) -> tuple[float, float, float]:
     """Return blended brain weight and per-track normalized weights at TR ``t``."""
+    from scout_core.neural_moments import neural_moment_strength
+
     engagement = _as_float_list((bundle.get("engagement_track") or {}).get("scores") or [])
     activation = _as_float_list((bundle.get("activation_track") or {}).get("scores") or [])
     eng = _normal_positive(engagement[t] if t < len(engagement) else None)
     act = _normal_positive(activation[t] if t < len(activation) else None)
+    moments = bundle.get("neural_moments_by_t") or {}
+    moment = moments.get(str(t)) or moments.get(t)
+    moment_w = neural_moment_strength(moment) / 3.0 if moment else 0.0
+    moment_w = float(np.clip(moment_w, 0.0, 1.0))
     blended = engagement_blend * eng + (1.0 - engagement_blend) * act
+    if moment_w > 0:
+        blended = float(np.clip(0.65 * blended + 0.35 * moment_w, 0.0, 1.0))
     return blended, eng, act
 
 
@@ -181,16 +190,22 @@ def aggregate_per_tr_element_scores(
 
     rolled: list[dict[str, Any]] = []
     for entry in accum.values():
+        n_tr = max(int(entry["n_tr"]), 1)
+        mean_contrib = float(entry["contribution"]) / n_tr
+        mean_eng = float(entry["engagement_attributed"]) / n_tr
+        mean_act = float(entry["activation_attributed"]) / n_tr
         rolled.append({
             "dom_id": entry["dom_id"],
             "tag": entry["tag"],
             "role": entry.get("role", ""),
             "text": entry.get("text", ""),
             "bbox": entry["bbox"],
-            "mean_attention_density": round(float(entry["contribution"]), 6),
-            "n_samples": int(entry["n_tr"]),
-            "engagement_attributed": round(float(entry["engagement_attributed"]), 4),
-            "activation_attributed": round(float(entry["activation_attributed"]), 4),
+            "mean_attention_density": round(mean_contrib, 6),
+            "summed_attention_density": round(float(entry["contribution"]), 6),
+            "n_samples": n_tr,
+            "engagement_attributed": round(mean_eng, 4),
+            "activation_attributed": round(mean_act, 4),
+            "attribution_confidence": round(min(1.0, n_tr / 10.0), 3),
             "heatmap_source": "per_tr_sum",
         })
     rolled.sort(key=lambda x: x["mean_attention_density"], reverse=True)

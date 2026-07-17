@@ -27,6 +27,21 @@ AROUSAL_CHANNELS = frozenset({"fear", "anger", "surprise"})
 POSITIVE_CHANNELS = frozenset({"contentment", "amusement"})
 
 
+def _emotion_series(emotion: dict[str, Any]) -> tuple[list[str], list[list[float]], str]:
+    """Return (names, per-TR values, mode) for template Z or decoder probabilities."""
+    if emotion.get("mode") == "decoder":
+        return (
+            list(emotion.get("class_names") or []),
+            list(emotion.get("probabilities") or []),
+            "decoder",
+        )
+    return (
+        list(emotion.get("template_names") or []),
+        list(emotion.get("z_scores") or []),
+        "template",
+    )
+
+
 @dataclass
 class SectionAssignment:
     t_idx: int
@@ -282,8 +297,7 @@ def aggregate_section_metrics(
     act_raw = activation.get("raw_scores") or []
     act_z = activation.get("scores") or []
     act_labels = activation.get("labels") or []
-    template_names = emotion.get("template_names") or []
-    z_scores = emotion.get("z_scores") or []
+    template_names, z_scores, emo_mode = _emotion_series(emotion)
     cosine_scores = emotion.get("cosine_scores") or []
 
     by_section: dict[str, list[int]] = {}
@@ -380,17 +394,41 @@ def aggregate_section_metrics(
                 break
 
         peak_emotion: dict[str, Any] | None = None
-        if peak_channel and z_scores and cosine_scores and peak_t < len(z_scores):
-            peak_emotion = {
-                "channel": peak_channel,
-                "z_score": round(peak_z, 4),
-                "t_idx": peak_t,
-                **dominant_emotion_at_timestep(
-                    cosine_scores[peak_t],
-                    z_scores[peak_t],
-                    template_names,
-                ),
-            }
+        if peak_channel and z_scores:
+            if emo_mode == "decoder":
+                peak_emotion = {
+                    "channel": peak_channel,
+                    "peak_prob": round(peak_z, 4),
+                    "t_idx": peak_t,
+                    **dominant_emotion_at_timestep(
+                        None,
+                        None,
+                        template_names,
+                        prob_row=z_scores[peak_t] if peak_t < len(z_scores) else None,
+                        class_names=template_names,
+                        mode="decoder",
+                    ),
+                }
+            elif cosine_scores and peak_t < len(cosine_scores):
+                peak_emotion = {
+                    "channel": peak_channel,
+                    "z_score": round(peak_z, 4),
+                    "t_idx": peak_t,
+                    **dominant_emotion_at_timestep(
+                        cosine_scores[peak_t],
+                        z_scores[peak_t],
+                        template_names,
+                    ),
+                }
+
+        emotion_block: dict[str, Any] = {
+            "mean_z": mean_z,
+            "peak": peak_emotion,
+            "mode": emo_mode,
+        }
+        if emo_mode == "decoder":
+            emotion_block["mean_prob"] = mean_z
+            emotion_block["peak_prob"] = peak_emotion.get("peak_prob") if peak_emotion else None
 
         m = meta.get(section_id)
         reports.append({
@@ -418,10 +456,7 @@ def aggregate_section_metrics(
                 "comparison_mode": activation.get("comparison_mode"),
                 "n_scored": len(valid_act_raw),
             },
-            "emotion": {
-                "mean_z": mean_z,
-                "peak": peak_emotion,
-            },
+            "emotion": emotion_block,
             "flags": flags,
             "top_elements": [],
             "sample_t_indices": [],

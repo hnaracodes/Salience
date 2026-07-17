@@ -88,9 +88,9 @@ export function ScrollProductJourney() {
         if (progressRef.current) progressRef.current.style.width = '100%'
         dotRefs.current.forEach((dot, i) => {
           if (!dot) return
-          dot.classList.toggle('bg-signal', i === 3)
+          dot.classList.toggle('bg-ink-950', i === 3)
           dot.classList.toggle('scale-125', i === 3)
-          dot.classList.toggle('bg-ink-600', i !== 3)
+          dot.classList.toggle('bg-line-strong', i !== 3)
         })
         return
       }
@@ -115,13 +115,13 @@ export function ScrollProductJourney() {
           trigger: section,
           start: 'top top',
           end: 'bottom bottom',
-          scrub: 0.6,
+          scrub: 1.8,
           pin: pin,
           anticipatePin: 1,
           snap: {
             snapTo: 0.25,
-            duration: { min: 0.15, max: 0.35 },
-            ease: 'power1.inOut',
+            duration: { min: 0.35, max: 0.7 },
+            ease: 'power4.inOut',
           },
           onUpdate(self) {
             if (progressRef.current) {
@@ -130,16 +130,17 @@ export function ScrollProductJourney() {
             const active = Math.min(3, Math.floor(self.progress * 4))
             dotRefs.current.forEach((dot, i) => {
               if (!dot) return
-              dot.classList.toggle('bg-signal', i === active)
+              dot.classList.toggle('bg-ink-950', i === active)
               dot.classList.toggle('scale-125', i === active)
-              dot.classList.toggle('bg-ink-600', i !== active)
+              dot.classList.toggle('bg-line-strong', i !== active)
             })
             textRefs.current.forEach((t, i) => {
               if (!t) return
               gsap.to(t, {
                 opacity: i === active ? 1 : 0,
-                y: i === active ? 0 : i < active ? -16 : 16,
-                duration: 0.15,
+                y: i === active ? 0 : i < active ? -10 : 10,
+                duration: 0.65,
+                ease: 'power4.out',
                 overwrite: true,
               })
             })
@@ -197,13 +198,14 @@ export function ScrollProductJourney() {
     <section
       ref={sectionRef}
       id="product-journey"
-      className="relative border-t border-ink-700 bg-ink-900"
+      data-section
+      className="relative border-t border-line bg-surface-muted"
       style={reducedMotion ? undefined : { height: '400vh' }}
       aria-label="Product pipeline — scroll to explore"
     >
       <div ref={pinRef} className={`relative flex flex-col justify-center px-6 ${reducedMotion ? 'py-28' : 'h-screen'}`}>
         <div className="mx-auto w-full max-w-6xl">
-          <p className="mb-3 text-xs font-mono uppercase tracking-widest text-signal">
+          <p className="section-eyebrow mb-3 text-signal">
             Scroll the pipeline
           </p>
 
@@ -219,14 +221,11 @@ export function ScrollProductJourney() {
                   className="absolute inset-0"
                   style={{ opacity: i === 0 ? 1 : 0 }}
                 >
-                  <span className="font-mono text-xs text-ink-600">{phase.label}</span>
-                  <h2
-                    className="mt-2 text-2xl font-display font-semibold tracking-tight text-text-primary md:text-3xl"
-                    style={{ letterSpacing: '-0.02em' }}
-                  >
+                  <span className="text-xs font-medium text-text-tertiary">{phase.label}</span>
+                  <h2 className="section-heading mt-2 text-2xl md:text-3xl">
                     {phase.title}
                   </h2>
-                  <p className="mt-4 max-w-md text-sm leading-relaxed text-text-secondary">
+                  <p className="mt-4 max-w-md text-base leading-relaxed text-text-secondary">
                     {phase.body}
                   </p>
                 </div>
@@ -235,27 +234,27 @@ export function ScrollProductJourney() {
 
             {/* Visual stack — crossfade panels */}
             <div className="relative aspect-[4/3] w-full max-w-xl justify-self-center lg:justify-self-end">
-              <div data-journey-panel className="absolute inset-0">
-                <CrawlPhaseVisual className="h-full shadow-xl shadow-black/30" />
+              <div data-journey-panel className="product-mock-shell absolute inset-0">
+                <CrawlPhaseVisual className="h-full" />
               </div>
-              <div data-journey-panel className="absolute inset-0 opacity-0">
-                <NeuralPhaseVisual className="h-full shadow-xl shadow-black/30" />
+              <div data-journey-panel className="product-mock-shell absolute inset-0 opacity-0">
+                <NeuralPhaseVisual className="h-full" />
               </div>
-              <div data-journey-panel className="absolute inset-0 opacity-0">
-                <HeatmapPhaseVisual className="h-full shadow-xl shadow-black/30" />
+              <div data-journey-panel className="product-mock-shell absolute inset-0 opacity-0">
+                <HeatmapPhaseVisual className="h-full" />
               </div>
-              <div data-journey-panel className="absolute inset-0 opacity-0">
-                <InspectPhaseVisual className="h-full shadow-xl shadow-black/30" />
+              <div data-journey-panel className="product-mock-shell absolute inset-0 opacity-0">
+                <InspectPhaseVisual className="h-full" />
               </div>
             </div>
           </div>
 
           {/* Scroll progress */}
           <div className="mt-12 flex items-center gap-4">
-            <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-700">
+            <div className="h-1 flex-1 overflow-hidden rounded-pill bg-line">
               <div
                 ref={progressRef}
-                className="h-full w-0 rounded-full bg-gradient-to-r from-signal to-neural transition-none"
+                className="h-full w-0 rounded-pill bg-ink-950 transition-none"
               />
             </div>
             <div className="flex gap-2">
@@ -265,13 +264,13 @@ export function ScrollProductJourney() {
                   ref={(el) => {
                     dotRefs.current[i] = el
                   }}
-                  className={`h-2 w-2 rounded-full transition-transform ${i === 0 ? 'bg-signal scale-125' : 'bg-ink-600'}`}
+                  className={`h-2 w-2 rounded-full transition-all duration-500 ease-premium ${i === 0 ? 'bg-ink-950 scale-125' : 'bg-line-strong'}`}
                   aria-hidden="true"
                 />
               ))}
             </div>
-            <span className="hidden font-mono text-[10px] text-text-secondary sm:block">
-              scrub ↓
+            <span className="hidden text-[10px] text-text-tertiary sm:block">
+              scroll to explore
             </span>
           </div>
         </div>

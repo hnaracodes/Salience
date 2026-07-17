@@ -3,10 +3,18 @@ import { Logo } from '@/components/Logo'
 import { SITE } from '@/lib/site'
 
 const productLinks = [
+  { href: '/#use-cases', label: 'Use cases' },
   { href: '/#product-journey', label: 'Pipeline' },
   { href: '/#how-it-works', label: 'How it works' },
   { href: '/#viewer', label: 'Viewer' },
   { href: '/scans/new', label: 'New scan' },
+]
+
+const companyLinks = [
+  { href: '/about', label: 'About' },
+  { href: '/security', label: 'Security' },
+  { href: '/data-processing', label: 'Data Processing' },
+  { href: '/anti-theft', label: 'Anti-Theft' },
 ]
 
 const legalLinks = [
@@ -25,24 +33,24 @@ export function SiteFooter() {
   const year = new Date().getFullYear()
 
   return (
-    <footer className="border-t border-ink-700 bg-ink-950 px-6 py-14">
+    <footer className="border-t border-line bg-surface px-6 py-14">
       <div className="mx-auto max-w-6xl">
-        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
-          {/* Brand */}
+        <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-1">
             <Link href="/" className="inline-flex items-center gap-2.5">
               <Logo variant="nav" size={24} />
-              <span className="text-sm font-medium text-text-primary">{SITE.name}</span>
+              <span className="text-sm font-semibold text-text-primary">{SITE.name}</span>
             </Link>
-            <p className="mt-3 max-w-xs text-sm text-text-secondary">{SITE.tagline}</p>
-            <p className="mt-4 font-mono text-[10px] text-ink-600">
+            <p className="mt-3 max-w-xs text-sm leading-relaxed text-text-secondary">
+              {SITE.description}
+            </p>
+            <p className="mt-4 text-[10px] text-text-tertiary">
               © {year} {SITE.legalEntity}
             </p>
           </div>
 
-          {/* Product */}
           <div>
-            <h3 className="mb-4 font-mono text-xs uppercase tracking-widest text-text-secondary">
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-text-tertiary">
               Product
             </h3>
             <ul className="space-y-2">
@@ -50,7 +58,7 @@ export function SiteFooter() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-text-secondary transition-colors hover:text-text-primary"
+                    className="cursor-pointer text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
                   >
                     {link.label}
                   </Link>
@@ -59,9 +67,26 @@ export function SiteFooter() {
             </ul>
           </div>
 
-          {/* Legal */}
           <div>
-            <h3 className="mb-4 font-mono text-xs uppercase tracking-widest text-text-secondary">
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-text-tertiary">
+              Company
+            </h3>
+            <ul className="space-y-2">
+              {companyLinks.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="cursor-pointer text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-text-tertiary">
               Legal
             </h3>
             <ul className="space-y-2">
@@ -69,7 +94,7 @@ export function SiteFooter() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="text-sm text-text-secondary transition-colors hover:text-text-primary"
+                    className="cursor-pointer text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
                   >
                     {link.label}
                   </Link>
@@ -78,9 +103,8 @@ export function SiteFooter() {
             </ul>
           </div>
 
-          {/* Support */}
           <div>
-            <h3 className="mb-4 font-mono text-xs uppercase tracking-widest text-text-secondary">
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-widest text-text-tertiary">
               Support
             </h3>
             <ul className="space-y-2">
@@ -89,14 +113,14 @@ export function SiteFooter() {
                   {link.external ? (
                     <a
                       href={link.href}
-                      className="text-sm text-text-secondary transition-colors hover:text-text-primary"
+                      className="cursor-pointer text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
                     >
                       {link.label}
                     </a>
                   ) : (
                     <Link
                       href={link.href}
-                      className="text-sm text-text-secondary transition-colors hover:text-text-primary"
+                      className="cursor-pointer text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
                     >
                       {link.label}
                     </Link>
@@ -104,11 +128,11 @@ export function SiteFooter() {
                 </li>
               ))}
             </ul>
-            <p className="mt-4 font-mono text-[10px] text-ink-600">{SITE.address}</p>
+            <p className="mt-4 text-[10px] text-text-tertiary">{SITE.address}</p>
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-ink-700 pt-8 sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-line pt-8 sm:flex-row">
           <p className="text-center text-xs text-text-secondary sm:text-left">
             By using {SITE.name}, you agree to our{' '}
             <Link href="/terms" className="text-signal hover:underline">
@@ -120,15 +144,18 @@ export function SiteFooter() {
             </Link>
             .
           </p>
-          <div className="flex flex-wrap justify-center gap-4 font-mono text-[10px] text-ink-600">
-            <Link href="/privacy" className="hover:text-text-secondary">
+          <div className="flex flex-wrap justify-center gap-4 text-[10px] text-text-tertiary">
+            <Link href="/about" className="transition-colors hover:text-text-secondary">
+              About
+            </Link>
+            <Link href="/security" className="transition-colors hover:text-text-secondary">
+              Security
+            </Link>
+            <Link href="/privacy" className="transition-colors hover:text-text-secondary">
               Privacy
             </Link>
-            <Link href="/terms" className="hover:text-text-secondary">
+            <Link href="/terms" className="transition-colors hover:text-text-secondary">
               Terms
-            </Link>
-            <Link href="/cookies" className="hover:text-text-secondary">
-              Cookies
             </Link>
           </div>
         </div>

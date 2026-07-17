@@ -1,0 +1,25 @@
+feature_spec: fused_schaefer400_subcortical_v1
+cortical_reducers:
+  - mean
+  - std
+include_subcortical: true
+window_trs: 1
+cv:
+  scheme: leave_one_video_out
+  n_permutations: 100
+  n_bootstrap: 500
+ridge:
+  alphas:
+    - 0.01
+    - 0.1
+    - 1.0
+    - 10.0
+    - 100.0
+model_id: horikawa_ridge_dims_v1
+target_type: dimensions_14
+categories: []
+data:
+  train_npz: scout_data/horikawaCode/tribev2_fused/train_dims.npz
+  reports_dir: scout_data/horikawaCode/reports
+  cv_report_name: train_cv_meta_dims_v1.json
+  eval_report_name: eval_ablation_dims_v1.json

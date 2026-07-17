@@ -1,0 +1,91 @@
+{
+  "schema_version": 2,
+  "passed": false,
+  "is_synthetic": false,
+  "multi_site_validated": true,
+  "n_sites": 2,
+  "data_source": "cloud_s3:hcp_camcan:HCP_1200",
+  "n_subjects": 10,
+  "n_permutations": 500,
+  "networks": [
+    {
+      "network_name": "Cont",
+      "network_id": 6,
+      "r2_demographic_given_site": 0.00011719428997158943,
+      "r2_site_only": 0.9994892813881462,
+      "r2_demographic_only": 0.796819378622495,
+      "permutation_p": 0.4231536926147705,
+      "permutation_null_95": 0.00028594483158272954,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "Default",
+      "network_id": 7,
+      "r2_demographic_given_site": 0.00003680074425993496,
+      "r2_site_only": 0.9994466700228198,
+      "r2_demographic_only": 0.8044054332282266,
+      "permutation_p": 0.9421157684630739,
+      "permutation_null_95": 0.00036226881524092924,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "DorsAttn",
+      "network_id": 3,
+      "r2_demographic_given_site": 0.00030880113235620676,
+      "r2_site_only": 0.9993932484771583,
+      "r2_demographic_only": 0.8114695952329867,
+      "permutation_p": 0.2055888223552894,
+      "permutation_null_95": 0.00037360977835898534,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "Limbic",
+      "network_id": 5,
+      "r2_demographic_given_site": 0.00046950709123338985,
+      "r2_site_only": 0.9992154989845181,
+      "r2_demographic_only": 0.8138707666769148,
+      "permutation_p": 0.18962075848303392,
+      "permutation_null_95": 0.0004929966357029025,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "SalVentAttn",
+      "network_id": 4,
+      "r2_demographic_given_site": 0.0001250924266169573,
+      "r2_site_only": 0.9994479212731913,
+      "r2_demographic_only": 0.8076926477320161,
+      "permutation_p": 0.4311377245508982,
+      "permutation_null_95": 0.00037493974658286966,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "SomMot",
+      "network_id": 2,
+      "r2_demographic_given_site": 0.00006750149537904093,
+      "r2_site_only": 0.9997451680627345,
+      "r2_demographic_only": 0.8061798659518404,
+      "permutation_p": 0.4630738522954092,
+      "permutation_null_95": 0.0001447650688662927,
+      "n_subjects": 10
+    },
+    {
+      "network_name": "Vis",
+      "network_id": 1,
+      "r2_demographic_given_site": 0.000024182284589002734,
+      "r2_site_only": 0.9998126187318707,
+      "r2_demographic_only": 0.8034921802064161,
+      "permutation_p": 0.7345309381237525,
+      "permutation_null_95": 0.00012673982460509325,
+      "n_subjects": 10
+    }
+  ],
+  "go_criteria": {
+    "variance_in_two_priority_networks": false,
+    "permutation_significant_in_two_networks": false,
+    "demographic_beats_site_in_one_network": false
+  },
+  "notes": [
+    "OLS incremental R² on subject-level network aggregates (not mixed model).",
+    "camcan_openneuro_rest — ds000221 mirror has rest fMRI only (HCP uses 7T movie)"
+  ]
+}

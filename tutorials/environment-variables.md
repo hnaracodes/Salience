@@ -1,6 +1,6 @@
 # Environment variables reference
 
-All variables used across Salience production services. Set these in each host's secret manager (Vercel, Railway, Render, Modal) — never commit real values.
+All variables used across Salience production services. Set these in each host's secret manager (Vercel, Railway, Modal) — never commit real values.
 
 ---
 
@@ -18,7 +18,7 @@ Without `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, the app runs in **dev bypass mode**
 
 ---
 
-## API — Railway / Render (`Dockerfile.api`)
+## API — Railway (`Dockerfile.api`)
 
 | Variable | Required | Example | Notes |
 |----------|----------|---------|-------|
@@ -37,7 +37,7 @@ Health check path: `GET /health` → `{"status":"ok"}`
 
 ---
 
-## Worker — Railway / Render (`Dockerfile.worker`)
+## Worker — Railway (`Dockerfile.worker`)
 
 | Variable | Required | Example | Notes |
 |----------|----------|---------|-------|

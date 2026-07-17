@@ -1,0 +1,57 @@
+schema_version: 1
+description: >-
+  Preliminary TRIBE / norm corpus. Local fixtures are the executable baseline.
+  Public archetypes are listed for optional capture when headless access is
+  permitted; they cannot supply Clarity ground truth for attention T2.
+
+base_profile: configs/explore_public_smoke.yaml
+repeats: 3
+norm_id: synthetic_bootstrap_v1
+
+promotion_gates:
+  min_dom_snapshots: 6
+  require_capture_mode: explore
+  require_robots_allowed: true
+  reject_bot_challenge: true
+
+# Phase A: local fixtures (always runnable; start http.server on these ports).
+local_sites:
+  - id: threadmind
+    url: http://127.0.0.1:8780/index.html
+    archetype: saas_product_fixture
+    root: chatbot_product_site
+    port: 8780
+    script: configs/walkthrough_scripts/explore_threadmind_smoke.yaml
+  - id: aurora
+    url: http://127.0.0.1:8765/index.html
+    archetype: marketing_fixture
+    root: tests/fixtures/walkthrough_site
+    port: 8765
+    script: configs/walkthrough_scripts/explore_aurora_smoke.yaml
+
+# Phase B: public archetypes (optional; many block bot/headless clients).
+sites:
+  - id: wikipedia
+    url: https://www.wikipedia.org/
+    archetype: content_search
+  - id: govuk
+    url: https://www.gov.uk/
+    archetype: public_service
+  - id: mozilla_firefox
+    url: https://www.mozilla.org/en-US/firefox/
+    archetype: consumer_product
+  - id: github_features
+    url: https://github.com/features
+    archetype: developer_platform
+  - id: shopify
+    url: https://www.shopify.com/
+    archetype: commerce_platform
+  - id: unicef
+    url: https://www.unicef.org/
+    archetype: nonprofit_donation
+  - id: stripe
+    url: https://stripe.com/
+    archetype: b2b_payments_saas
+  - id: linear
+    url: https://linear.app/
+    archetype: productivity_saas
