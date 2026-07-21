@@ -421,6 +421,7 @@ def main() -> None:
             "triggers": ev.get("triggers"),
             "grounding": g,
             "heatmap_provenance": ev.get("heatmap_provenance"),
+            "neural_context": ev.get("neural_context"),
             "in_manifest_bounds": t_spike is not None and int(t_spike) <= manifest_max_t + 1,
         })
         if t_spike is not None:
@@ -485,6 +486,7 @@ def main() -> None:
         "activation_track": bundle.get("activation_track"),
         "marketing_narrative": marketing_narrative,
         "element_insight_index": element_insight_index,
+        "neural_moments_by_t": bundle.get("neural_moments_by_t") or {},
         "interaction_events": manifest.get("interaction_events") or [],
     }
     copy_signals_path = session_dir / "copy_signals.json"

@@ -1,0 +1,24 @@
+# Read-only capture profile for preliminary runs on public websites.
+# The zero-click budget prevents login, checkout, donation, and form actions.
+
+viewport:
+  width: 1280
+  height: 720
+interval_sec: 1.0
+scroll_mode: explore
+
+explore:
+  max_tr: 12
+  max_clicks: 0
+  max_pages: 1
+  per_page_max_tr: 12
+  max_wall_sec: 90
+  initial_settle_ms: 2000
+  scroll_px_per_tr: 720
+  scroll_settle_ms: 400
+  scroll_to_bottom_before_clicks: true
+  allow_nav_clicks_during_scroll: false
+  allow_role_locators: true
+  robots_txt_respect: true
+  same_origin_only: true
+  allow_subdomains: false

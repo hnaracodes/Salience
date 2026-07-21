@@ -1,0 +1,33 @@
+categories:
+- amusement
+- awe
+- contentment
+- excitement
+- fear
+- anger
+- sadness
+- confusion
+cortical_reducers:
+- mean
+- std
+cv:
+  n_bootstrap: 50
+  n_permutations: 25
+  scheme: leave_one_video_out
+data:
+  cv_report_name: train_cv_meta_v1.json
+  eval_report_name: eval_ablation_v1.json
+  reports_dir: scout_data/horikawaCode/reports
+  train_npz: scout_data/horikawaCode/tribev2_fused/train.npz
+feature_spec: fused_schaefer400_subcortical_v1
+include_subcortical: true
+model_id: horikawa_ridge_v1
+ridge:
+  alphas:
+  - 0.01
+  - 0.1
+  - 1.0
+  - 10.0
+  - 100.0
+target_type: product_8
+window_trs: 1

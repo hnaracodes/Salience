@@ -5,7 +5,7 @@ import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
 import { HeroLiveScanVisual } from '@/components/marketing/HeroLiveScanVisual'
 
-/** Hero visual — live scan animation, not the full viewer. */
+/** Hero visual — live scan animation with floating stat cards. */
 export function HeroProductPanel() {
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -19,32 +19,55 @@ export function HeroProductPanel() {
       }
       gsap.fromTo(
         panelRef.current,
-        { opacity: 0, y: 28 },
-        { opacity: 1, y: 0, duration: 1, ease: 'power2.out', delay: 0.2 }
+        { opacity: 0, y: 40, scale: 0.97 },
+        { opacity: 1, y: 0, scale: 1, duration: 1.2, ease: 'power3.out', delay: 0.35 }
       )
+
+      const floatCards = panelRef.current.querySelectorAll('[data-float-card]')
+      floatCards.forEach((card, i) => {
+        gsap.to(card, {
+          y: i % 2 === 0 ? -6 : 6,
+          duration: 4 + i * 0.5,
+          ease: 'sine.inOut',
+          yoyo: true,
+          repeat: -1,
+          delay: i * 0.3,
+        })
+      })
     },
     { scope: panelRef }
   )
 
   return (
     <div ref={panelRef} className="relative w-full max-w-2xl">
-      <div className="absolute -left-3 top-6 z-20 hidden rounded-lg border border-signal/40 bg-ink-900/95 px-3 py-2 shadow-xl sm:block">
-        <p className="text-[9px] font-mono uppercase tracking-widest text-text-secondary">Pages</p>
+      <div
+        data-float-card
+        className="absolute -left-2 top-8 z-20 hidden rounded-card border border-line bg-surface px-4 py-3 shadow-card sm:block"
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">Pages</p>
         <p className="text-2xl font-semibold text-signal">3/8</p>
       </div>
-      <div className="absolute -right-2 top-1/2 z-20 hidden rounded-lg border border-neural/40 bg-ink-900/95 px-3 py-2 shadow-xl sm:block">
-        <p className="text-[9px] font-mono uppercase tracking-widest text-text-secondary">Current TR</p>
+      <div
+        data-float-card
+        className="absolute -right-1 top-1/2 z-20 hidden rounded-card border border-line bg-surface px-4 py-3 shadow-card-lg sm:block"
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">Peak TR</p>
         <p className="text-2xl font-semibold text-neural">14</p>
       </div>
-      <div className="absolute -bottom-2 left-1/4 z-20 hidden rounded-lg border border-copy/40 bg-ink-900/95 px-3 py-2 shadow-xl sm:block">
-        <p className="text-[9px] font-mono uppercase tracking-widest text-text-secondary">Mode</p>
+      <div
+        data-float-card
+        className="absolute -bottom-1 left-1/4 z-20 hidden rounded-card border border-line bg-surface px-4 py-3 shadow-card sm:block"
+      >
+        <p className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">Status</p>
         <p className="text-lg font-semibold text-copy">crawling</p>
       </div>
 
-      <HeroLiveScanVisual />
+      <div className="product-mock-shell animate-float-gentle">
+        <HeroLiveScanVisual />
+      </div>
 
-      <p className="mt-4 text-center text-xs font-mono text-text-secondary">
-        Live scan in progress — scroll down to see the full pipeline
+      <p className="mt-5 text-center text-xs text-text-tertiary">
+        Live scan in progress — scroll to walk through the full pipeline
       </p>
     </div>
   )

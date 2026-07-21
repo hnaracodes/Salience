@@ -17,8 +17,8 @@ Maps UI copy and bundle fields to evidence tier. Update when validation memos ch
 
 | Field | Tier | Safe language |
 |-------|------|---------------|
-| `engagement_track.scores` | T1–T2 | Norm-referenced or baseline-relative cortical engagement proxy |
-| `activation_track.scores` | T1–T2 | Mean vertex activation Z vs gray baseline or session |
+| `engagement_track.scores` | T1 | Baseline-relative cortical engagement proxy |
+| `activation_track.scores` | T1 | Mean vertex activation Z vs gray baseline or session |
 
 **Not claimable:** Equivalent to fMRI measurement.
 
@@ -34,8 +34,12 @@ Maps UI copy and bundle fields to evidence tier. Update when validation memos ch
 
 | Field | Tier | Safe language |
 |-------|------|---------------|
-| `marketing_scores.comparison_score` | T2 | Cross-session comparison on `naturalistic_v1` norm corpus |
-| `marketing_scores.overall_score` | T1–T2 | Display score; norm-referenced when `comparison_mode: norm_referenced` |
+| `marketing_scores.comparison_score` | T1 | Engineering preview; session-relative while `naturalistic_v1` is below the validation floor |
+| `marketing_scores.overall_score` | T1 | Session-relative display score unless bundle provenance explicitly reports an approved norm corpus |
+
+**T2 gate:** `naturalistic_v1` contains at least 15 non-held-out sessions, scored bundles report
+`comparison_mode: norm_referenced` without fallback, and the cross-session validation memo documents
+held-out rank stability. Until then, do not describe these scores as cross-session comparable.
 
 ### Autonomous scouting
 
@@ -50,9 +54,12 @@ Maps UI copy and bundle fields to evidence tier. Update when validation memos ch
 
 | Field | Tier | Safe language |
 |-------|------|---------------|
-| `conversion_prediction.probability` | T3 | Calibrated conversion intent score on held-out labels |
+| `conversion_prediction.probability` | Unearned T3 | Reserved for a calibrated conversion intent model after held-out validation |
 
 **Not claimable:** Guaranteed revenue lift.
+
+**T3 gate:** Real conversion outcomes, property-grouped train/calibration/holdout splits, a committed
+model bundle, and a validation memo reporting discrimination and calibration metrics.
 
 ### Copy engagement (multimodal fusion)
 
@@ -72,5 +79,6 @@ Maps UI copy and bundle fields to evidence tier. Update when validation memos ch
 |----------|------|
 | Norm corpus | `scout_norms/naturalistic_v1/` |
 | Attention validation | `scout_data/validation/attention_v1/` |
+| Engagement validation | `scout_data/validation/engagement_v1/` |
 | Conversion labels | `scout_data/validation/conversion_labels.json` |
 | Calibration config | `configs/attribution_calibrated.yaml` |

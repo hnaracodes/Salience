@@ -1,5 +1,19 @@
 {
-  "/page": "app/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/scans/[id]/page": "app/scans/[id]/page.js"
+  "/page": "app/page.js",
+  "/scans/[id]/page": "app/scans/[id]/page.js",
+  "/scans/[id]/viewer/page": "app/scans/[id]/viewer/page.js",
+  "/sign-in/[[...sign-in]]/page": "app/sign-in/[[...sign-in]]/page.js",
+  "/sign-up/[[...sign-up]]/page": "app/sign-up/[[...sign-up]]/page.js",
+  "/acceptable-use/page": "app/acceptable-use/page.js",
+  "/about/page": "app/about/page.js",
+  "/anti-theft/page": "app/anti-theft/page.js",
+  "/contact/page": "app/contact/page.js",
+  "/scans/new/page": "app/scans/new/page.js",
+  "/privacy/page": "app/privacy/page.js",
+  "/security/page": "app/security/page.js",
+  "/data-processing/page": "app/data-processing/page.js",
+  "/cookies/page": "app/cookies/page.js",
+  "/terms/page": "app/terms/page.js"
 }

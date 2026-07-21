@@ -1,0 +1,69 @@
+{
+  "model_id": "horikawa_ridge_v1",
+  "data_source": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\tribev2_fused\\train.npz",
+  "fused_lovo_mean_r": 0.24197771308531232,
+  "group_kfold_mean_r": 0.2302955059280629,
+  "cortical_only_lovo_mean_r": 0.23656590448310422,
+  "subcortical_lift": 0.005411808602208107,
+  "permutation_lovo_mean_r": -0.007055234385832938,
+  "permutation_null_std": 0.028063085194959505,
+  "permutation_p_value": 0.038461538461538464,
+  "in_sample_mean_r2": 0.30288453592418924,
+  "per_target_r": {
+    "amusement": 0.34333520015873553,
+    "awe": 0.3234826302217993,
+    "contentment": 0.31447470097048846,
+    "excitement": 0.22517876474331794,
+    "fear": 0.30287501321154664,
+    "anger": 0.12534766428239638,
+    "sadness": 0.1551535510772092,
+    "confusion": 0.14597418001700518
+  },
+  "bootstrap_ci_per_target": {
+    "amusement": {
+      "r": 0.34333520015873553,
+      "ci_low": 0.2716953511673178,
+      "ci_high": 0.433792002699024
+    },
+    "awe": {
+      "r": 0.3234826302217993,
+      "ci_low": 0.21535753636314567,
+      "ci_high": 0.43007989292178717
+    },
+    "contentment": {
+      "r": 0.31447470097048846,
+      "ci_low": 0.22865951848105037,
+      "ci_high": 0.38144733768459654
+    },
+    "excitement": {
+      "r": 0.22517876474331794,
+      "ci_low": 0.09563759945837182,
+      "ci_high": 0.31340099269685506
+    },
+    "fear": {
+      "r": 0.30287501321154664,
+      "ci_low": 0.2124588994330769,
+      "ci_high": 0.3737369705905314
+    },
+    "anger": {
+      "r": 0.12534766428239638,
+      "ci_low": 0.03305350156067046,
+      "ci_high": 0.2085655926452923
+    },
+    "sadness": {
+      "r": 0.1551535510772092,
+      "ci_low": 0.05811555036282421,
+      "ci_high": 0.23659865023238819
+    },
+    "confusion": {
+      "r": 0.14597418001700518,
+      "ci_low": 0.06161565263730726,
+      "ci_high": 0.23156062755208245
+    }
+  },
+  "exported_cv_mean_r": 0.24197771308531232,
+  "train_eval_delta": 0.0,
+  "pass_subcortical_lift": true,
+  "pass_beats_permutation": true,
+  "identification_top1": 0.3638814016172507
+}

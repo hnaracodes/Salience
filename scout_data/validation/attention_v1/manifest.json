@@ -1,18 +1,21 @@
 {
-  "schema_version": 1,
-  "description": "Ground-truth collection manifest for attention proxy calibration.",
-  "sessions": [
-    {
-      "session_id": "8b8421edda6a40d0b055960fcdbaf24c",
-      "site": "aurora_localhost_fixture",
-      "clarity_csv": null,
-      "notes": "Add clarity_clicks.csv to session dir or set clarity_csv path when exported."
-    }
-  ],
+  "schema_version": 2,
+  "description": "Owned-site Clarity corpus for property-grouped attention calibration.",
+  "claim_scope": "Observed traffic corpus; not representative of the average population without demographic sampling and weighting.",
+  "minimums": {
+    "pages": 12,
+    "properties": 4,
+    "unique_sessions_per_page": 200,
+    "mapped_clicks_per_page": 50
+  },
+  "split_policy": "Assign each property_id to exactly one of train, validation, or holdout.",
+  "sessions": [],
   "collection_checklist": [
+    "Use only owned or explicitly authorized properties with Clarity installed",
     "Export Microsoft Clarity click CSV per site",
-    "Place as scout_data/sessions/<id>/clarity_clicks.csv",
-    "Re-run analyze_session --website --clarity-csv path",
-    "Run validate_attention_proxy.py"
+    "Capture and analyze the TRIBE session before placing the Clarity CSV to prevent label leakage",
+    "Place CSV under scout_data/validation/attention_v1/exports/",
+    "Record property_id, page_id, role, unique_sessions, mapped_clicks, and clarity_csv",
+    "Run validate_attention_proxy.py --fit-weights --evaluate-holdout only after splits are frozen"
   ]
 }

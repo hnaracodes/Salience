@@ -1,0 +1,191 @@
+{
+  "manifest": "scout_data\\horikawaCode\\manifests\\pilot_275.json",
+  "corpus": "pilot_275",
+  "n_clips": 264,
+  "n_rows": 264,
+  "n_features": 808,
+  "constant_feature_columns": 0,
+  "issues": [],
+  "missing_labels": [],
+  "product_8_stats": [
+    {
+      "name": "amusement",
+      "mean": 0.20588232576847076,
+      "std": 0.2330503910779953,
+      "min": 0.0,
+      "max": 0.8888900279998779,
+      "near_constant": false
+    },
+    {
+      "name": "awe",
+      "mean": 0.10029418766498566,
+      "std": 0.14367209374904633,
+      "min": 0.0,
+      "max": 0.699999988079071,
+      "near_constant": false
+    },
+    {
+      "name": "contentment",
+      "mean": 0.09230262041091919,
+      "std": 0.12718142569065094,
+      "min": 0.0,
+      "max": 0.666670024394989,
+      "near_constant": false
+    },
+    {
+      "name": "excitement",
+      "mean": 0.18665599822998047,
+      "std": 0.15670889616012573,
+      "min": 0.0,
+      "max": 0.8461499810218811,
+      "near_constant": false
+    },
+    {
+      "name": "fear",
+      "mean": 0.12459954619407654,
+      "std": 0.1811833679676056,
+      "min": 0.0,
+      "max": 0.8461499810218811,
+      "near_constant": false
+    },
+    {
+      "name": "anger",
+      "mean": 0.03256404772400856,
+      "std": 0.06691446155309677,
+      "min": 0.0,
+      "max": 0.5,
+      "near_constant": false
+    },
+    {
+      "name": "sadness",
+      "mean": 0.08213745802640915,
+      "std": 0.1563749611377716,
+      "min": 0.0,
+      "max": 0.800000011920929,
+      "near_constant": false
+    },
+    {
+      "name": "confusion",
+      "mean": 0.10345451533794403,
+      "std": 0.11232659220695496,
+      "min": 0.0,
+      "max": 0.6428599953651428,
+      "near_constant": false
+    }
+  ],
+  "dimensions_14_stats": [
+    {
+      "name": "approach",
+      "mean": 0.4559135437011719,
+      "std": 0.26502159237861633,
+      "min": 0.0,
+      "max": 0.9166624546051025,
+      "near_constant": false
+    },
+    {
+      "name": "arousal",
+      "mean": 0.600273847579956,
+      "std": 0.11735827475786209,
+      "min": 0.25,
+      "max": 0.84722501039505,
+      "near_constant": false
+    },
+    {
+      "name": "attention",
+      "mean": 0.6265251636505127,
+      "std": 0.12205963581800461,
+      "min": 0.20833748579025269,
+      "max": 0.9027750492095947,
+      "near_constant": false
+    },
+    {
+      "name": "certainty",
+      "mean": 0.4975798726081848,
+      "std": 0.14704568684101105,
+      "min": 0.055549994111061096,
+      "max": 0.8055499792098999,
+      "near_constant": false
+    },
+    {
+      "name": "commitment",
+      "mean": 0.5066809058189392,
+      "std": 0.1498124748468399,
+      "min": 0.0694500058889389,
+      "max": 0.9027750492095947,
+      "near_constant": false
+    },
+    {
+      "name": "control",
+      "mean": 0.5394572615623474,
+      "std": 0.2590959072113037,
+      "min": 0.0,
+      "max": 0.9305499792098999,
+      "near_constant": false
+    },
+    {
+      "name": "dominance",
+      "mean": 0.4569128155708313,
+      "std": 0.10972196608781815,
+      "min": 0.125,
+      "max": 0.7638875246047974,
+      "near_constant": false
+    },
+    {
+      "name": "effort",
+      "mean": 0.2992948591709137,
+      "std": 0.18492889404296875,
+      "min": 0.0,
+      "max": 0.84722501039505,
+      "near_constant": false
+    },
+    {
+      "name": "fairness",
+      "mean": 0.508154034614563,
+      "std": 0.20498508214950562,
+      "min": 0.027775004506111145,
+      "max": 0.9166624546051025,
+      "near_constant": false
+    },
+    {
+      "name": "identity",
+      "mean": 0.45828062295913696,
+      "std": 0.15219546854496002,
+      "min": 0.013887494802474976,
+      "max": 0.8888875246047974,
+      "near_constant": false
+    },
+    {
+      "name": "obstruction",
+      "mean": 0.3348062038421631,
+      "std": 0.13967886567115784,
+      "min": 0.013887494802474976,
+      "max": 0.75,
+      "near_constant": false
+    },
+    {
+      "name": "safety",
+      "mean": 0.4703284800052643,
+      "std": 0.2340424656867981,
+      "min": 0.0,
+      "max": 0.875,
+      "near_constant": false
+    },
+    {
+      "name": "upswing",
+      "mean": 0.528461754322052,
+      "std": 0.23684978485107422,
+      "min": 0.0,
+      "max": 0.9305499792098999,
+      "near_constant": false
+    },
+    {
+      "name": "valence",
+      "mean": 0.5140990018844604,
+      "std": 0.2623976171016693,
+      "min": 0.0,
+      "max": 0.9722249507904053,
+      "near_constant": false
+    }
+  ],
+  "pass": true
+}

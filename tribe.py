@@ -56,12 +56,32 @@ def _plot_timesteps_warm(plotter, preds, output_path: str, *, views: str = "left
 class TribeInference:
     @modal.enter()
     def load_model(self):
+        import os
+
         from tribev2.demo_utils import TribeModel
         # This will download weights to the persistent volume on first run
         self.model = TribeModel.from_pretrained(
-            "facebook/tribev2", 
-            cache_folder="/cache"
+            "facebook/tribev2",
+            cache_folder="/cache",
         )
+        self._subcortical_checkpoint = os.environ.get(
+            "TRIBEV2_SUBCORTICAL_CHECKPOINT", "facebook/tribev2-subcortical"
+        )
+        self._subcortical_model = None
+        self._last_subcortical_meta: dict | None = None
+
+    def _ensure_subcortical_model(self) -> None:
+        """Lazy-load subcortical TribeModel (avoids double load at cold start)."""
+        if self._subcortical_model is not None:
+            return
+        from scout_core.subcortical.tribev2_adapter import load_tribev2_checkpoint_model
+
+        print(f"Loading subcortical checkpoint: {self._subcortical_checkpoint}", flush=True)
+        self._subcortical_model = load_tribev2_checkpoint_model(
+            self._subcortical_checkpoint,
+            cache_folder="/cache",
+        )
+        print("Subcortical checkpoint loaded.", flush=True)
 
     @modal.method()
     def predict_and_visualize(self, video_bytes: bytes):
@@ -135,6 +155,146 @@ class TribeInference:
         buf = io.BytesIO()
         np.savez_compressed(buf, preds=np.asarray(preds, dtype=np.float32))
         return buf.getvalue()
+
+    def _predict_subcortical_array(self, video_path: str) -> "np.ndarray":
+        import numpy as np
+
+        from scout_core.subcortical.tribev2_adapter import predict_subcortical_with_meta
+
+        df = self.model.get_events_dataframe(video_path=video_path)
+        self._ensure_subcortical_model()
+        preds, meta = predict_subcortical_with_meta(
+            df,
+            cache_folder="/cache",
+            checkpoint=self._subcortical_checkpoint,
+            sub_model=self._subcortical_model,
+            allow_proxy_fallback=False,
+        )
+        self._last_subcortical_meta = meta
+        return preds
+
+    @modal.method()
+    def predict_subcortical_npz(self, video_bytes: bytes) -> bytes:
+        """Return compressed NPZ with subcortical preds (T, 8802)."""
+        import tempfile
+
+        from scout_core.subcortical.tribev2_adapter import subcortical_npz_bytes
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            video_path = temp_video.name
+
+        preds = self._predict_subcortical_array(video_path)
+        meta = getattr(self, "_last_subcortical_meta", None) or {}
+        return subcortical_npz_bytes(
+            preds,
+            tribe_checkpoint=self._subcortical_checkpoint,
+            prediction_source=meta.get("prediction_source"),
+        )
+
+    @modal.method()
+    def predict_brain_both_npz(self, video_bytes: bytes) -> tuple[bytes, bytes]:
+        """Return (cortical_npz_bytes, subcortical_npz_bytes) from one video decode."""
+        import io
+        import tempfile
+
+        import numpy as np
+
+        from scout_core.subcortical.tribev2_adapter import predict_subcortical_with_meta, subcortical_npz_bytes
+
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video:
+            temp_video.write(video_bytes)
+            video_path = temp_video.name
+
+        df = self.model.get_events_dataframe(video_path=video_path)
+        cortical_preds, _segments = self.model.predict(events=df)
+        cortical_buf = io.BytesIO()
+        np.savez_compressed(
+            cortical_buf, preds=np.asarray(cortical_preds, dtype=np.float32)
+        )
+        self._ensure_subcortical_model()
+        sub_preds, sub_meta = predict_subcortical_with_meta(
+            df,
+            cache_folder="/cache",
+            checkpoint=self._subcortical_checkpoint,
+            sub_model=self._subcortical_model,
+            allow_proxy_fallback=False,
+        )
+        sub_bytes = subcortical_npz_bytes(
+            sub_preds,
+            tribe_checkpoint=self._subcortical_checkpoint,
+            prediction_source=sub_meta.get("prediction_source"),
+        )
+        return cortical_buf.getvalue(), sub_bytes
+
+    @modal.method()
+    def inspect_subcortical_checkpoint(self) -> dict:
+        """Return checkpoint structure for tribev2 vs tribev2-subcortical (debug)."""
+        import torch
+        from huggingface_hub import hf_hub_download
+
+        def _summarize(repo_id: str) -> dict:
+            ckpt_path = hf_hub_download(repo_id, "best.ckpt")
+            ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+            if not isinstance(ckpt, dict):
+                return {"repo_id": repo_id, "ckpt_path": ckpt_path, "type": type(ckpt).__name__}
+            summary = {
+                "repo_id": repo_id,
+                "ckpt_path": ckpt_path,
+                "keys": list(ckpt.keys()),
+            }
+            if "model_build_args" in ckpt:
+                summary["model_build_args_keys"] = list(ckpt["model_build_args"].keys())
+            if "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
+                sample = next(iter(ckpt["state_dict"].keys()), None)
+                summary["state_dict_n"] = len(ckpt["state_dict"])
+                summary["state_dict_sample"] = sample
+            return summary
+
+        return {
+            "cortical": _summarize("facebook/tribev2"),
+            "subcortical": _summarize(self._subcortical_checkpoint),
+        }
+
+    @modal.method()
+    def verify_subcortical_checkpoint(self) -> dict:
+        """Lightweight health check: load subcortical checkpoint without video inference."""
+        import traceback
+
+        try:
+            self._ensure_subcortical_model()
+            return {
+                "ok": True,
+                "checkpoint": self._subcortical_checkpoint,
+                "model_class": type(self._subcortical_model).__name__,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "checkpoint": self._subcortical_checkpoint,
+                "error": str(exc),
+                "traceback": traceback.format_exc()[-3000:],
+            }
+
+    @modal.method()
+    def extract_subcortical_voxel_regions(self) -> dict:
+        """Return tribev2 Harvard-Oxford voxel->region mapping (8802 voxels, 8 regions)."""
+        from scout_core.subcortical.atlas import (
+            N_SUBCORTICAL_VOXELS,
+            SUBCORTICAL_REGION_LABELS,
+            build_region_index_from_tribev2_ho,
+            region_voxel_counts,
+        )
+
+        region_index = build_region_index_from_tribev2_ho()
+        counts = region_voxel_counts(region_index)
+        return {
+            "n_voxels": N_SUBCORTICAL_VOXELS,
+            "region_labels": list(SUBCORTICAL_REGION_LABELS),
+            "region_voxel_counts": counts,
+            "region_index": region_index.tolist(),
+            "source": "tribev2.plotting.subcortical.get_subcortical_mask",
+        }
 
     @modal.method()
     def extract_frame_attention(
@@ -566,7 +726,13 @@ def record_session(session_id: str, visualize: bool = True):
 
     import numpy as np
 
-    from activation_store import DATA_DIR, DB_PATH, resolve_vertex_regions, save_cortical_timeseries
+    from activation_store import (
+        DATA_DIR,
+        DB_PATH,
+        resolve_vertex_regions,
+        save_cortical_timeseries,
+        save_subcortical_timeseries,
+    )
     from scout_core.session_align import find_walkthrough_video, load_manifest, validate_session_dir
 
     if not session_id:
@@ -588,11 +754,12 @@ def record_session(session_id: str, visualize: bool = True):
     if visualize:
         preds_npz_bytes, video_mp4_bytes = predictor.predict_and_visualize.remote(video_data)
         preds = np.load(io.BytesIO(preds_npz_bytes))["preds"].astype(np.float32)
+        sub_npz_bytes = predictor.predict_subcortical_npz.remote(video_data)
         (session_dir / "brain_results.mp4").write_bytes(video_mp4_bytes)
         print(f"Brain render: {session_dir / 'brain_results.mp4'}")
     else:
-        preds_list = predictor.predict_brain.remote(video_data)
-        preds = np.asarray(preds_list, dtype=np.float32)
+        preds_npz_bytes, sub_npz_bytes = predictor.predict_brain_both_npz.remote(video_data)
+        preds = np.load(io.BytesIO(preds_npz_bytes))["preds"].astype(np.float32)
     vertex_equivalence = _session_vertex_equivalence_meta()
 
     from activation_store import PROJECT_ROOT
@@ -614,6 +781,13 @@ def record_session(session_id: str, visualize: bool = True):
         extra_meta={"capture_type": "website_walkthrough"},
     )
 
+    sub_preds = np.load(io.BytesIO(sub_npz_bytes))["preds"].astype(np.float32)
+    save_subcortical_timeseries(
+        sub_preds,
+        session_id=session_id,
+        extra_meta={"capture_type": "website_walkthrough"},
+    )
+
     manifest = load_manifest(session_dir)
     if manifest is not None:
         manifest.setdefault("alignment", {})
@@ -626,6 +800,7 @@ def record_session(session_id: str, visualize: bool = True):
     print(f"Session id: {session_id}")
     print(f"preds shape (T×V): {preds.shape[0]} × {preds.shape[1]}")
     print(f"Dense preds: {session_dir / 'preds.npz'}")
+    print(f"Subcortical preds: {session_dir / 'preds_subcortical.npz'}")
     print(f"SQLite: {DB_PATH}")
     if manifest and manifest.get("alignment", {}).get("preds_validation"):
         print(manifest["alignment"]["preds_validation"].get("message", ""))

@@ -4,6 +4,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -161,6 +162,7 @@ def ensure_dual_track_schema(conn: sqlite3.Connection) -> None:
     """Create dual-track tables if they don't exist. Safe to call multiple times."""
     conn.executescript(DUAL_TRACK_SCHEMA)
     _ensure_emotion_trace_columns(conn)
+    _ensure_emotion_decoder_trace_table(conn)
 
 
 def _ensure_emotion_trace_columns(conn: sqlite3.Connection) -> None:
@@ -344,6 +346,53 @@ def insert_engagement_trace(
         VALUES (?, ?, ?, ?)
         """,
         rows,
+    )
+
+
+def insert_emotion_decoder_trace(
+    conn: sqlite3.Connection,
+    *,
+    session_id: str,
+    emotion_result: dict[str, Any],
+) -> None:
+    """Persist decoder probabilities as JSON (session_emotion_decoder_trace)."""
+    _ensure_emotion_decoder_trace_table(conn)
+    probabilities = emotion_result.get("probabilities") or []
+    class_names = emotion_result.get("class_names") or []
+    rows = []
+    for t, prob_row in enumerate(probabilities):
+        payload = {
+            "class_names": class_names,
+            "probabilities": prob_row,
+            "scores": (emotion_result.get("scores") or [None])[t]
+            if t < len(emotion_result.get("scores") or [])
+            else prob_row,
+            "model_id": emotion_result.get("model_id"),
+        }
+        rows.append((session_id, t, json.dumps(payload)))
+    conn.executemany(
+        """
+        INSERT OR REPLACE INTO session_emotion_decoder_trace (session_id, t_idx, trace_json)
+        VALUES (?, ?, ?)
+        """,
+        rows,
+    )
+
+
+def _ensure_emotion_decoder_trace_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS session_emotion_decoder_trace (
+            session_id TEXT NOT NULL,
+            t_idx INTEGER NOT NULL,
+            trace_json TEXT NOT NULL,
+            PRIMARY KEY (session_id, t_idx),
+            FOREIGN KEY (session_id) REFERENCES sessions(id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_emotion_decoder ON session_emotion_decoder_trace(session_id)"
     )
 
 

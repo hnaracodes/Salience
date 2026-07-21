@@ -6,9 +6,9 @@ import gsap from 'gsap'
 import { Globe, Layers, TrendingUp } from 'lucide-react'
 import { MiniFeatureTile } from '@/components/marketing/PageRouteIcon'
 import { Logo } from '@/components/Logo'
+import { HEATMAP_LIGHT_SOFT, mock } from '@/components/marketing/mock-ui'
 import { SITE } from '@/lib/site'
 
-/** Hero visual — live scan in progress (distinct from viewer mock). */
 export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -30,7 +30,7 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
       if (beam) {
         gsap.to(beam, {
           y: '+=220',
-          duration: 2.8,
+          duration: 4.2,
           ease: 'none',
           repeat: -1,
         })
@@ -40,7 +40,7 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
         gsap.to(reticle, {
           x: 24,
           y: -12,
-          duration: 3.2,
+          duration: 4.8,
           ease: 'sine.inOut',
           yoyo: true,
           repeat: -1,
@@ -49,9 +49,9 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
 
       pulses.forEach((el, i) => {
         gsap.to(el, {
-          opacity: 0.9,
-          scale: 1.05,
-          duration: 1.2 + i * 0.2,
+          opacity: 1,
+          scale: 1.04,
+          duration: 1.6 + i * 0.2,
           ease: 'sine.inOut',
           yoyo: true,
           repeat: -1,
@@ -63,41 +63,34 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
   )
 
   return (
-    <div
-      ref={rootRef}
-      className={`overflow-hidden rounded-lg border border-ink-700 bg-[#0a0c10] shadow-2xl shadow-black/40 ring-1 ring-signal/20 ${className}`}
-    >
-      <div className="flex items-center gap-2 border-b border-ink-700 bg-ink-800 px-3 py-2">
-        <span className="h-2 w-2 rounded-full bg-red-500/60" />
-        <span className="h-2 w-2 rounded-full bg-yellow-500/50" />
-        <span className="h-2 w-2 rounded-full bg-green-500/50" />
-        <span className="ml-2 flex-1 truncate font-mono text-[10px] text-text-secondary">
+    <div ref={rootRef} className={`${mock.shell} ${className}`}>
+      <div className={mock.chrome}>
+        <span className="h-2 w-2 rounded-full bg-red-400/70" />
+        <span className="h-2 w-2 rounded-full bg-amber-400/70" />
+        <span className="h-2 w-2 rounded-full bg-copy/70" />
+        <span className={mock.chromeTitle}>
           {SITE.name.toLowerCase()} · scanning {SITE.exampleUrl}
         </span>
-        <span
-          data-hero-pulse
-          className="rounded border border-signal/40 bg-signal/10 px-1.5 py-0.5 font-mono text-[9px] text-signal"
-        >
+        <span data-hero-pulse className={mock.badgeLive}>
           LIVE
         </span>
       </div>
 
-      <div className="relative aspect-[4/3] bg-[#0f1117] p-5">
-        {/* Page skeleton */}
+      <div className={`relative aspect-[4/3] ${mock.panel} p-5`}>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Logo variant="nav" size={20} />
-            <div className="h-2 w-16 rounded-sm bg-white/15" />
+            <div className={`h-2 w-16 ${mock.skeleton}`} />
           </div>
           <div className="flex gap-2">
-            <div className="h-2 w-8 rounded-sm bg-white/8" />
-            <div className="h-5 w-12 rounded-full bg-signal/30" />
+            <div className={`h-2 w-8 ${mock.skeleton}`} />
+            <div className={`h-5 w-12 rounded-full ${mock.skeletonBtn}`} />
           </div>
         </div>
         <div className="space-y-2 text-center">
-          <div className="mx-auto h-3 w-3/4 rounded-sm bg-white/20" />
-          <div className="mx-auto h-2 w-1/2 rounded-sm bg-white/10" />
-          <div className="mx-auto mt-4 h-8 w-28 rounded-md bg-signal/35" />
+          <div className={`mx-auto h-3 w-3/4 ${mock.skeletonMid}`} />
+          <div className={`mx-auto h-2 w-1/2 ${mock.skeleton}`} />
+          <div className={`mx-auto mt-4 h-8 w-28 rounded-lg bg-ink-950`} />
         </div>
         <div className="mt-6 grid grid-cols-3 gap-2">
           <MiniFeatureTile icon={Globe} label="Pages" accent="signal" />
@@ -105,18 +98,14 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
           <MiniFeatureTile icon={TrendingUp} label="TR 14" accent="neural" />
         </div>
 
-        {/* Scan beam */}
         <div
           data-hero-beam
-          className="pointer-events-none absolute left-4 right-4 top-5 h-px bg-gradient-to-r from-transparent via-signal to-transparent"
-          style={{ boxShadow: '0 0 16px rgba(37,99,255,0.5)' }}
+          className="pointer-events-none absolute left-4 right-4 top-5 h-px bg-gradient-to-r from-transparent via-signal/60 to-transparent"
         />
 
-        {/* Reticle */}
         <div
           data-hero-reticle
-          className="pointer-events-none absolute left-1/2 top-1/3 h-10 w-10 -translate-x-1/2 border border-signal/50"
-          style={{ boxShadow: 'inset 0 0 0 1px rgba(37,99,255,0.2)' }}
+          className="pointer-events-none absolute left-1/2 top-1/3 h-10 w-10 -translate-x-1/2 rounded-sm border border-signal/40 bg-signal/5"
         >
           <span className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-signal" />
           <span className="absolute -right-1 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-signal" />
@@ -124,25 +113,21 @@ export function HeroLiveScanVisual({ className = '' }: { className?: string }) {
           <span className="absolute left-1/2 -bottom-1 h-2 w-2 -translate-x-1/2 rounded-full bg-signal" />
         </div>
 
-        {/* Partial heatmap — building */}
         <div
-          className="pointer-events-none absolute inset-0 mix-blend-screen opacity-40"
-          style={{
-            background:
-              'radial-gradient(ellipse 40% 30% at 50% 35%, rgba(255,140,50,0.5) 0%, transparent 60%)',
-          }}
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{ background: HEATMAP_LIGHT_SOFT }}
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-px border-t border-ink-700 bg-ink-700">
+      <div className={mock.footerGrid}>
         {[
           { k: 'Pages', v: '3/8' },
           { k: 'TR', v: '14' },
           { k: 'Status', v: 'crawl' },
         ].map((m) => (
-          <div key={m.k} className="bg-ink-900 px-3 py-2 text-center">
-            <p className="text-[8px] text-text-secondary">{m.k}</p>
-            <p className="font-mono text-xs text-signal">{m.v}</p>
+          <div key={m.k} className={mock.footerCell}>
+            <p className="text-[8px] text-text-tertiary">{m.k}</p>
+            <p className="font-mono text-xs font-medium text-signal">{m.v}</p>
           </div>
         ))}
       </div>

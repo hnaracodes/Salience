@@ -1,6 +1,6 @@
 """Portable pipeline runner: chains all TribeV2 scan stages in order.
 
-Stages: capture → tribe → dual_track → heatmaps → analyze →
+Stages: capture → tribe → [demographic_mux] → dual_track → heatmaps → analyze →
         copy_signals → narrative → export_viewer
 
 Each stage calls on_stage(stage_name, status) with "running" before
@@ -31,6 +31,10 @@ StatusCallback = Callable[[str, str], None]
 
 def _fake_tribe_mode() -> bool:
     return os.environ.get("FAKE_TRIBE", "0") == "1"
+
+
+def _demographic_mux_enabled() -> bool:
+    return os.environ.get("DEMOGRAPHIC_MUX", "0") == "1"
 
 
 def _run_subprocess(args: list[str], stage: str) -> None:
@@ -95,7 +99,7 @@ def _sync_sqlite_session(session_id: str) -> None:
     """Register preds in activations.sqlite so dual_track FK constraints succeed."""
     import numpy as np
 
-    from activation_store import save_cortical_timeseries
+    from activation_store import save_cortical_timeseries, save_subcortical_timeseries
 
     session_dir = SESSIONS_DIR / session_id
     npz_path = session_dir / "preds.npz"
@@ -116,6 +120,11 @@ def _sync_sqlite_session(session_id: str) -> None:
         notes="pipeline runner",
     )
 
+    sub_path = session_dir / "preds_subcortical.npz"
+    if sub_path.is_file():
+        sub_preds = np.asarray(np.load(sub_path)["preds"], dtype=np.float32)
+        save_subcortical_timeseries(sub_preds, session_id=session_id)
+
 
 def _stage_tribe(session_id: str) -> None:
     session_dir = SESSIONS_DIR / session_id
@@ -123,6 +132,9 @@ def _stage_tribe(session_id: str) -> None:
     if _fake_tribe_mode():
         # Generate synthetic preds: shape (T, 20484) float32 zeros.
         import numpy as np
+
+        from scout_core.subcortical.io import save_subcortical_npz
+        from scout_core.subcortical.tribev2_adapter import fake_subcortical_preds
 
         manifest_path = session_dir / "session_manifest.json"
         if manifest_path.is_file():
@@ -135,8 +147,13 @@ def _stage_tribe(session_id: str) -> None:
         preds = np.zeros((t_count, 20484), dtype=np.float32)
         out_path = session_dir / "preds.npz"
         np.savez(out_path, preds=preds)
+        sub_preds = fake_subcortical_preds(t_count)
+        save_subcortical_npz(session_dir, sub_preds)
         logger.info(
-            "FAKE_TRIBE: wrote synthetic preds shape %s → %s", preds.shape, out_path
+            "FAKE_TRIBE: wrote synthetic preds shape %s and subcortical %s → %s",
+            preds.shape,
+            sub_preds.shape,
+            session_dir,
         )
         _sync_sqlite_session(session_id)
         return
@@ -149,10 +166,49 @@ def _stage_tribe(session_id: str) -> None:
     if not video_path.is_file():
         # Fall back to mp4 variant
         video_path = session_dir / "walkthrough.mp4"
-    npz_bytes: bytes = cls().predict_brain_npz.remote(video_path.read_bytes())
-    (session_dir / "preds.npz").write_bytes(npz_bytes)
-    logger.info("tribe: wrote preds.npz (%d bytes)", len(npz_bytes))
+    video_bytes = video_path.read_bytes()
+    cortical_bytes, subcortical_bytes = cls().predict_brain_both_npz.remote(video_bytes)
+    (session_dir / "preds.npz").write_bytes(cortical_bytes)
+    (session_dir / "preds_subcortical.npz").write_bytes(subcortical_bytes)
+    logger.info(
+        "tribe: wrote preds.npz (%d bytes) and preds_subcortical.npz (%d bytes)",
+        len(cortical_bytes),
+        len(subcortical_bytes),
+    )
     _sync_sqlite_session(session_id)
+
+
+def _stage_demographic_mux(session_id: str) -> None:
+    """Optional stage: preds-fallback mux when M0 passed and checkpoint configured."""
+    from data_prep.viability_partition import m0_passed_for_training
+
+    m0_path = PROJECT_ROOT / "scout_data" / "demographic" / "viability" / "m0_report.json"
+    if not m0_passed_for_training(m0_path):
+        logger.warning(
+            "demographic_mux skipped: M0 gate not passed (%s)", m0_path
+        )
+        return
+
+    ckpt = os.environ.get("DEMOGRAPHIC_MUX_CHECKPOINT", "")
+    if not ckpt:
+        logger.warning("demographic_mux skipped: DEMOGRAPHIC_MUX_CHECKPOINT not set")
+        return
+
+    cluster_ids = os.environ.get("DEMOGRAPHIC_MUX_CLUSTER_IDS", "0,1")
+    ids_arg = cluster_ids.split(",")
+
+    python = sys.executable
+    args = [
+        python,
+        str(PROJECT_ROOT / "scripts" / "run_demographic_mux_session.py"),
+        "--session-id",
+        session_id,
+        "--checkpoint",
+        ckpt,
+        "--cluster-ids",
+        *ids_arg,
+    ]
+    _run_subprocess(args, "demographic_mux")
 
 
 def _stage_dual_track(session_id: str) -> None:
@@ -277,6 +333,8 @@ def run_scan(
 
     _wrap("capture", lambda: _stage_capture(session_id, url, config))
     _wrap("tribe", lambda: _stage_tribe(session_id))
+    if _demographic_mux_enabled():
+        _wrap("demographic_mux", lambda: _stage_demographic_mux(session_id))
     _wrap("dual_track", lambda: _stage_dual_track(session_id))
     _wrap("heatmaps", lambda: _stage_heatmaps(session_id))
     _wrap("analyze", lambda: _stage_analyze(session_id))

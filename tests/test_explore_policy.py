@@ -80,6 +80,25 @@ def test_budget_stop():
     assert action.kind == "stop"
 
 
+def test_zero_click_budget_still_allows_scroll_capture():
+    budget = ExploreBudget(max_tr=8, max_clicks=0, max_pages=1)
+    budget.record_page("http://127.0.0.1:8780/")
+    assert budget.at_limit() is False
+    assert budget.clicks_exhausted() is True
+    assert budget.pages_exhausted() is True
+    action = next_action(
+        snapshot={"elements": [], "scrollY": 0},
+        page_url="http://127.0.0.1:8780/",
+        initial_url="http://127.0.0.1:8780/",
+        budget=budget,
+        cfg={"scroll_px_per_tr": 540},
+        viewport_h=720,
+        scroll_height=4000,
+        client_height=720,
+    )
+    assert action.kind == "scroll_down"
+
+
 def test_is_same_origin_relative_href():
     cfg = {"same_origin_only": True}
     assert is_same_origin("/pricing.html", "http://127.0.0.1:8780/index.html", cfg)

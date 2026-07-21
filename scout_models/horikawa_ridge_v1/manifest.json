@@ -1,0 +1,28 @@
+{
+  "model_id": "horikawa_ridge_v1",
+  "model_type": "ridge",
+  "train_npz": "scout_data\\horikawaCode\\tribev2_fused\\train.npz",
+  "n_features": 808,
+  "n_targets": 8,
+  "label_names": [
+    "amusement",
+    "awe",
+    "contentment",
+    "excitement",
+    "fear",
+    "anger",
+    "sadness",
+    "confusion"
+  ],
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "atlas_sha256": "8b7ca359c65e507da281673bd48cfa190682a71c4833f673ecf92feb5b623a80",
+  "data_hash": "ca309053b09fa44e1a6f3612265dd90d1cc09d4c63c442c39dca36b6abaf577d",
+  "corpus": "ready_all",
+  "cv_scheme": "leave_one_video_out",
+  "cv_mean_r": 0.24197771308531232,
+  "training_argv": [
+    "scripts\\horikawaCode\\train_horikawa_ridge_decoder.py",
+    "--config",
+    "configs\\horikawa_decoding.yaml"
+  ]
+}

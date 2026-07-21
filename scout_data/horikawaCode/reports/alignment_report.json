@@ -1,0 +1,20 @@
+{
+  "verdict": "aligned",
+  "n_manifest_clips": 371,
+  "n_ratings_cache": 2196,
+  "id_overlap": 371,
+  "duration_stats": {
+    "n_clips": 371,
+    "tr_mean": 7.088948726654053,
+    "tr_std": 5.744812488555908,
+    "tr_min": 1.0,
+    "tr_max": 54.0
+  },
+  "aligned_lovo_mean_r": 0.19659168211988357,
+  "shuffle_negative_control_r": -0.0307607331054564,
+  "in_sample_mean_r2": 0.7435958540623897,
+  "off_by_one_plus_r": 0.03352414957338976,
+  "off_by_one_minus_r": 0.012904090999289913,
+  "misalignment_red_flag": false,
+  "spotcheck_csv": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\reports\\alignment_spotcheck.csv"
+}

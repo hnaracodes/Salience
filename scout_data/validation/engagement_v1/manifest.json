@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Engagement validation corpus — add session_id entries after pipeline runs",
+  "sessions": []
+}

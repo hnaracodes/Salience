@@ -114,13 +114,20 @@ def main() -> None:
         default=ROOT / "configs" / "vertex_regions.csv",
     )
     parser.add_argument("--glob", type=str, default="scout_data/sessions/*/preds.npz")
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Session directory name to exclude (repeatable)",
+    )
     parser.add_argument("--reducer", choices=("mean", "mean_abs", "median"), default="mean")
     parser.add_argument("--no-register-db", action="store_true")
     args = parser.parse_args()
 
-    paths = sorted(ROOT.glob(args.glob))
+    excluded = set(args.exclude or [])
+    paths = sorted(p for p in ROOT.glob(args.glob) if p.parent.name not in excluded)
     if not paths:
-        raise SystemExit(f"No preds.npz matched glob {args.glob}")
+        raise SystemExit(f"No preds.npz matched glob {args.glob} after exclusions")
 
     by_parcel, parcel_ids_ref, table = _collect_parcel_values(
         paths,

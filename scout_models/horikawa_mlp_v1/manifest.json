@@ -1,0 +1,30 @@
+{
+  "model_id": "horikawa_mlp_v1",
+  "model_type": "mlp",
+  "train_npz": "scout_data\\horikawaCode\\tribev2_fused\\train.npz",
+  "n_features": 808,
+  "n_targets": 8,
+  "label_names": [
+    "amusement",
+    "awe",
+    "contentment",
+    "excitement",
+    "fear",
+    "anger",
+    "sadness",
+    "confusion"
+  ],
+  "feature_spec": "fused_schaefer400_subcortical_v1",
+  "atlas_sha256": "1770f7c8ef7179a387df992e3de4a3ae51d373274596468f1d4c89075b6e3e87",
+  "data_hash": "3b794f02afdc2f5775ea1b781962dec66f093df228914a95641efb06c22b4e0b",
+  "corpus": "pilot_275",
+  "cv_scheme": "group_kfold",
+  "cv_mean_r": 0.016601664186376784,
+  "training_argv": [
+    "scripts/horikawaCode/train_horikawa_ridge_decoder.py",
+    "--config",
+    "configs/horikawa_decoding.yaml",
+    "--model",
+    "mlp"
+  ]
+}

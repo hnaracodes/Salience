@@ -11,6 +11,8 @@ requests>=2.31
 pytest>=8.0
 playwright>=1.40
 scikit-learn>=1.6
+webdataset>=0.2.86
+torch>=2.2; platform_system != "Windows" or python_version < "3.14"
 joblib>=1.4
 yt-dlp>=2024.1
 imageio[ffmpeg]>=2.34

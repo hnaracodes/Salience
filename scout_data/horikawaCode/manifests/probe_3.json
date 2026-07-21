@@ -1,0 +1,8 @@
+{
+  "corpus": "probe_3",
+  "clips": [
+    {"stimulus_id": "1"},
+    {"stimulus_id": "10"},
+    {"stimulus_id": "100"}
+  ]
+}

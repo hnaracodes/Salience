@@ -58,7 +58,7 @@ export function ScanCard({ scan }: ScanCardProps) {
   } catch {}
 
   return (
-    <div className="flex items-center justify-between gap-4 bg-ink-900 px-5 py-4 hover:bg-ink-800 transition-colors">
+    <div className="flex items-center justify-between gap-4 bg-surface px-5 py-4 transition-colors duration-300 hover:bg-surface-muted">
       <div className="min-w-0 flex-1">
         <p
           className="truncate text-sm font-mono text-text-primary"

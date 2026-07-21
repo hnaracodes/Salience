@@ -1048,6 +1048,30 @@
       text-transform: none;
     }
 
+    .neural-panel {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-subtle, #2a3140);
+      border-radius: 8px;
+      background: rgba(12, 16, 24, 0.55);
+    }
+    .neural-panel h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted, #9aa3b2);
+    }
+    .neural-parcel-list {
+      margin: 6px 0 0;
+      padding-left: 18px;
+      font-size: 12px;
+      color: var(--text-secondary, #c5cad3);
+    }
+    .tr-chip.neural.active {
+      border-color: #6eb5ff;
+    }
+
     .hm-stat-badge {
       display: inline-flex;
       align-items: center;
@@ -1558,14 +1582,23 @@
       const safeTagLine = escapeHtml(tagLine);
       const safeTitle = titleText ? escapeHtml(truncateText(titleText, 80)) : "";
       const safeFlags = (score?.attribution_flags || []).map(f => `<span class="flag-chip">${escapeHtml(f)}</span>`).join("");
+      const sec = sectionForTimestep(t)
+        || (viewerBundle.sections || []).find(s => s.section_id === activeSectionId);
       const copyRow = lookupCopySignal(sec?.section_id);
       const copyChips = renderCopyChips(copyRow);
+      const neuralT = peakT != null ? peakT : t;
+      const moment = (viewerBundle.neural_moments_by_t || {})[String(neuralT)];
+      const neuralBlock = renderNeuralMomentPanel(moment, neuralT);
+      const conf = score?.attribution_confidence != null
+        ? `<p class="source-note">Attribution confidence: ${Math.round(Number(score.attribution_confidence) * 100)}%</p>`
+        : "";
       panel.hidden = false;
       panel.innerHTML = `
         <h3>${safeDomId}${clarityBadge}</h3>
         <div class="el-detail-tag">${safeTagLine}${safeTitle ? ` · "${safeTitle}"` : ""}</div>
         <div class="el-detail-score">${combined != null ? `${Math.round(combined)}/100` : "—"}</div>
-        <div class="el-detail-source">${score?.source ? `Scores from ${escapeHtml(score.source)}` : "No attribution scores for this element yet"}</div>
+        <div class="el-detail-source">${score?.source ? `Scores from ${escapeHtml(score.source)}` : "No saliency attribution yet — inspect neural readout below"}</div>
+        ${conf}
         <div class="attn-meter" role="presentation" aria-hidden="true">
           <div class="attn-meter-fill" style="width:${pct.toFixed(1)}%"></div>
         </div>
@@ -1573,6 +1606,7 @@
           <span>attention ${attention != null ? Math.round(attention) : "—"}</span>
           <span>clickability ${clickability != null ? Math.round(clickability) : "—"}</span>
         </div>
+        ${neuralBlock}
         ${safeFlags ? `<div class="sec-meta-row" style="margin-top:6px">${safeFlags}</div>` : ""}
         ${copyChips}
         ${ins?.plain_summary ? `<p class="insight-rec" style="margin-top:8px;margin-bottom:0">${escapeHtml(ins.plain_summary)}</p>` : ""}
@@ -1589,13 +1623,14 @@
         const active = row.t === t ? " active" : "";
         return `<button type="button" class="tr-chip${active}" data-tr="${row.t}">TR ${row.t} · ${formatDensity(row.density)}</button>`;
       }).join("");
-      if (salient.length || grounded.length) {
+      if (salient.length || grounded.length || (viewerBundle.neural_moments_by_t && Object.keys(viewerBundle.neural_moments_by_t).length)) {
         correlate.hidden = false;
         correlate.innerHTML = `
-          <h4>Salience timeline</h4>
-          <p class="source-note" style="margin:0">Model attention density when this element was on screen.</p>
+          <h4>Salience & neural timeline</h4>
+          <p class="source-note" style="margin:0">Saliency density when visible; neural readout from TRIBE parcel/network norms.</p>
           ${grounded.length ? `<p class="brain-meta">Grounded spikes: ${grounded.map(tr => `TR ${tr}`).join(", ")}</p>` : ""}
-          ${salient.length ? `<div class="tr-chip-row">${chips}</div>` : ""}`;
+          ${salient.length ? `<div class="tr-chip-row">${chips}</div>` : ""}
+          ${renderNeuralTimelineChips(domId, salient, grounded, t)}`;
         correlate.querySelectorAll(".tr-chip").forEach(btn => {
           btn.addEventListener("click", () => selectElement(domId, { t: Number(btn.dataset.tr) }));
         });
@@ -1638,6 +1673,43 @@
       return snaps.reduce((a, b) =>
         Math.abs((a.t_idx || 0) - t) <= Math.abs((b.t_idx || 0) - t) ? a : b
       );
+    }
+
+    function renderNeuralMomentPanel(moment, t) {
+      if (!moment) {
+        return `<div class="neural-panel empty"><h4>Neural readout</h4><p class="source-note">No parcel/network snapshot at TR ${t}.</p></div>`;
+      }
+      const nets = (moment.top_networks || []).map(n =>
+        `<span class="flag-chip neural-net">${escapeHtml(n.network)} Z=${n.z}</span>`).join(" ");
+      const parcels = (moment.top_parcels || []).slice(0, 5).map(p =>
+        `<li><span class="mono">${escapeHtml(String(p.label || p.parcel_id))}</span> Z=${p.z}</li>`).join("");
+      const emo = moment.dominant_emotion;
+      const emoLine = emo
+        ? `<p class="brain-meta">Emotion: ${escapeHtml(emo.dominant)} (Z=${emo.z_score?.toFixed?.(2) ?? emo.z_score})</p>`
+        : "";
+      const eng = moment.engagement_z != null
+        ? `<p class="brain-meta">Engagement Z (VAN−DMN): ${moment.engagement_z}</p>`
+        : "";
+      return `<div class="neural-panel">
+        <h4>Neural readout · TR ${t}</h4>
+        ${eng}
+        ${emoLine}
+        ${nets ? `<div class="sec-meta-row" style="margin:6px 0">${nets}</div>` : ""}
+        ${parcels ? `<ul class="neural-parcel-list">${parcels}</ul>` : ""}
+        <p class="source-note">Model-assisted cortical proxy — not eye-tracking.</p>
+      </div>`;
+    }
+
+    function renderNeuralTimelineChips(domId, salient, grounded, currentT) {
+      const trs = new Set([...(grounded || []), ...(salient || []).map(r => r.t)]);
+      const chips = [...trs].sort((a, b) => a - b).slice(0, 10).map(tr => {
+        const m = (viewerBundle.neural_moments_by_t || {})[String(tr)];
+        const net = m?.top_networks?.[0]?.network || "—";
+        const active = tr === currentT ? " active" : "";
+        return `<button type="button" class="tr-chip neural${active}" data-tr="${tr}">TR ${tr} · ${escapeHtml(net)}</button>`;
+      }).join("");
+      if (!chips) return "";
+      return `<div class="tr-chip-row neural-tr-row">${chips}</div>`;
     }
 
     function snapshotForTimestep(t) {
@@ -1750,7 +1822,7 @@
         const reaction = ins?.reaction || (isHi ? "engaging" : "neutral");
         const isScored = scoredIds.has(el.dom_id) || ins
           || (viewerBundle.element_scores_index || {})[el.dom_id];
-        const dimmed = !isScored && !isSel;
+        const dimmed = false;
 
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("class", "bbox-group" + (isHi ? " highlight" : "") + (isSel ? " selected" : ""));

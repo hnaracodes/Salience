@@ -33,23 +33,23 @@ export default function RootLayout({
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
   const clerkAppearance = {
     variables: {
-      colorBackground: '#08090b',
-      colorInputBackground: '#0d0f12',
-      colorPrimary: '#2563ff',
-      colorText: '#f0f2f5',
-      colorTextSecondary: '#8b95a8',
-      borderRadius: '0.375rem',
+      colorBackground: '#FFFFFF',
+      colorInputBackground: '#F9F8F3',
+      colorPrimary: '#0F0F0F',
+      colorText: '#0F0F0F',
+      colorTextSecondary: '#5C5C5C',
+      borderRadius: '9999px',
     },
     elements: {
-      card: 'shadow-none border border-[#1c2028]',
-      formButtonPrimary: 'bg-[#2563ff] hover:bg-[#1a4acc] text-white text-sm',
+      card: 'shadow-card border border-[#E8E6DF]',
+      formButtonPrimary: 'bg-[#0F0F0F] hover:bg-[#1A1A1A] text-white text-sm rounded-full',
     },
   }
 
   return (
     <html
       lang="en"
-      className={`${dmSans.variable} ${jetbrainsMono.variable} bg-ink-950 text-text-primary`}
+      className={`${dmSans.variable} ${jetbrainsMono.variable} bg-canvas text-text-primary`}
     >
       <body className="font-body antialiased">
         {clerkEnabled && publishableKey ? (

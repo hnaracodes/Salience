@@ -1,0 +1,18 @@
+{
+  "status": "paused",
+  "phase": "modal_features",
+  "corpus": "full_2181",
+  "manifest": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\manifests\\full_2181.json",
+  "intermediates_dir": "C:\\Users\\kragh\\OneDrive\\Documents\\HrudayCodingProjects\\TribeV2WebAnalyzer\\TribeV2\\scout_data\\horikawaCode\\intermediates_modal",
+  "expected_clips": 2196,
+  "ok_real": 371,
+  "discarded": 0,
+  "orphans_removed": 0,
+  "remaining": 1825,
+  "pct_complete": 16.89,
+  "last_completed_stimulus_id": "394",
+  "next_stimulus_id": "188",
+  "resume_index": 371,
+  "paused_at": "2026-07-06T04:30:31.358433+00:00",
+  "resume_command": ".venv311\\Scripts\\python.exe scripts\\horikawaCode\\run_full_horikawa_training.py --skip-labels --resume"
+}

@@ -1,0 +1,148 @@
+{
+  "corpus": "ready_all",
+  "n_clips": 371,
+  "n_permutations": 25,
+  "n_bootstrap": 50,
+  "mode": "frozen_npz_subset",
+  "cells": [
+    {
+      "feature_spec": "cortical_mean_std800_v1",
+      "label_framing": "va_2",
+      "n_samples": 371,
+      "n_features": 800,
+      "lovo_mean_r": 0.2694517044195911,
+      "group_kfold_mean_r": 0.2419155190456102,
+      "per_target_r": {
+        "valence": 0.23912335766042586,
+        "arousal": 0.2997800511787563
+      },
+      "permutation_null_mean": -0.0008166686041493176,
+      "permutation_null_std": 0.050834704277325685,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.30254539602266384
+    },
+    {
+      "feature_spec": "cortical_mean_std800_v1",
+      "label_framing": "dimensions_14",
+      "n_samples": 371,
+      "n_features": 800,
+      "lovo_mean_r": 0.2402539043571037,
+      "group_kfold_mean_r": 0.22041743591526536,
+      "per_target_r": {
+        "approach": 0.221954723445988,
+        "arousal": 0.2997800511787563,
+        "attention": 0.24169628333679197,
+        "certainty": 0.2720601125962895,
+        "commitment": 0.2620091899395697,
+        "control": 0.29820504569465095,
+        "dominance": 0.1464518666634229,
+        "effort": 0.2035199419707164,
+        "fairness": 0.2200278963477715,
+        "identity": 0.18703580392538918,
+        "obstruction": 0.32015429150951025,
+        "safety": 0.2664985863702176,
+        "upswing": 0.18503751035995164,
+        "valence": 0.23912335766042586
+      },
+      "permutation_null_mean": -0.0019839041811312024,
+      "permutation_null_std": 0.0514955177981602,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.288179864400157
+    },
+    {
+      "feature_spec": "fused_schaefer400_subcortical_v1",
+      "label_framing": "va_2",
+      "n_samples": 371,
+      "n_features": 808,
+      "lovo_mean_r": 0.2674446942091108,
+      "group_kfold_mean_r": 0.24304304184340897,
+      "per_target_r": {
+        "valence": 0.2367810685564732,
+        "arousal": 0.2981083198617484
+      },
+      "permutation_null_mean": 0.0012072488192060137,
+      "permutation_null_std": 0.04940660756013814,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.3071150423030649
+    },
+    {
+      "feature_spec": "fused_schaefer400_subcortical_v1",
+      "label_framing": "dimensions_14",
+      "n_samples": 371,
+      "n_features": 808,
+      "lovo_mean_r": 0.23628237531064192,
+      "group_kfold_mean_r": 0.21910601559423568,
+      "per_target_r": {
+        "approach": 0.2167399222974964,
+        "arousal": 0.2981083198617484,
+        "attention": 0.24263698582000823,
+        "certainty": 0.26808257737214247,
+        "commitment": 0.2535921168069082,
+        "control": 0.29240919698253953,
+        "dominance": 0.14193559661007993,
+        "effort": 0.20259626992607968,
+        "fairness": 0.2202062964557057,
+        "identity": 0.1789015491785215,
+        "obstruction": 0.31873229818875704,
+        "safety": 0.26210986466338326,
+        "upswing": 0.17512119162914314,
+        "valence": 0.2367810685564732
+      },
+      "permutation_null_mean": -0.0001874620583370201,
+      "permutation_null_std": 0.05060950347711623,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.29142252850001976
+    },
+    {
+      "feature_spec": "fused_v2_real_subcortical",
+      "label_framing": "va_2",
+      "n_samples": 371,
+      "n_features": 816,
+      "lovo_mean_r": 0.2680454961655724,
+      "group_kfold_mean_r": 0.2379290351900164,
+      "per_target_r": {
+        "valence": 0.23535463856085004,
+        "arousal": 0.30073635377029473
+      },
+      "permutation_null_mean": 0.0002545938319764729,
+      "permutation_null_std": 0.051405820443975174,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.3161285292475674
+    },
+    {
+      "feature_spec": "fused_v2_real_subcortical",
+      "label_framing": "dimensions_14",
+      "n_samples": 371,
+      "n_features": 816,
+      "lovo_mean_r": 0.23755714999371083,
+      "group_kfold_mean_r": 0.22192646159930932,
+      "per_target_r": {
+        "approach": 0.22079843755420453,
+        "arousal": 0.30073635377029473,
+        "attention": 0.25183807289526144,
+        "certainty": 0.2776921879657208,
+        "commitment": 0.2566028592490438,
+        "control": 0.2944217191089144,
+        "dominance": 0.14568378958175515,
+        "effort": 0.1870025817125501,
+        "fairness": 0.21950032720479715,
+        "identity": 0.18965920480475273,
+        "obstruction": 0.31461007866269514,
+        "safety": 0.258743733335678,
+        "upswing": 0.1731561155054343,
+        "valence": 0.23535463856085004
+      },
+      "permutation_null_mean": 0.000649395948759815,
+      "permutation_null_std": 0.05036909389470649,
+      "permutation_p_value": 0.038461538461538464,
+      "in_sample_mean_r2": 0.3006682512253659
+    }
+  ],
+  "best_cell": {
+    "feature_spec": "cortical_mean_std800_v1",
+    "label_framing": "va_2",
+    "lovo_mean_r": 0.2694517044195911,
+    "permutation_p_value": 0.038461538461538464
+  },
+  "n_significant_p005": 6
+}
