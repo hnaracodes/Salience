@@ -1,0 +1,44 @@
+# Isolated DeepGaze MSDB evaluation environment.
+# Do NOT install into the Horikawa / website pipeline venv.
+#
+# Create:
+#   .\venv311\Scripts\python.exe -m venv .venv-deepgaze-msdb
+#   .\.venv-deepgaze-msdb\Scripts\python.exe -m pip install -U "pip<26.1" "setuptools<81" wheel
+#   .\.venv-deepgaze-msdb\Scripts\python.exe -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+#   .\.venv-deepgaze-msdb\Scripts\python.exe -m pip install "git+https://github.com/openai/CLIP.git@dcba3cb2e2827b402d2701e7e1c7d9fed8a20ef1" --no-build-isolation
+#   .\.venv-deepgaze-msdb\Scripts\python.exe -m pip install -r requirements-deepgaze-msdb.txt
+#
+# Note: OpenAI CLIP's setup.py needs pkg_resources; keep setuptools<81 and install
+# CLIP with --no-build-isolation before the remaining requirements.
+#
+# LICENSE BLOCKER (production):
+#   Upstream https://github.com/matthias-k/DeepGaze currently ships with NO active
+#   license (MIT classifiers/fields are commented out). Commercial-use request
+#   https://github.com/matthias-k/DeepGaze/issues/15 is unanswered. Use for
+#   evaluation only until written permission or an explicit license exists.
+
+# Core scientific stack (pinned for reproducibility of this baseline).
+# numpy is intentionally a range: the CUDA torch wheel may pull numpy 2.x.
+numpy>=1.26,<3
+scipy==1.14.1
+Pillow>=10.4,<13
+matplotlib==3.9.2
+PyYAML==6.0.2
+requests==2.32.3
+tqdm==4.66.5
+pytest==8.3.3
+
+# DeepGaze MSDB runtime extras (beyond torch/torchvision)
+boltons==24.0.0
+einops==0.8.0
+ftfy==6.2.3
+regex==2024.9.11
+timm==1.0.9
+
+# Upstream package at a pinned commit (2026-03-13 main tip).
+# Install after torch/torchvision so CLIP/DINOv2 backends can resolve.
+deepgaze-pytorch @ git+https://github.com/matthias-k/DeepGaze.git@c87b106e8698497c59998b469c45770e993baca3
+
+# OpenAI CLIP is installed separately (see header) because modern pip build
+# isolation fails on CLIP's setup.py (pkg_resources). Pin for reference:
+#   git+https://github.com/openai/CLIP.git@dcba3cb2e2827b402d2701e7e1c7d9fed8a20ef1

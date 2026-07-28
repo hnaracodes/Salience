@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .venv311
+.venv-deepgaze-msdb/
 node_modules
 
 .env
@@ -90,6 +91,13 @@ scout_data/validation/**/*.csv
 scout_data/**/clarity*.csv
 scout_data/**/*_clicks.csv
 scout_data/**/*heatmap*.csv
+
+
+# DeepGaze MSDB evaluation-only artifacts (screenshots, heatmaps, caches)
+scout_data/deepgaze_msdb_eval/
+scout_models/deepgaze_msdb_v1/*.pth
+scout_models/deepgaze_msdb_v1/*.npy
+scout_models/deepgaze_msdb_v1/cache/
 
 # Other bulky regenerable runtime artifacts under scout_data
 # Keep: horikawa reports/, fused train.npz, manifests, label caches

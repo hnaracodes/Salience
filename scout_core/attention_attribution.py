@@ -20,6 +20,10 @@ from scout_core.dom_intersect import (
     score_all_elements,
 )
 from scout_core.element_goals import clickability_score
+from scout_core.heatmap_extract import (
+    load_heatmap_for_dom_scoring,
+    read_heatmaps_manifest,
+)
 from scout_core.session_align import is_timestep_in_manifest
 
 
@@ -90,7 +94,8 @@ def load_or_compute_heatmap(
     """Load cached heatmap or compute CPU visual saliency for timestep ``t``."""
     heatmap_path = session_dir / heatmaps_subdir / f"t_{t}.npy"
     if heatmap_path.is_file():
-        return np.load(heatmap_path).astype(np.float32)
+        hm_manifest = read_heatmaps_manifest(session_dir / heatmaps_subdir)
+        return load_heatmap_for_dom_scoring(heatmap_path, hm_manifest.get(t))
 
     frame_path = session_dir / frames_subdir / f"t_{t}.jpg"
     if not frame_path.is_file():

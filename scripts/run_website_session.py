@@ -29,6 +29,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from activation_store import SESSIONS_DIR
+from scout_core.heatmap_backends import HEATMAP_BACKENDS, build_heatmap_stage_command
 from scout_core.session_align import validate_session_dir
 
 STAGES = ("capture", "tribe", "dual_track", "heatmaps", "analyze", "narrative", "export_viewer", "all")
@@ -97,18 +98,18 @@ def _stage_dual_track(session_id: str, args: argparse.Namespace) -> None:
 
 
 def _stage_heatmaps(session_id: str, args: argparse.Namespace) -> None:
-    cmd = [
-        sys.executable,
-        str(PROJECT_ROOT / "scripts" / "extract_section_heatmaps.py"),
-        "--session-id",
-        session_id,
-    ]
+    backend = args.heatmap_backend
     if args.uniform_heatmap:
-        cmd.append("--uniform-heatmap")
-    if args.no_modal:
-        pass
-    elif not args.uniform_heatmap:
-        cmd.append("--modal")
+        backend = "uniform"
+    elif args.no_modal:
+        backend = "visual_saliency"
+    cmd = build_heatmap_stage_command(
+        PROJECT_ROOT,
+        session_id,
+        backend=backend,
+        current_python=sys.executable,
+        all_frames=True,
+    )
     if args.refresh_sections:
         cmd.append("--refresh-sections")
     _run(cmd)
@@ -162,7 +163,17 @@ def main() -> None:
     parser.add_argument("--baseline-session-id", default=None)
     parser.add_argument("--baseline-preds", type=Path, default=None)
     parser.add_argument("--uniform-heatmap", action="store_true")
-    parser.add_argument("--no-modal", action="store_true", help="Heatmaps: frames only, no Modal")
+    parser.add_argument(
+        "--heatmap-backend",
+        choices=HEATMAP_BACKENDS,
+        default=None,
+        help="Default: PIPELINE_HEATMAP_BACKEND or deepgaze_msdb",
+    )
+    parser.add_argument(
+        "--no-modal",
+        action="store_true",
+        help="Legacy alias for the local visual_saliency backend",
+    )
     parser.add_argument("--refresh-sections", action="store_true")
     parser.add_argument("--sections", action="store_true")
     parser.add_argument("--ground", action="store_true")
