@@ -123,8 +123,9 @@ export default function SecurityPage() {
             worker containers running Playwright capture and the analysis pipeline.
           </li>
           <li>
-            <strong>Modal GPU</strong> — TRIBE v2 inference and DINOv2 heatmaps run on Modal;
-            video and manifest data are sent to Modal only for jobs you submit.
+            <strong>Modal GPU</strong> — TRIBE v2 inference runs on Modal; video and manifest data
+            are sent to Modal only for jobs you submit. Attention heatmaps run on an isolated
+            DeepGaze worker (Modal DINOv2 remains available as a rollback backend).
           </li>
           <li>
             <strong>Artifact deletion</strong> — deleting a scan removes PostgreSQL records and

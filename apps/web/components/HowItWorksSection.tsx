@@ -23,7 +23,7 @@ const steps = [
     number: '03',
     title: 'Neural report',
     description:
-      'TRIBE v2 cortical inference, DINOv2 heatmaps, copy signals, and engagement tracks compile into your interactive viewer.',
+      'TRIBE v2 cortical inference, DeepGaze eye-tracking heatmaps, copy signals, and engagement tracks compile into your interactive viewer.',
     visual: 'report' as const,
   },
 ]

@@ -11,7 +11,7 @@ const features: {
   {
     visual: 'neural',
     title: 'Neural Scoring',
-    body: 'TRIBE v2 models cortical engagement from walkthrough video — VAN−DMN Z-scores tracked per timeline frame, not eye-tracking proxies.',
+    body: 'TRIBE v2 models cortical engagement from walkthrough video — VAN−DMN Z-scores tracked per timeline frame, distinct from the eye-tracking-based heatmaps below.',
     metric: 'VAN−DMN Z per TR',
   },
   {
@@ -29,7 +29,7 @@ const features: {
   {
     visual: 'heatmap',
     title: 'Attention Heatmaps',
-    body: 'DINOv2 attention maps overlaid on every captured frame. Warm regions show exactly which pixels drive cortical spikes.',
+    body: 'DeepGaze eye-tracking-trained saliency maps overlaid on every captured frame. Warm regions show exactly which pixels drive cortical spikes.',
     metric: 'Yellow → red saliency ramp',
   },
 ]

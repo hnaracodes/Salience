@@ -111,7 +111,7 @@ export function HeatmapPhaseVisual({ className = '' }: { className?: string }) {
   return (
     <div className={`relative ${mock.shell} ${className}`}>
       <div className={`border-b ${mock.divider} px-4 py-2 ${mock.label}`}>
-        DINOv2 · attention heatmap
+        DeepGaze · attention heatmap
       </div>
       <div className={`relative aspect-[16/10] ${mock.panel} p-6`}>
         <div className="space-y-3">

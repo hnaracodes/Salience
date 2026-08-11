@@ -11,7 +11,7 @@ const showcases = [
   {
     step: '02',
     title: 'Neural inference',
-    body: 'TRIBE v2 predicts cortical response from walkthrough video. DINOv2 builds attention heatmaps.',
+    body: 'TRIBE v2 predicts cortical response from walkthrough video. DeepGaze builds eye-tracking-trained attention heatmaps.',
     visual: 'neural' as const,
   },
   {

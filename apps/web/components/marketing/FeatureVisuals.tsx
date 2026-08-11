@@ -124,7 +124,7 @@ export function HeatmapVisual() {
         <span className="text-signal">■ low</span>
       </div>
       <span className="absolute top-2 right-2 rounded-full border border-line bg-surface px-2 py-0.5 font-mono text-[8px] text-text-tertiary shadow-card">
-        DINOv2
+        DeepGaze
       </span>
     </div>
   )

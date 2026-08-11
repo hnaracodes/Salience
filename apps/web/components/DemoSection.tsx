@@ -33,7 +33,7 @@ export function DemoSection() {
           data-reveal-delay="0.18"
         >
           {[
-            { label: 'Heatmap overlay', sub: 'DINOv2 per frame' },
+            { label: 'Heatmap overlay', sub: 'DeepGaze per frame' },
             { label: 'Element scores', sub: 'Click any bbox' },
             { label: 'Brain strip', sub: 'TRIBE v2 cortical' },
             { label: 'Copy chips', sub: 'Clarity · urgency · fit' },

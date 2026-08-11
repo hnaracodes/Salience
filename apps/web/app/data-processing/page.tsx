@@ -69,8 +69,8 @@ export default function DataProcessingPage() {
             the analysis bundle.
           </li>
           <li>
-            <strong>heatmaps</strong> — DINOv2 on Modal (or uniform placeholder in dev) for
-            spatial UI grounding.
+            <strong>heatmaps</strong> — DeepGaze, an eye-tracking-trained saliency model, on an
+            isolated local worker (or uniform placeholder in dev) for spatial UI grounding.
           </li>
           <li>
             <strong>analyze</strong> — parcellation, events, sections, marketing scores →{' '}

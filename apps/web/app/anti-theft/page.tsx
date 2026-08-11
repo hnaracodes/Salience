@@ -40,7 +40,7 @@ export default function AntiTheftPage() {
           >
             Facebook TRIBE v2
           </a>{' '}
-          and related components (e.g. DINOv2 for heatmaps), each subject to their own licenses
+          and related components (e.g. DeepGaze for heatmaps), each subject to their own licenses
           and terms. {SITE.name} does not grant you ownership of TRIBE weights, architecture, or
           underlying research artifacts.
         </p>

@@ -104,7 +104,7 @@ export function HeroSection() {
             </li>
             <li className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-signal" />
-              DINOv2 heatmaps + copy fusion
+              DeepGaze heatmaps + copy fusion
             </li>
           </ul>
         </div>

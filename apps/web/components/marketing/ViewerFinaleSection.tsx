@@ -9,7 +9,7 @@ const tabs = [
   {
     id: 'heatmap',
     label: 'Heatmap',
-    sub: 'DINOv2 per frame',
+    sub: 'DeepGaze per frame',
     accent: 'from-amber-200/30 to-orange-300/20',
   },
   {
@@ -122,7 +122,7 @@ export function ViewerFinaleSection() {
 
 function TabCallout({ tab }: { tab: TabId }) {
   const copy = {
-    heatmap: { title: 'Attention heatmap', detail: 'Warm regions = peak DINOv2 saliency' },
+    heatmap: { title: 'Attention heatmap', detail: 'Warm regions = peak DeepGaze saliency' },
     elements: { title: 'Element bboxes', detail: '91 engaging · 45 low attention' },
     brain: { title: 'Cortical strip', detail: 'VAN pathway spike at TR 14' },
     copy: { title: 'Copy fusion', detail: 'clarity 88 · urgency 72 · goal fit 81' },

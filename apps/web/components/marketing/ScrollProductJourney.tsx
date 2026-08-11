@@ -24,13 +24,13 @@ const phases = [
     id: 'neural',
     label: '02 · Infer',
     title: 'TRIBE models cortical response',
-    body: 'Engagement tracks and VAN−DMN Z-scores are computed from walkthrough video — not eye-tracking proxies.',
+    body: 'Engagement tracks and VAN−DMN Z-scores are computed from walkthrough video, separately from the pixel-level heatmap.',
   },
   {
     id: 'heatmap',
     label: '03 · Heatmap',
     title: 'Attention mapped per pixel',
-    body: 'DINOv2 attention sweeps across captured frames so you see exactly which regions drive neural spikes.',
+    body: 'DeepGaze, a saliency model trained on human eye-tracking data, sweeps across captured frames so you see exactly which regions draw the eye.',
   },
   {
     id: 'inspect',
