@@ -140,3 +140,9 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+
+# Local-only planning/session artifacts (kept out of the public repo)
+/sessions/
+/.cursor/
+/coding-sessions/
+/docs/implementation-plans/

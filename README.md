@@ -2,7 +2,7 @@
 
 **Salience** is a research and product codebase that turns scripted or autonomous website walkthroughs into **model-assisted UX intelligence**: cortical activation proxies from [Facebook TRIBE v2](https://github.com/facebookresearch/tribev2), spatial UI grounding, section-level reports, copy engagement signals, marketing-oriented scores, and an interactive session viewer.
 
-The repository name **TribeV2** reflects the core brain model; the product direction is **Salience**. Session history and engineering decisions live under [`sessions/`](sessions/INDEX.md) (Ledger Protocol).
+The repository name **TribeV2** reflects the core brain model; the product direction is **Salience**.
 
 ---
 
@@ -284,7 +284,6 @@ configs/
 
 services/                     # SaaS pipeline + API
 apps/web/                     # Next.js product UI
-sessions/                     # Ledger Protocol project memory
 ```
 
 **Norm bundles:** `scout_norms/synthetic_bootstrap_v1/` is the default for dev; replace with empirical norms before trusting production threshold hits (`meta.json` leakage notes).
@@ -314,9 +313,8 @@ TribeV2/
 ├── viewer/                          # Static HTML viewer templates
 ├── scout_data/, scout_norms/        # Runtime artifacts
 ├── tests/                           # pytest (+ neuroEmoCode archive)
-├── docs/                            # Runbooks, architecture plans, atlas setup
+├── docs/                            # Runbooks, atlas setup, validation protocols
 ├── tutorials/                       # production-deployment.md, env guides
-├── sessions/                        # Ledger Protocol (INDEX.md)
 ├── docker-compose.yml, Dockerfile.*
 └── neuroEmoCode/, eevCode/          # Research archives
 ```
@@ -368,10 +366,8 @@ python scripts/download_emotion_templates.py
 
 | Document | Purpose |
 |----------|---------|
-| [`sessions/INDEX.md`](sessions/INDEX.md) | Ledger Protocol — all engineering sessions |
 | [`docs/runbooks/website-session.md`](docs/runbooks/website-session.md) | CLI operator runbook |
 | [`tutorials/production-deployment.md`](tutorials/production-deployment.md) | SaaS deploy (Vercel, Railway, Modal, R2, Clerk) |
-| [`docs/implementation-plans/salience-architecture-plan.md`](docs/implementation-plans/salience-architecture-plan.md) | Full system architecture |
 | [`services/pipeline/ASSETS_REQUIRED.md`](services/pipeline/ASSETS_REQUIRED.md) | Required assets for pipeline runs |
 | [`scripts/neuroEmoCode/README.md`](scripts/neuroEmoCode/README.md) | Archived NeuroEmo training |
 | [`scripts/eevCode/README.md`](scripts/eevCode/README.md) | Archived EEV regression track |
