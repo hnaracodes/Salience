@@ -22,7 +22,10 @@ from scout_core.dom_intersect import (
     rollup_section_elements,
     score_all_elements,
 )
-from scout_core.heatmap_extract import read_heatmaps_manifest
+from scout_core.heatmap_extract import (
+    load_heatmap_for_dom_scoring,
+    read_heatmaps_manifest,
+)
 from scout_core.section_analytics import build_section_report
 from scout_core.section_recommendations import apply_recommendations
 from scout_core.section_sampling import attach_sample_timesteps
@@ -84,7 +87,7 @@ def enrich_section_report_with_attention(
             else:
                 real_count += 1
 
-            heatmap = np.load(heatmap_path).astype(np.float32)
+            heatmap = load_heatmap_for_dom_scoring(heatmap_path, hm_meta)
             snapshot = find_nearest_snapshot(manifest, t)
             if snapshot is None:
                 continue
@@ -108,6 +111,7 @@ def enrich_section_report_with_attention(
         }
 
     return section_report
+
 
 
 def run_section_analytics(

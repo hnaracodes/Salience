@@ -1,0 +1,23 @@
+# Evaluation/research-only DeepGaze MSDB defaults.
+# The website pipeline uses this backend by default, but upstream still has no
+# active license. Noncommercial intent is not a license grant.
+
+model_id: deepgaze_msdb_v1
+upstream_repo: https://github.com/matthias-k/DeepGaze
+upstream_commit: c87b106e8698497c59998b469c45770e993baca3
+weights_url: https://github.com/matthias-k/DeepGaze/releases/download/v1.2.0/deepgazemsdb.pth
+centerbias_url: https://github.com/matthias-k/DeepGaze/releases/download/v1.0.0/centerbias_mit1003.npy
+
+# Webpage screenshots are an unknown domain → averaged MSDB bias parameters.
+dataset: null
+# Screenshots do not encode viewing geometry; 35 is the MIT1003 benchmark default.
+# CLI emits a warning unless --pixels-per-degree is set explicitly without --allow-default-ppd.
+default_pixels_per_degree: 35.0
+centerbias: mit1003  # mit1003 | uniform
+
+device: auto  # auto | cuda | cpu
+checkpoint_dir: scout_models/deepgaze_msdb_v1
+
+# Optional long-side clamp before inference (density is resized back).
+# null keeps the native screenshot resolution.
+max_long_side: null

@@ -19,7 +19,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from activation_store import SESSIONS_DIR
-from scout_core.heatmap_extract import read_heatmaps_manifest
+from scout_core.heatmap_extract import (
+    load_heatmap_for_dom_scoring,
+    read_heatmaps_manifest,
+)
 from scout_core.dom_intersect import (
     filter_elements_to_section,
     find_nearest_snapshot,
@@ -231,11 +234,12 @@ def _element_scores_by_t(
     """Per-sample TR element scores for timestep-aware sidebar."""
     by_t: dict[str, list[dict]] = {}
     root_bbox = sec.get("section_root_bbox")
+    hm_manifest = read_heatmaps_manifest(heatmaps_dir)
     for t in sec.get("sample_t_indices") or []:
         npy = heatmaps_dir / f"t_{t}.npy"
         if not npy.is_file():
             continue
-        heatmap = np.load(npy).astype(np.float32)
+        heatmap = load_heatmap_for_dom_scoring(npy, hm_manifest.get(int(t)))
         snap = find_nearest_snapshot(manifest, int(t))
         if snap is None:
             continue

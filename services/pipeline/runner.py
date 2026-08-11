@@ -18,13 +18,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from activation_store import SESSIONS_DIR
+from scout_core.heatmap_backends import build_heatmap_stage_command
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 logger = logging.getLogger(__name__)
 
 PRODUCTION_EXPLORE_CONFIG = PROJECT_ROOT / "configs" / "explore_production.yaml"
-DEFAULT_NORM_ID = os.environ.get("PIPELINE_NORM_ID", "synthetic_bootstrap_v1")
+DEFAULT_NORM_ID = os.environ.get("PIPELINE_NORM_ID", "naturalistic_v1")
 
 StatusCallback = Callable[[str, str], None]
 
@@ -221,14 +222,31 @@ def _stage_dual_track(session_id: str) -> None:
     _run_subprocess(args, "dual_track")
 
 
-def _stage_heatmaps(session_id: str) -> None:
-    python = sys.executable
-    script = str(PROJECT_ROOT / "scripts" / "extract_section_heatmaps.py")
+def _heatmap_stage_command(
+    session_id: str,
+    *,
+    backend: str | None = None,
+) -> list[str]:
+    """Build a dense per-session command, preserving a cheap fake-pipeline path."""
     if _fake_tribe_mode():
-        args = [python, script, "--session-id", session_id, "--uniform-heatmap"]
-    else:
-        args = [python, script, "--session-id", session_id, "--modal"]
-    _run_subprocess(args, "heatmaps")
+        return build_heatmap_stage_command(
+            PROJECT_ROOT,
+            session_id,
+            backend="uniform",
+            current_python=sys.executable,
+            all_frames=True,
+        )
+    return build_heatmap_stage_command(
+        PROJECT_ROOT,
+        session_id,
+        backend=backend,
+        current_python=sys.executable,
+        all_frames=True,
+    )
+
+
+def _stage_heatmaps(session_id: str, *, backend: str | None = None) -> None:
+    _run_subprocess(_heatmap_stage_command(session_id, backend=backend), "heatmaps")
 
 
 def _stage_analyze(session_id: str) -> None:
@@ -304,6 +322,7 @@ def run_scan(
     config:
         Pipeline config dict. Keys:
           - ``explore_script``: path to explore YAML (default: configs/explore_production.yaml)
+          - ``heatmap_backend``: optional override for PIPELINE_HEATMAP_BACKEND
     on_stage:
         Callback ``(stage_name, status)`` where status is "running" | "done" | "failed".
     scan_id:
@@ -336,7 +355,13 @@ def run_scan(
     if _demographic_mux_enabled():
         _wrap("demographic_mux", lambda: _stage_demographic_mux(session_id))
     _wrap("dual_track", lambda: _stage_dual_track(session_id))
-    _wrap("heatmaps", lambda: _stage_heatmaps(session_id))
+    _wrap(
+        "heatmaps",
+        lambda: _stage_heatmaps(
+            session_id,
+            backend=config.get("heatmap_backend"),
+        ),
+    )
     _wrap("analyze", lambda: _stage_analyze(session_id))
     _wrap("copy_signals", lambda: _stage_copy_signals(session_id, site_goal))
     _wrap("narrative", lambda: _stage_narrative(session_id))

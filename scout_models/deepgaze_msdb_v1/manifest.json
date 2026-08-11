@@ -1,0 +1,45 @@
+{
+  "model_id": "deepgaze_msdb_v1",
+  "family": "deepgaze_msdb",
+  "status": "evaluation_only",
+  "license_status": "no_active_license_upstream",
+  "license_notes": [
+    "Upstream matthias-k/DeepGaze has MIT license fields commented out in setup.py.",
+    "GitHub issue https://github.com/matthias-k/DeepGaze/issues/15 requesting commercial use remains unanswered.",
+    "Do not productionize or redistribute weights until written permission or an explicit license exists."
+  ],
+  "upstream": {
+    "repo": "https://github.com/matthias-k/DeepGaze",
+    "commit": "c87b106e8698497c59998b469c45770e993baca3",
+    "package": "deepgaze_pytorch",
+    "class": "DeepGazeMSDB",
+    "weights_release": "v1.2.0",
+    "weights_asset": "deepgazemsdb.pth",
+    "weights_url": "https://github.com/matthias-k/DeepGaze/releases/download/v1.2.0/deepgazemsdb.pth",
+    "centerbias_url": "https://github.com/matthias-k/DeepGaze/releases/download/v1.0.0/centerbias_mit1003.npy",
+    "centerbias_sha256": "051645b7da47884c138e81f28a4afbadd99b6c3262eaf086434a9626e3578be9",
+    "paper": "Kümmerer, Khanuja, & Bethge (2025). Modeling Saliency Dataset Bias. ICCV."
+  },
+  "eval_run": {
+    "run_id": "20260724T175149Z",
+    "device": "cuda",
+    "hardware": "NVIDIA GeForce RTX 4060 Ti",
+    "warm_model_median_s": 1.105,
+    "warm_model_p95_s": 1.809,
+    "report": "sessions/CS-20260724-DEEPGAZE-MSDB-BASELINE/EVALUATION_REPORT.md"
+  },
+  "inference_defaults": {
+    "dataset": null,
+    "default_pixels_per_degree": 35.0,
+    "centerbias": "mit1003"
+  },
+  "isolation": {
+    "not_wired_into": [
+      "tribe.py",
+      "scout_core/dual_track.py",
+      "scout_core/horikawaCode",
+      "scripts/extract_section_heatmaps.py",
+      "services/pipeline/runner.py"
+    ]
+  }
+}

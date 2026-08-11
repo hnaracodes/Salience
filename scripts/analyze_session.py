@@ -13,7 +13,7 @@ Workflow (full pipeline):
 
 The --ground step reads isolation thresholds from configs/isolation_thresholds.yaml
 and loads pre-saved heatmaps from scout_data/sessions/<id>/heatmaps/t_<N>.npy.
-Heatmaps are produced by tribe.py::extract_frame_attention (Modal GPU).
+Heatmaps are produced by the configured backend in extract_section_heatmaps.py.
 """
 
 from __future__ import annotations
@@ -55,7 +55,10 @@ from scout_core.schemas import (  # noqa: E402
     ThresholdContext,
     analysis_bundle_path,
 )
-from scout_core.heatmap_extract import read_heatmaps_manifest  # noqa: E402
+from scout_core.heatmap_extract import (  # noqa: E402
+    load_heatmap_for_dom_scoring,
+    read_heatmaps_manifest,
+)
 from scout_core.session_align import (  # noqa: E402
     load_manifest,
     tr_duration_from_manifest,
@@ -208,7 +211,7 @@ def _run_grounding_step(
     """Detect spikes, load saved heatmaps, run DOM intersection, return events.
 
     Heatmaps must be pre-saved at session_dir/heatmaps/t_<N>.npy by a prior
-    call to tribe.py::extract_frame_attention. Missing heatmaps produce an
+    call to extract_section_heatmaps.py. Missing heatmaps produce an
     event with grounding=None and a grounding_skip_reason.
 
     Args:
@@ -301,7 +304,7 @@ def _run_grounding_step(
                     "skip_reason": "heatmap_not_found",
                 }
             else:
-                heatmap = np.load(heatmap_path).astype(np.float32)
+                heatmap = load_heatmap_for_dom_scoring(heatmap_path, hm_meta)
                 snapshot = find_nearest_snapshot(manifest, t)
                 if snapshot is None:
                     print(f"  t={t}: no DOM snapshot in manifest — recording ungrounded event(s).")
@@ -424,7 +427,7 @@ def main() -> None:
         "--with-heatmaps",
         action="store_true",
         default=False,
-        help="If heatmaps/ is missing, print hint to run extract_section_heatmaps.py --modal",
+        help="If heatmaps/ is missing, print a heatmap extraction hint",
     )
     parser.add_argument(
         "--marketing-scores",
@@ -648,7 +651,7 @@ def main() -> None:
                 "  No heatmaps in session — run: "
                 "python scripts/extract_section_heatmaps.py --session-id",
                 args.session_id,
-                "--modal --refresh-sections",
+                "--all-frames --refresh-sections",
                 file=sys.stderr,
             )
 

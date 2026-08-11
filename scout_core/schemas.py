@@ -63,7 +63,7 @@ class HeatmapProvenance(BaseModel):
     """Tracks whether a heatmap came from a real Modal inference or a placeholder."""
 
     heatmap_path: str | None = None
-    source: str | None = None          # "modal" | "uniform_placeholder" | None
+    source: str | None = None          # "deepgaze_msdb" | "modal" | "visual_saliency" | placeholder
     placeholder: bool = False
     frame_path: str | None = None
     sha256: str | None = None
